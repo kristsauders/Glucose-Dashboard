@@ -1,8 +1,16 @@
 # Glucose Dashboard
 
-A comprehensive, interactive blood glucose analysis dashboard designed specifically for Type 1 Diabetes management and LADA progression tracking.
+A comprehensive, interactive blood glucose analysis dashboard designed specifically for Type 1 Diabetes management and LADA progression tracking. Features real-time glucose monitoring with LibreView/LibreLinkUp integration and detailed historical analysis.
 
 ## Features
+
+### Live Glucose Monitoring
+- **Real-time LibreView Integration**: Connect to your LibreView/LibreLinkUp account for live glucose readings
+- **Fresh Data**: Displays current glucose with trend arrows (updated every minute)
+- **Today-focused View**: Shows glucose data from 7am through now
+- **Last Night's Bedtime & Overnight**: Reference charts for bedtime (10pm-midnight) and overnight fasting (3am-7am)
+- **Trend Arrows**: Real-time glucose direction indicators
+- **Data Persistence**: Keeps up to 24 hours of readings in localStorage to preserve bedtime data
 
 ### Data Analysis
 - **Daily Metrics**: Average, minimum, maximum glucose levels
@@ -30,26 +38,66 @@ A comprehensive, interactive blood glucose analysis dashboard designed specifica
 ## Getting Started
 
 ### Prerequisites
+
 - Node.js 18+ and npm
 
 ### Installation
 
-1. Navigate to the project directory:
+1. Clone the repository and navigate to the project directory:
+
 ```bash
-cd glucose-dashboard
+git clone https://github.com/kristsauders/Glucose-Dashboard.git
+cd Glucose-Dashboard/glucose-dashboard
 ```
 
 2. Install dependencies:
+
 ```bash
 npm install
 ```
 
-3. Start the development server:
+3. Install CORS proxy dependencies:
+
 ```bash
+cd ../cors-proxy
+npm install
+cd ../glucose-dashboard
+```
+
+### Running the Application
+
+**Quick Start (Recommended):**
+
+Run both the CORS proxy and the dashboard with a single command:
+
+```bash
+npm start
+```
+
+This starts:
+- CORS Proxy on `http://localhost:3001`
+- Dashboard on `http://localhost:5173`
+
+**Alternative - Run Separately:**
+
+If you prefer to run them separately:
+
+```bash
+# Terminal 1 - Start the CORS proxy
+cd cors-proxy
+npm start
+
+# Terminal 2 - Start the dashboard
+cd glucose-dashboard
 npm run dev
 ```
 
-4. Open your browser and navigate to the URL shown (typically `http://localhost:5173`)
+### Using Live Mode
+
+1. Open the dashboard at `http://localhost:5173`
+2. Switch to "Live" mode in the date range selector
+3. Enter your LibreView credentials
+4. The dashboard will fetch and display real-time glucose data, updating every minute
 
 ### Building for Production
 
@@ -65,16 +113,34 @@ You can deploy the `dist` directory to any static hosting service (Vercel, Netli
 
 ## Usage
 
-1. **Upload Your Data**: On first load, you'll see an upload screen. Drag and drop or browse for your Libre CGM CSV export file.
+### Live Mode (Real-time Monitoring)
 
+1. **Switch to Live Mode**: Select "Live" from the date range selector
+2. **Connect to LibreView**: Enter your LibreView credentials in the settings panel
+3. **View Real-time Data**: See your current glucose, trend arrow, and today's data (from 7am)
+4. **Auto-refresh**: Data updates automatically every minute
+5. **Bedtime & Overnight**: View last night's bedtime and overnight glucose in separate reference charts
+
+### Historical Data (CSV Upload)
+
+1. **Upload Your Data**: On first load, you'll see an upload screen. Drag and drop or browse for your Libre CGM CSV export file
 2. **Explore Your Data**: Once uploaded, you'll see:
    - Summary statistics at the top
    - Multiple interactive charts showing different aspects of your glucose control
    - Date range selector to focus on different time periods
+3. **Data Persistence**: Your data is saved locally in your browser, so you can return anytime to review your metrics
+4. **Upload New Data**: Click "New Upload" to replace your data with a newer CSV file
 
-3. **Data Persistence**: Your data is saved locally in your browser, so you can return anytime to review your metrics.
+### CORS Proxy
 
-4. **Upload New Data**: Click "New Upload" to replace your data with a newer CSV file.
+The CORS proxy (`cors-proxy` directory) is required for LibreView integration because the LibreView API doesn't allow direct browser access. The proxy:
+
+- Runs locally on port 3001
+- Forwards requests to LibreView API with proper headers
+- Only accessible from your local machine
+- Logs all requests for debugging
+
+**Note**: Never expose the proxy server to the internet or share your LibreView credentials.
 
 ## Libre CSV Export Format
 
@@ -95,6 +161,8 @@ This dashboard is designed to work with CSV files exported from the FreeStyle Li
 
 ## Technology Stack
 
+### Frontend
+
 - **React**: UI framework
 - **TypeScript**: Type safety
 - **Vite**: Build tool and dev server
@@ -105,9 +173,22 @@ This dashboard is designed to work with CSV files exported from the FreeStyle Li
 - **date-fns**: Date manipulation
 - **papaparse**: CSV parsing
 
-## Privacy
+### CORS Proxy
 
-All your glucose data is stored locally in your browser's localStorage. No data is ever sent to any server or third party.
+- **Node.js**: Runtime
+- **Express**: Web server
+- **node-fetch**: HTTP requests to LibreView API
+- Runs locally on port 3001
+
+## Privacy & Security
+
+- All glucose data is stored locally in your browser's localStorage
+- LibreView credentials are stored in browser localStorage (encrypted by the browser)
+- The CORS proxy runs only on your local machine and is not accessible from the internet
+- No data is sent to any third-party servers
+- All LibreView API communication goes through your local proxy to your local browser
+
+**Important**: Keep your LibreView credentials secure and never expose the CORS proxy server to the public internet.
 
 ## Future Enhancements
 
