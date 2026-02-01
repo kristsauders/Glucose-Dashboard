@@ -66,15 +66,6 @@ export function Dashboard({ readings, onNewUpload }: DashboardProps) {
         } as GlucoseReading))
         .sort((a, b) => a.timestamp.getTime() - b.timestamp.getTime());
 
-      console.log('Total readings from API:', data.graphData.length);
-      console.log('After filtering ValueInMgPerDl > 0:', convertedReadings.length);
-      if (convertedReadings.length > 0) {
-        console.log('First converted reading timestamp:', convertedReadings[0].timestamp);
-        console.log('Last converted reading timestamp:', convertedReadings[convertedReadings.length - 1].timestamp);
-      }
-      // Check first few raw timestamps from API
-      console.log('First 3 raw API timestamps:', data.graphData.slice(0, 3).map(r => r.Timestamp));
-
       // Merge with stored readings to preserve older data that API no longer returns
       // This is important for bedtime data which may expire from the API after ~12 hours
       const storedReadingsJson = localStorage.getItem('liveReadings');
@@ -99,12 +90,6 @@ export function Dashboard({ readings, onNewUpload }: DashboardProps) {
           mergedReadings = Array.from(readingMap.values())
             .filter(r => r.timestamp.getTime() >= oneDayAgo)
             .sort((a, b) => a.timestamp.getTime() - b.timestamp.getTime());
-
-          console.log('Merged with stored readings:', mergedReadings.length, 'total readings');
-          if (mergedReadings.length > 0) {
-            console.log('Merged first reading:', mergedReadings[0].timestamp);
-            console.log('Merged last reading:', mergedReadings[mergedReadings.length - 1].timestamp);
-          }
         } catch (error) {
           console.error('Failed to parse stored readings:', error);
         }
@@ -227,23 +212,7 @@ export function Dashboard({ readings, onNewUpload }: DashboardProps) {
   );
 
   const bedtimeMetrics = useMemo(
-    () => {
-      const metrics = calculateBedtimeMetrics(dateRange === 'live' ? lastNightReadings : filteredReadings);
-      if (dateRange === 'live' && lastNightReadings.length > 0) {
-        console.log('Live mode - bedtimeMetrics:', metrics);
-        console.log('lastNightReadings for bedtime:', lastNightReadings.length, 'readings');
-        // Log first and last readings to check timestamps
-        console.log('First reading:', lastNightReadings[0].timestamp, 'hour:', lastNightReadings[0].timestamp.getHours());
-        console.log('Last reading:', lastNightReadings[lastNightReadings.length - 1].timestamp, 'hour:', lastNightReadings[lastNightReadings.length - 1].timestamp.getHours());
-        // Check how many readings have hour >= 22
-        const bedtimeHourReadings = lastNightReadings.filter(r => r.timestamp.getHours() >= 22);
-        console.log('Readings with hour >= 22:', bedtimeHourReadings.length);
-        if (bedtimeHourReadings.length > 0) {
-          console.log('Sample bedtime reading:', bedtimeHourReadings[0]);
-        }
-      }
-      return metrics;
-    },
+    () => calculateBedtimeMetrics(dateRange === 'live' ? lastNightReadings : filteredReadings),
     [filteredReadings, lastNightReadings, dateRange]
   );
 

@@ -336,11 +336,9 @@ class LibreViewService {
         // User is a caregiver - use first connection
         currentConnection = connections[0];
         id = patientId || currentConnection.patientId;
-        console.log('Using connection ID:', id);
       } else {
         // User is a patient - use their own ID
         id = patientId || this.patientId;
-        console.log('Using patient own ID:', id);
       }
 
       if (!id) {
@@ -372,7 +370,6 @@ class LibreViewService {
           const currentTimestamp = new Date(currentConnection.glucoseMeasurement.Timestamp).getTime();
 
           if (!existingTimestamps.includes(currentTimestamp)) {
-            console.log('Adding fresh glucoseMeasurement from connections:', currentReading);
             response.data.graphData.unshift(currentReading);
           }
         }
