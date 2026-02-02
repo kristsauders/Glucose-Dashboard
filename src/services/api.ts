@@ -163,26 +163,16 @@ class APIService {
   }
 
   async importCSV(file: File): Promise<{ count: number }> {
-    const formData = new FormData();
-    formData.append('file', file);
+    // Read file content as text
+    const csvContent = await file.text();
 
-    const headers: HeadersInit = {};
-    if (this.token) {
-      headers['Authorization'] = `Bearer ${this.token}`;
-    }
-
-    const response = await fetch(`${API_BASE_URL}/import/csv`, {
+    const response = await this.request<{ imported: { glucose: number; meals: number; insulin: number } }>('/import/csv', {
       method: 'POST',
-      headers,
-      body: formData,
+      body: JSON.stringify({ csvContent }),
     });
 
-    if (!response.ok) {
-      const error = await response.json().catch(() => ({ error: 'Import failed' }));
-      throw new Error(error.error || 'Import failed');
-    }
-
-    return response.json();
+    // Return total count of imported items
+    return { count: response.imported.glucose + response.imported.meals + response.imported.insulin };
   }
 
   // Chat methods
