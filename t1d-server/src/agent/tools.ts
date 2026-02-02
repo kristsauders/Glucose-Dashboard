@@ -1,6 +1,7 @@
 import { DynamicStructuredTool } from '@langchain/core/tools';
 import { z } from 'zod';
 import { query } from '../config/database.js';
+import { discordService } from '../services/discord.js';
 
 /**
  * Tool: Get recent glucose readings
@@ -460,6 +461,357 @@ export const deleteMemoryTool = new DynamicStructuredTool({
   },
 });
 
+/**
+ * Tool: Analyze live glucose trend
+ */
+export const analyzeLiveTrendTool = new DynamicStructuredTool({
+  name: 'analyze_live_trend',
+  description: 'Analyze recent glucose trend (last 1-3 hours) to detect rapid changes, patterns, or concerning trends.',
+  schema: z.object({
+    userId: z.string().describe('The user ID'),
+    hours: z.number().default(2).describe('Hours to analyze (default 2)'),
+  }),
+  func: async ({ userId, hours }) => {
+    const result = await query(
+      `SELECT timestamp, glucose, trend
+       FROM glucose_readings
+       WHERE user_id = $1
+         AND timestamp >= NOW() - INTERVAL '${hours} hours'
+       ORDER BY timestamp ASC`,
+      [userId]
+    );
+
+    if (result.rows.length === 0) {
+      return JSON.stringify({
+        hasData: false,
+        message: 'No recent glucose readings available',
+      });
+    }
+
+    const readings = result.rows.map(r => ({
+      timestamp: r.timestamp,
+      glucose: parseFloat(r.glucose),
+      trend: r.trend,
+    }));
+
+    const latest = readings[readings.length - 1];
+    const oldest = readings[0];
+    const change = latest.glucose - oldest.glucose;
+    const changeRate = change / hours;
+
+    // Calculate moving average
+    const recentAvg = readings.slice(-6).reduce((sum, r) => sum + r.glucose, 0) / Math.min(6, readings.length);
+
+    // Detect if rising or falling rapidly
+    const isRapidRise = changeRate > 10; // Rising > 10 mg/dL per hour
+    const isRapidFall = changeRate < -10; // Falling > 10 mg/dL per hour
+
+    return JSON.stringify({
+      hasData: true,
+      period: `${hours} hours`,
+      readingCount: readings.length,
+      latest: {
+        timestamp: latest.timestamp,
+        glucose: latest.glucose,
+        trend: latest.trend,
+      },
+      trend: {
+        change: change.toFixed(1),
+        changeRate: changeRate.toFixed(1),
+        direction: change > 0 ? 'rising' : change < 0 ? 'falling' : 'stable',
+        isRapidRise,
+        isRapidFall,
+      },
+      recentAvg: recentAvg.toFixed(1),
+      readings: readings.slice(-10), // Last 10 readings for context
+    });
+  },
+});
+
+/**
+ * Tool: Check alert conditions
+ */
+export const checkAlertConditionsTool = new DynamicStructuredTool({
+  name: 'check_alert_conditions',
+  description: 'Check if any conditions warrant proactive outreach (not critical alerts). Returns insights about patterns worth discussing.',
+  schema: z.object({
+    userId: z.string().describe('The user ID'),
+  }),
+  func: async ({ userId }) => {
+    const conditions = [];
+
+    // Check recent pattern (last 24 hours)
+    const recentStats = await query(
+      `SELECT
+        AVG(glucose) as avg_glucose,
+        MIN(glucose) as min_glucose,
+        MAX(glucose) as max_glucose,
+        COUNT(*) FILTER (WHERE glucose >= 70 AND glucose <= 180) * 100.0 / COUNT(*) as tir,
+        COUNT(*) FILTER (WHERE glucose < 70) as low_count,
+        COUNT(*) FILTER (WHERE glucose > 250) as high_count
+       FROM glucose_readings
+       WHERE user_id = $1
+         AND timestamp >= NOW() - INTERVAL '24 hours'`,
+      [userId]
+    );
+
+    const stats = recentStats.rows[0];
+    const avgGlucose = parseFloat(stats.avg_glucose || 0);
+    const tir = parseFloat(stats.tir || 0);
+    const lowCount = parseInt(stats.low_count || 0);
+    const highCount = parseInt(stats.high_count || 0);
+
+    // Check for patterns worth discussing
+    if (tir > 0 && tir < 50) {
+      conditions.push({
+        type: 'low_tir',
+        severity: 'medium',
+        message: `Time in range is ${tir.toFixed(1)}% over the last 24 hours`,
+        data: { tir, avgGlucose },
+      });
+    }
+
+    if (lowCount > 3) {
+      conditions.push({
+        type: 'frequent_lows',
+        severity: 'medium',
+        message: `${lowCount} readings below 70 mg/dL in the last 24 hours`,
+        data: { lowCount },
+      });
+    }
+
+    if (highCount > 10) {
+      conditions.push({
+        type: 'frequent_highs',
+        severity: 'low',
+        message: `${highCount} readings above 250 mg/dL in the last 24 hours`,
+        data: { highCount },
+      });
+    }
+
+    // Check for repeated patterns (dawn phenomenon, post-meal spikes)
+    const dawnCheck = await query(
+      `SELECT AVG(glucose) as dawn_avg
+       FROM glucose_readings
+       WHERE user_id = $1
+         AND timestamp >= NOW() - INTERVAL '7 days'
+         AND EXTRACT(HOUR FROM timestamp) BETWEEN 5 AND 8`,
+      [userId]
+    );
+
+    const dawnAvg = parseFloat(dawnCheck.rows[0]?.dawn_avg || 0);
+    if (dawnAvg > 150) {
+      conditions.push({
+        type: 'dawn_phenomenon',
+        severity: 'low',
+        message: `Morning glucose averaging ${dawnAvg.toFixed(1)} mg/dL`,
+        data: { dawnAvg },
+      });
+    }
+
+    return JSON.stringify({
+      hasConditions: conditions.length > 0,
+      conditionCount: conditions.length,
+      conditions,
+    });
+  },
+});
+
+/**
+ * Tool: Get recent Sage messages
+ */
+export const getRecentSageMessagesTool = new DynamicStructuredTool({
+  name: 'get_recent_sage_messages',
+  description: 'Get recent proactive messages sent to the user. Use this to avoid sending duplicate messages or spamming.',
+  schema: z.object({
+    userId: z.string().describe('The user ID'),
+    hours: z.number().default(24).describe('Hours to look back (default 24)'),
+    type: z.string().optional().describe('Optional filter by message type'),
+  }),
+  func: async ({ userId, hours, type }) => {
+    let queryText = `
+      SELECT id, type, title, content, sent_at, acknowledged
+      FROM sage_messages
+      WHERE user_id = $1
+        AND sent_at >= NOW() - INTERVAL '${hours} hours'
+    `;
+    const params = [userId];
+
+    if (type) {
+      queryText += ` AND type = $2`;
+      params.push(type);
+    }
+
+    queryText += ` ORDER BY sent_at DESC`;
+
+    const result = await query(queryText, params);
+
+    return JSON.stringify({
+      count: result.rows.length,
+      messages: result.rows.map(r => ({
+        id: r.id,
+        type: r.type,
+        title: r.title,
+        content: r.content,
+        sentAt: r.sent_at,
+        acknowledged: r.acknowledged,
+      })),
+    });
+  },
+});
+
+/**
+ * Tool: Send proactive message
+ */
+export const sendProactiveMessageTool = new DynamicStructuredTool({
+  name: 'send_proactive_message',
+  description: 'Send a proactive message to the user via Discord. Use this to reach out with insights, questions, or suggestions.',
+  schema: z.object({
+    userId: z.string().describe('The user ID'),
+    type: z.enum(['insight', 'question', 'suggestion', 'daily_summary'])
+      .describe('Type of message'),
+    title: z.string().describe('Message title'),
+    content: z.string().describe('Message content (supports markdown)'),
+    metadata: z.object({}).optional().describe('Optional metadata to store with message'),
+  }),
+  func: async ({ userId, type, title, content, metadata }) => {
+    try {
+      // Check if Discord is configured
+      if (!discordService.isConfigured()) {
+        return JSON.stringify({
+          success: false,
+          error: 'Discord webhook not configured',
+        });
+      }
+
+      // Store message in database first
+      const dbResult = await query(
+        `INSERT INTO sage_messages (user_id, type, title, content, metadata)
+         VALUES ($1, $2, $3, $4, $5)
+         RETURNING id, sent_at`,
+        [userId, type, title, content, metadata ? JSON.stringify(metadata) : null]
+      );
+
+      const messageId = dbResult.rows[0].id;
+
+      // Send to Discord
+      await discordService.sendSageMessage(type, title, content);
+
+      // Update monitoring state
+      await query(
+        `INSERT INTO glucose_monitoring_state (user_id, last_message_sent_at)
+         VALUES ($1, NOW())
+         ON CONFLICT (user_id) DO UPDATE
+         SET last_message_sent_at = NOW(),
+             updated_at = NOW()`,
+        [userId]
+      );
+
+      return JSON.stringify({
+        success: true,
+        messageId,
+        sentAt: dbResult.rows[0].sent_at,
+      });
+    } catch (error) {
+      return JSON.stringify({
+        success: false,
+        error: error instanceof Error ? error.message : 'Unknown error',
+      });
+    }
+  },
+});
+
+/**
+ * Tool: Get user context for proactive analysis
+ */
+export const getUserContextTool = new DynamicStructuredTool({
+  name: 'get_user_context',
+  description: 'Get comprehensive user context including profile, recent stats, and stored memories. Use this when preparing proactive outreach.',
+  schema: z.object({
+    userId: z.string().describe('The user ID'),
+  }),
+  func: async ({ userId }) => {
+    // Get user profile
+    const userResult = await query(
+      `SELECT email, diagnosis_type, diagnosis_date, timezone, preferences
+       FROM users
+       WHERE id = $1`,
+      [userId]
+    );
+
+    if (userResult.rows.length === 0) {
+      return JSON.stringify({
+        found: false,
+        error: 'User not found',
+      });
+    }
+
+    const user = userResult.rows[0];
+
+    // Get recent stats (last 7 days)
+    const statsResult = await query(
+      `SELECT
+        COUNT(*) as reading_count,
+        AVG(glucose) as avg_glucose,
+        STDDEV(glucose) as std_dev,
+        COUNT(*) FILTER (WHERE glucose >= 70 AND glucose <= 180) * 100.0 / COUNT(*) as tir
+       FROM glucose_readings
+       WHERE user_id = $1
+         AND timestamp >= NOW() - INTERVAL '7 days'`,
+      [userId]
+    );
+
+    const stats = statsResult.rows[0];
+
+    // Get stored memories
+    const memoryResult = await query(
+      `SELECT key, value, updated_at
+       FROM agent_memory
+       WHERE user_id = $1
+       ORDER BY updated_at DESC`,
+      [userId]
+    );
+
+    const memories = memoryResult.rows.map(r => ({
+      key: r.key,
+      ...r.value,
+      updated_at: r.updated_at,
+    }));
+
+    // Get monitoring state
+    const stateResult = await query(
+      `SELECT last_check_timestamp, last_message_sent_at, last_daily_summary_at, state
+       FROM glucose_monitoring_state
+       WHERE user_id = $1`,
+      [userId]
+    );
+
+    const monitoringState = stateResult.rows[0] || null;
+
+    return JSON.stringify({
+      found: true,
+      user: {
+        email: user.email,
+        diagnosisType: user.diagnosis_type,
+        diagnosisDate: user.diagnosis_date,
+        timezone: user.timezone,
+        preferences: user.preferences,
+      },
+      recentStats: {
+        readingCount: parseInt(stats.reading_count || 0),
+        avgGlucose: parseFloat(stats.avg_glucose || 0).toFixed(1),
+        stdDev: parseFloat(stats.std_dev || 0).toFixed(1),
+        timeInRange: parseFloat(stats.tir || 0).toFixed(1),
+      },
+      memories: {
+        count: memories.length,
+        items: memories,
+      },
+      monitoringState,
+    });
+  },
+});
+
 export const allTools = [
   getRecentGlucoseTool,
   getGlucoseStatsTool,
@@ -469,4 +821,9 @@ export const allTools = [
   storeMemoryTool,
   retrieveMemoryTool,
   deleteMemoryTool,
+  analyzeLiveTrendTool,
+  checkAlertConditionsTool,
+  getRecentSageMessagesTool,
+  sendProactiveMessageTool,
+  getUserContextTool,
 ];

@@ -13,6 +13,9 @@ import conversationsRoutes from './routes/conversations.js';
 
 const app = express();
 
+// Track active connections for forceful shutdown
+const connections = new Set<any>();
+
 // Middleware
 app.use(cors({
   origin: env.CORS_ORIGIN,
@@ -42,24 +45,11 @@ app.use('/api/conversations', conversationsRoutes);
 // Error handler (must be last)
 app.use(errorHandler);
 
-// Graceful shutdown
-process.on('SIGTERM', () => {
-  console.log('\n\n📴 Shutting down gracefully...');
-  libreViewPoller.stopAll();
-  process.exit(0);
-});
-
-process.on('SIGINT', () => {
-  console.log('\n\n📴 Shutting down gracefully...');
-  libreViewPoller.stopAll();
-  process.exit(0);
-});
-
 export function startServer() {
   const port = parseInt(env.PORT);
 
-  return new Promise<void>((resolve) => {
-    app.listen(port, '0.0.0.0', async () => {
+  return new Promise<any>((resolve) => {
+    const server = app.listen(port, '0.0.0.0', async () => {
       console.log('');
       console.log('╔════════════════════════════════════════════════════════╗');
       console.log('║                                                        ║');
@@ -79,7 +69,23 @@ export function startServer() {
       console.log('Press Ctrl+C to stop');
       console.log('════════════════════════════════════════════════════════');
       console.log('');
-      resolve();
+      resolve(server);
     });
+
+    // Track connections for forceful shutdown
+    server.on('connection', (conn) => {
+      connections.add(conn);
+      conn.on('close', () => {
+        connections.delete(conn);
+      });
+    });
+
+    // Add method to forcefully close all connections
+    (server as any).closeAllConnections = () => {
+      for (const conn of connections) {
+        conn.destroy();
+      }
+      connections.clear();
+    };
   });
 }

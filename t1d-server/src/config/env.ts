@@ -16,6 +16,8 @@ const envSchema = z.object({
   OLLAMA_MODEL: z.string().default('glm-4.7-flash:latest'),
   LIBREVIEW_POLL_INTERVAL: z.string().default('60000'),
   CORS_ORIGIN: z.string().default('http://localhost:5173'),
+  DISCORD_WEBHOOK_URL: z.string().url().optional(),
+  DISCORD_BOT_TOKEN: z.string().optional(),
 });
 
 export const env = envSchema.parse(process.env);

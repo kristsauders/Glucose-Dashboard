@@ -9,6 +9,7 @@ CREATE TABLE IF NOT EXISTS users (
   diagnosis_date DATE,
   diagnosis_type TEXT,
   timezone TEXT DEFAULT 'America/Los_Angeles',
+  discord_user_id TEXT UNIQUE,
   preferences JSONB DEFAULT '{}',
   created_at TIMESTAMPTZ DEFAULT NOW(),
   updated_at TIMESTAMPTZ DEFAULT NOW()
@@ -147,5 +148,37 @@ CREATE TRIGGER update_agent_memory_updated_at
 DROP TRIGGER IF EXISTS update_conversations_updated_at ON conversations;
 CREATE TRIGGER update_conversations_updated_at
   BEFORE UPDATE ON conversations
+  FOR EACH ROW
+  EXECUTE FUNCTION update_updated_at();
+
+-- Sage proactive messages
+CREATE TABLE IF NOT EXISTS sage_messages (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  user_id UUID REFERENCES users(id) ON DELETE CASCADE,
+  type TEXT NOT NULL, -- 'insight', 'question', 'suggestion', 'daily_summary'
+  title TEXT NOT NULL,
+  content TEXT NOT NULL,
+  metadata JSONB, -- Additional data like glucose values, patterns, etc.
+  sent_at TIMESTAMPTZ DEFAULT NOW(),
+  acknowledged BOOLEAN DEFAULT FALSE,
+  acknowledged_at TIMESTAMPTZ
+);
+CREATE INDEX IF NOT EXISTS idx_sage_messages_user_sent ON sage_messages(user_id, sent_at DESC);
+CREATE INDEX IF NOT EXISTS idx_sage_messages_type ON sage_messages(user_id, type, sent_at DESC);
+
+-- Glucose monitoring state
+CREATE TABLE IF NOT EXISTS glucose_monitoring_state (
+  user_id UUID PRIMARY KEY REFERENCES users(id) ON DELETE CASCADE,
+  last_check_timestamp TIMESTAMPTZ,
+  last_message_sent_at TIMESTAMPTZ,
+  last_daily_summary_at TIMESTAMPTZ,
+  state JSONB DEFAULT '{}', -- Store pattern detection state, cooldowns, etc.
+  updated_at TIMESTAMPTZ DEFAULT NOW()
+);
+
+-- Trigger for glucose_monitoring_state table
+DROP TRIGGER IF EXISTS update_glucose_monitoring_state_updated_at ON glucose_monitoring_state;
+CREATE TRIGGER update_glucose_monitoring_state_updated_at
+  BEFORE UPDATE ON glucose_monitoring_state
   FOR EACH ROW
   EXECUTE FUNCTION update_updated_at();

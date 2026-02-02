@@ -18,7 +18,7 @@ router.get('/', async (req, res, next) => {
 
     const result = await query<User>(
       `SELECT id, email, libreview_email, libreview_region, diagnosis_date,
-              diagnosis_type, timezone, preferences
+              diagnosis_type, timezone, discord_user_id, preferences
        FROM users WHERE id = $1`,
       [authReq.user!.id]
     );
@@ -38,6 +38,10 @@ router.get('/', async (req, res, next) => {
           connected: !!user.libreview_email,
           polling: libreViewPoller.isPolling(user.id),
           lastPoll: libreViewPoller.getLastPoll(user.id),
+        },
+        discord: {
+          userId: (user as any).discord_user_id || null,
+          linked: !!(user as any).discord_user_id,
         },
         diagnosis: {
           date: user.diagnosis_date,
@@ -226,6 +230,54 @@ router.delete('/libreview', async (req, res, next) => {
        SET libreview_email = NULL,
            libreview_password_encrypted = NULL
        WHERE id = $1`,
+      [authReq.user!.id]
+    );
+
+    res.json({ success: true });
+  } catch (error) {
+    next(error);
+  }
+});
+
+// Link Discord account
+const discordLinkSchema = z.object({
+  discordUserId: z.string().min(1),
+});
+
+router.post('/discord', async (req, res, next) => {
+  try {
+    const authReq = req as AuthRequest;
+    const { discordUserId } = discordLinkSchema.parse(req.body);
+
+    // Check if Discord ID is already linked to another user
+    const existing = await query(
+      `SELECT id FROM users WHERE discord_user_id = $1`,
+      [discordUserId]
+    );
+
+    if (existing.rows.length > 0 && existing.rows[0].id !== authReq.user!.id) {
+      return res.status(409).json({ error: 'This Discord account is already linked to another user' });
+    }
+
+    // Link Discord account
+    await query(
+      `UPDATE users SET discord_user_id = $1 WHERE id = $2`,
+      [discordUserId, authReq.user!.id]
+    );
+
+    res.json({ success: true, discordUserId });
+  } catch (error) {
+    next(error);
+  }
+});
+
+// Unlink Discord account
+router.delete('/discord', async (req, res, next) => {
+  try {
+    const authReq = req as AuthRequest;
+
+    await query(
+      `UPDATE users SET discord_user_id = NULL WHERE id = $1`,
       [authReq.user!.id]
     );
 
