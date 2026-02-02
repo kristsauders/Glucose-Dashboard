@@ -10,15 +10,232 @@ const router = Router();
 
 router.use(authMiddleware);
 
-// Send a message to the AI agent
+// Send a message to the AI agent (streaming)
 const chatSchema = z.object({
   message: z.string().min(1).max(10000),
+  conversationId: z.string().uuid().optional(),
 });
 
+router.post('/stream', async (req, res, next) => {
+  try {
+    const authReq = req as AuthRequest;
+    const { message, conversationId: providedConversationId } = chatSchema.parse(req.body);
+
+    // Set up SSE headers
+    res.setHeader('Content-Type', 'text/event-stream');
+    res.setHeader('Cache-Control', 'no-cache');
+    res.setHeader('Connection', 'keep-alive');
+
+    // Get user context
+    const userResult = await query<User>(
+      'SELECT email, diagnosis_type, diagnosis_date, timezone FROM users WHERE id = $1',
+      [authReq.user!.id]
+    );
+
+    if (userResult.rows.length === 0) {
+      res.write(`data: ${JSON.stringify({ type: 'error', content: 'User not found' })}\n\n`);
+      res.end();
+      return;
+    }
+
+    const user = userResult.rows[0];
+
+    // Get or create conversation
+    let conversationId = providedConversationId;
+    if (!conversationId) {
+      // Create new conversation
+      const convResult = await query(
+        `INSERT INTO conversations (user_id, title)
+         VALUES ($1, NULL)
+         RETURNING id`,
+        [authReq.user!.id]
+      );
+      conversationId = convResult.rows[0].id;
+    } else {
+      // Verify conversation belongs to user
+      const verifyResult = await query(
+        'SELECT id FROM conversations WHERE id = $1 AND user_id = $2',
+        [conversationId, authReq.user!.id]
+      );
+      if (verifyResult.rows.length === 0) {
+        res.write(`data: ${JSON.stringify({ type: 'error', content: 'Conversation not found' })}\n\n`);
+        res.end();
+        return;
+      }
+    }
+
+    // Get recent chat history from this conversation (last 10 messages)
+    const historyResult = await query(
+      `SELECT role, content
+       FROM chat_messages
+       WHERE conversation_id = $1
+       ORDER BY created_at DESC
+       LIMIT 10`,
+      [conversationId]
+    );
+
+    const history = historyResult.rows.reverse();
+    const isFirstMessage = history.length === 0;
+
+    // Create agent
+    const agent = createAgentGraph();
+
+    // Prepare messages
+    const messages = [
+      ...history.map(h =>
+        h.role === 'user'
+          ? new HumanMessage(h.content)
+          : new AIMessage(h.content)
+      ),
+      new HumanMessage(message),
+    ];
+
+    console.log(`Running streaming agent for user ${authReq.user!.id}...`);
+    const startTime = Date.now();
+
+    // Send initial status
+    res.write(`data: ${JSON.stringify({ type: 'status', content: 'Thinking...' })}\n\n`);
+
+    let fullResponse = '';
+    let toolCallCount = 0;
+    let isFirstChunk = true;
+
+    try {
+      // Use stream() and extract content from messages
+      const stream = await agent.stream({
+        messages,
+        userId: authReq.user!.id,
+        userContext: {
+          email: user.email,
+          diagnosisType: user.diagnosis_type || undefined,
+          diagnosisDate: user.diagnosis_date || undefined,
+          timezone: user.timezone || undefined,
+        },
+      });
+
+      let lastContent = '';
+      let chunkCount = 0;
+      for await (const chunk of stream) {
+        chunkCount++;
+        console.log(`\n=== Chunk ${chunkCount} ===`);
+        console.log('Chunk keys:', Object.keys(chunk));
+
+        // LangGraph streams chunks keyed by node name (agent or tools)
+        // Extract messages from the node-specific update
+        const nodeUpdate = chunk.agent || chunk.tools;
+
+        if (nodeUpdate && nodeUpdate.messages && nodeUpdate.messages.length > 0) {
+          const lastMessage = nodeUpdate.messages[nodeUpdate.messages.length - 1];
+          console.log('Last message type:', lastMessage.constructor.name);
+          console.log('Last message has content:', !!lastMessage.content);
+          console.log('Content type:', typeof lastMessage.content);
+          console.log('Content length:', lastMessage.content?.length || 0);
+          console.log('Has tool_calls:', !!lastMessage.tool_calls);
+          console.log('Tool calls count:', lastMessage.tool_calls?.length || 0);
+
+          // Only process AIMessage instances, not tool messages
+          const isAIMessage = lastMessage.constructor.name === 'AIMessage';
+          console.log('Is AI Message:', isAIMessage);
+
+          if (isAIMessage) {
+            // Check for tool calls
+            if (lastMessage.tool_calls && lastMessage.tool_calls.length > 0) {
+              const newToolCalls = lastMessage.tool_calls.length - toolCallCount;
+              if (newToolCalls > 0) {
+                toolCallCount = lastMessage.tool_calls.length;
+                const toolNames = lastMessage.tool_calls.slice(-newToolCalls).map((tc: any) => tc.name).join(', ');
+                console.log('Sending tool status:', toolNames);
+                res.write(`data: ${JSON.stringify({ type: 'status', content: `Using tool: ${toolNames}` })}\n\n`);
+              }
+            }
+
+            // Stream content incrementally (only from AI messages)
+            if (lastMessage.content && typeof lastMessage.content === 'string') {
+              const currentContent = lastMessage.content;
+              console.log('Current content preview:', currentContent.substring(0, 100));
+              if (currentContent.length > lastContent.length) {
+                const delta = currentContent.slice(lastContent.length);
+                console.log('Delta length:', delta.length);
+                lastContent = currentContent;
+                fullResponse = currentContent;
+
+                if (isFirstChunk) {
+                  res.write(`data: ${JSON.stringify({ type: 'status', content: 'Responding...' })}\n\n`);
+                  isFirstChunk = false;
+                }
+
+                res.write(`data: ${JSON.stringify({ type: 'content', content: delta })}\n\n`);
+              }
+            }
+          }
+        } else {
+          console.log('Chunk has no messages or empty messages array');
+        }
+      }
+
+      console.log('\n=== Stream Complete ===');
+      console.log('Total chunks:', chunkCount);
+      console.log('Final fullResponse length:', fullResponse.length);
+      console.log('Full response preview:', fullResponse.substring(0, 200));
+
+      const duration = Date.now() - startTime;
+      console.log(`✓ Streaming agent completed in ${duration}ms`);
+
+      // Save messages to database with conversation_id
+      await query(
+        `INSERT INTO chat_messages (user_id, conversation_id, role, content, metadata)
+         VALUES ($1, $2, 'user', $3, $4), ($1, $2, 'assistant', $5, $6)`,
+        [
+          authReq.user!.id,
+          conversationId,
+          message,
+          JSON.stringify({ timestamp: new Date().toISOString() }),
+          fullResponse,
+          JSON.stringify({
+            timestamp: new Date().toISOString(),
+            duration,
+            toolCalls: toolCallCount,
+          }),
+        ]
+      );
+
+      // Update conversation timestamp and generate title if first message
+      if (isFirstMessage) {
+        const title = message.length > 50 ? message.substring(0, 50) + '...' : message;
+        await query(
+          `UPDATE conversations SET title = $1, updated_at = NOW() WHERE id = $2`,
+          [title, conversationId]
+        );
+      } else {
+        await query(
+          `UPDATE conversations SET updated_at = NOW() WHERE id = $1`,
+          [conversationId]
+        );
+      }
+
+      // Send completion event with conversationId
+      res.write(`data: ${JSON.stringify({
+        type: 'done',
+        metadata: { duration, toolCalls: toolCallCount, conversationId }
+      })}\n\n`);
+
+    } catch (error) {
+      console.error('Streaming error:', error);
+      res.write(`data: ${JSON.stringify({ type: 'error', content: 'Failed to generate response' })}\n\n`);
+    }
+
+    res.end();
+  } catch (error) {
+    console.error('Chat stream error:', error);
+    next(error);
+  }
+});
+
+// Send a message to the AI agent (non-streaming, kept for backwards compatibility)
 router.post('/', async (req, res, next) => {
   try {
     const authReq = req as AuthRequest;
-    const { message } = chatSchema.parse(req.body);
+    const { message, conversationId: providedConversationId } = chatSchema.parse(req.body);
 
     // Get user context
     const userResult = await query<User>(
@@ -32,18 +249,40 @@ router.post('/', async (req, res, next) => {
 
     const user = userResult.rows[0];
 
-    // Get recent chat history (last 10 messages)
+    // Get or create conversation
+    let conversationId = providedConversationId;
+    if (!conversationId) {
+      const convResult = await query(
+        `INSERT INTO conversations (user_id, title)
+         VALUES ($1, NULL)
+         RETURNING id`,
+        [authReq.user!.id]
+      );
+      conversationId = convResult.rows[0].id;
+    } else {
+      // Verify conversation belongs to user
+      const verifyResult = await query(
+        'SELECT id FROM conversations WHERE id = $1 AND user_id = $2',
+        [conversationId, authReq.user!.id]
+      );
+      if (verifyResult.rows.length === 0) {
+        return res.status(404).json({ error: 'Conversation not found' });
+      }
+    }
+
+    // Get recent chat history from this conversation (last 10 messages)
     const historyResult = await query(
       `SELECT role, content
        FROM chat_messages
-       WHERE user_id = $1
+       WHERE conversation_id = $1
        ORDER BY created_at DESC
        LIMIT 10`,
-      [authReq.user!.id]
+      [conversationId]
     );
 
     // Reverse to get chronological order
     const history = historyResult.rows.reverse();
+    const isFirstMessage = history.length === 0;
 
     // Create agent
     const agent = createAgentGraph();
@@ -87,12 +326,13 @@ router.post('/', async (req, res, next) => {
       m.role === 'tool' || (m.tool_calls && m.tool_calls.length > 0)
     ).length;
 
-    // Save messages to database
+    // Save messages to database with conversation_id
     await query(
-      `INSERT INTO chat_messages (user_id, role, content, metadata)
-       VALUES ($1, 'user', $2, $3), ($1, 'assistant', $4, $5)`,
+      `INSERT INTO chat_messages (user_id, conversation_id, role, content, metadata)
+       VALUES ($1, $2, 'user', $3, $4), ($1, $2, 'assistant', $5, $6)`,
       [
         authReq.user!.id,
+        conversationId,
         message,
         JSON.stringify({ timestamp: new Date().toISOString() }),
         responseContent,
@@ -104,11 +344,26 @@ router.post('/', async (req, res, next) => {
       ]
     );
 
+    // Update conversation timestamp and generate title if first message
+    if (isFirstMessage) {
+      const title = message.length > 50 ? message.substring(0, 50) + '...' : message;
+      await query(
+        `UPDATE conversations SET title = $1, updated_at = NOW() WHERE id = $2`,
+        [title, conversationId]
+      );
+    } else {
+      await query(
+        `UPDATE conversations SET updated_at = NOW() WHERE id = $1`,
+        [conversationId]
+      );
+    }
+
     res.json({
       message: responseContent,
       metadata: {
         duration,
         toolCalls: totalToolCalls,
+        conversationId,
       },
     });
   } catch (error) {
@@ -127,13 +382,13 @@ router.get('/history', async (req, res, next) => {
       `SELECT id, role, content, metadata, created_at
        FROM chat_messages
        WHERE user_id = $1
-       ORDER BY created_at DESC
+       ORDER BY created_at ASC
        LIMIT $2`,
       [authReq.user!.id, parseInt(limit as string)]
     );
 
     res.json({
-      messages: result.rows.reverse(), // Return in chronological order
+      messages: result.rows, // Already in chronological order
       count: result.rows.length,
     });
   } catch (error) {

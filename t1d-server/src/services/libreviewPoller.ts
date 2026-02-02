@@ -1,6 +1,7 @@
 import { LibreViewClient } from './libreview.js';
 import { query } from '../config/database.js';
 import { env } from '../config/env.js';
+import { decrypt } from '../utils/crypto.js';
 import type { GlucoseReading } from '../types/index.js';
 
 interface PollerState {
@@ -145,6 +146,53 @@ class LibreViewPollerService {
     } catch (error) {
       console.error(`Polling failed for user ${state.userId}:`, error);
       throw error;
+    }
+  }
+
+  public async resumeAllPolling(): Promise<void> {
+    try {
+      console.log('Checking for users with LibreView credentials to resume polling...');
+
+      const result = await query<{
+        id: string;
+        libreview_email: string;
+        libreview_password_encrypted: string;
+        libreview_region: string;
+      }>(
+        `SELECT id, libreview_email, libreview_password_encrypted, libreview_region
+         FROM users
+         WHERE libreview_email IS NOT NULL AND libreview_password_encrypted IS NOT NULL`
+      );
+
+      if (result.rows.length === 0) {
+        console.log('No users with LibreView credentials found');
+        return;
+      }
+
+      console.log(`Found ${result.rows.length} user(s) with LibreView credentials, resuming polling...`);
+
+      for (const user of result.rows) {
+        try {
+          const password = decrypt(user.libreview_password_encrypted);
+          await this.startPolling(user.id, {
+            email: user.libreview_email,
+            password,
+            region: user.libreview_region || 'us',
+          });
+        } catch (error) {
+          console.log(`⚠️  Could not resume polling for user ${user.id} - password needs to be re-entered (old bcrypt hash detected)`);
+          // Clear old credentials so user can reconnect
+          await query(
+            `UPDATE users
+             SET libreview_email = NULL,
+                 libreview_password_encrypted = NULL
+             WHERE id = $1`,
+            [user.id]
+          );
+        }
+      }
+    } catch (error) {
+      console.error('Failed to resume polling:', error);
     }
   }
 

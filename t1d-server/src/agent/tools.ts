@@ -302,10 +302,171 @@ export const comparePeriodsTool = new DynamicStructuredTool({
   },
 });
 
+/**
+ * Tool: Store user memory/fact
+ */
+export const storeMemoryTool = new DynamicStructuredTool({
+  name: 'store_user_memory',
+  description: 'Store a fact or preference about the user for long-term memory (habits, preferences, medical info). This persists across all conversations.',
+  schema: z.object({
+    userId: z.string().describe('The user ID'),
+    key: z.string()
+      .min(1)
+      .max(50)
+      .regex(/^[a-z0-9_]+$/)
+      .describe('Memory key (lowercase, numbers, underscores only. e.g., "breakfast_time", "exercise_routine", "insulin_type")'),
+    value: z.object({
+      fact: z.string().describe('The fact or preference to store'),
+      category: z.enum(['habit', 'medical', 'timing', 'preference', 'other'])
+        .describe('Category of the memory'),
+      confidence: z.number().min(0).max(1).default(0.8)
+        .describe('How confident (0-1) you are in this memory'),
+    }).describe('Memory data'),
+  }),
+  func: async ({ userId, key, value }) => {
+    try {
+      const result = await query(
+        `INSERT INTO agent_memory (user_id, key, value)
+         VALUES ($1, $2, $3)
+         ON CONFLICT(user_id, key) DO UPDATE
+         SET value = EXCLUDED.value,
+             updated_at = NOW()
+         RETURNING id, key, value, updated_at`,
+        [userId, key, JSON.stringify(value)]
+      );
+
+      if (result.rows.length === 0) {
+        return JSON.stringify({
+          success: false,
+          error: 'Failed to store memory',
+        });
+      }
+
+      return JSON.stringify({
+        success: true,
+        key,
+        stored: result.rows[0].value,
+        timestamp: result.rows[0].updated_at,
+      });
+    } catch (error) {
+      return JSON.stringify({
+        success: false,
+        error: error instanceof Error ? error.message : 'Unknown error',
+      });
+    }
+  },
+});
+
+/**
+ * Tool: Retrieve user memories
+ */
+export const retrieveMemoryTool = new DynamicStructuredTool({
+  name: 'retrieve_user_memory',
+  description: 'Retrieve stored facts/memories about the user. Can get specific memory by key or all memories. Always check this before giving advice.',
+  schema: z.object({
+    userId: z.string().describe('The user ID'),
+    key: z.string().optional()
+      .describe('Optional specific memory key. If omitted, returns all memories.'),
+  }),
+  func: async ({ userId, key }) => {
+    try {
+      let result;
+
+      if (key) {
+        // Get specific memory
+        result = await query(
+          `SELECT key, value, updated_at
+           FROM agent_memory
+           WHERE user_id = $1 AND key = $2`,
+          [userId, key]
+        );
+      } else {
+        // Get all memories
+        result = await query(
+          `SELECT key, value, updated_at
+           FROM agent_memory
+           WHERE user_id = $1
+           ORDER BY updated_at DESC`,
+          [userId]
+        );
+      }
+
+      if (result.rows.length === 0) {
+        return JSON.stringify({
+          found: false,
+          message: key ? `No memory found for key: ${key}` : 'No memories stored',
+        });
+      }
+
+      // Parse stored JSON values
+      const memories = result.rows.map(row => ({
+        key: row.key,
+        ...row.value,
+        updated_at: row.updated_at,
+      }));
+
+      return JSON.stringify({
+        found: true,
+        count: memories.length,
+        memories: key ? memories[0] : memories,
+      });
+    } catch (error) {
+      return JSON.stringify({
+        found: false,
+        error: error instanceof Error ? error.message : 'Unknown error',
+      });
+    }
+  },
+});
+
+/**
+ * Tool: Delete user memory
+ */
+export const deleteMemoryTool = new DynamicStructuredTool({
+  name: 'delete_user_memory',
+  description: 'Delete a specific stored memory. Use when user asks to forget something or when correcting outdated information.',
+  schema: z.object({
+    userId: z.string().describe('The user ID'),
+    key: z.string()
+      .describe('Memory key to delete'),
+  }),
+  func: async ({ userId, key }) => {
+    try {
+      const result = await query(
+        `DELETE FROM agent_memory
+         WHERE user_id = $1 AND key = $2
+         RETURNING key`,
+        [userId, key]
+      );
+
+      if (result.rows.length === 0) {
+        return JSON.stringify({
+          success: false,
+          message: `No memory found with key: ${key}`,
+        });
+      }
+
+      return JSON.stringify({
+        success: true,
+        deletedKey: result.rows[0].key,
+        message: `Memory "${key}" deleted successfully`,
+      });
+    } catch (error) {
+      return JSON.stringify({
+        success: false,
+        error: error instanceof Error ? error.message : 'Unknown error',
+      });
+    }
+  },
+});
+
 export const allTools = [
   getRecentGlucoseTool,
   getGlucoseStatsTool,
   analyzeOvernightTool,
   detectPatternsTool,
   comparePeriodsTool,
+  storeMemoryTool,
+  retrieveMemoryTool,
+  deleteMemoryTool,
 ];

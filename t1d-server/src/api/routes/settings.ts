@@ -1,10 +1,10 @@
 import { Router } from 'express';
 import { z } from 'zod';
-import bcrypt from 'bcryptjs';
 import { authMiddleware } from '../middleware/auth.js';
 import { query } from '../../config/database.js';
 import { libreViewPoller } from '../../services/libreviewPoller.js';
 import { LibreViewClient } from '../../services/libreview.js';
+import { encrypt } from '../../utils/crypto.js';
 import type { AuthRequest, User } from '../../types/index.js';
 
 const router = Router();
@@ -157,8 +157,8 @@ router.post('/libreview', async (req, res, next) => {
       return res.status(401).json({ error: 'Invalid LibreView credentials' });
     }
 
-    // Encrypt password (basic encryption - in production use proper encryption)
-    const encryptedPassword = await bcrypt.hash(password, 10);
+    // Encrypt password so we can decrypt it later for polling
+    const encryptedPassword = encrypt(password);
 
     // Save to database
     await query(

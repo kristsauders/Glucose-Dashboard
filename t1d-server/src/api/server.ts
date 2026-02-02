@@ -9,6 +9,7 @@ import glucoseRoutes from './routes/glucose.js';
 import importRoutes from './routes/import.js';
 import settingsRoutes from './routes/settings.js';
 import chatRoutes from './routes/chat.js';
+import conversationsRoutes from './routes/conversations.js';
 
 const app = express();
 
@@ -36,6 +37,7 @@ app.use('/api/glucose', glucoseRoutes);
 app.use('/api/import', importRoutes);
 app.use('/api/settings', settingsRoutes);
 app.use('/api/chat', chatRoutes);
+app.use('/api/conversations', conversationsRoutes);
 
 // Error handler (must be last)
 app.use(errorHandler);
@@ -57,7 +59,7 @@ export function startServer() {
   const port = parseInt(env.PORT);
 
   return new Promise<void>((resolve) => {
-    app.listen(port, '0.0.0.0', () => {
+    app.listen(port, '0.0.0.0', async () => {
       console.log('');
       console.log('╔════════════════════════════════════════════════════════╗');
       console.log('║                                                        ║');
@@ -70,6 +72,10 @@ export function startServer() {
       console.log(`✓ Environment: ${env.NODE_ENV}`);
       console.log(`✓ AI Provider: ${env.AI_PROVIDER}`);
       console.log('');
+
+      // Resume LibreView polling for users with saved credentials
+      await libreViewPoller.resumeAllPolling();
+
       console.log('Press Ctrl+C to stop');
       console.log('════════════════════════════════════════════════════════');
       console.log('');

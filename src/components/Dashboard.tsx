@@ -36,10 +36,22 @@ interface DashboardProps {
   onDataUpdated?: () => void;
 }
 
-export function Dashboard({ readings, onNewUpload, onDataUpdated }: DashboardProps) {
+export function Dashboard({ readings, onDataUpdated }: DashboardProps) {
   const [dateRange, setDateRange] = useState<DateRangePreset>('30d');
   const [isLiveConnected, setIsLiveConnected] = useState(false);
   const [showChat, setShowChat] = useState(false);
+
+  // Close chat modal with ESC key
+  useEffect(() => {
+    const handleEscape = (e: KeyboardEvent) => {
+      if (e.key === 'Escape' && showChat) {
+        setShowChat(false);
+      }
+    };
+
+    document.addEventListener('keydown', handleEscape);
+    return () => document.removeEventListener('keydown', handleEscape);
+  }, [showChat]);
 
   const handleLogout = () => {
     if (confirm('Are you sure you want to logout?')) {
@@ -82,8 +94,8 @@ export function Dashboard({ readings, onNewUpload, onDataUpdated }: DashboardPro
     // Initial fetch
     fetchLiveData();
 
-    // Poll every minute
-    const interval = setInterval(fetchLiveData, 60000);
+    // Poll every 15 seconds to get new readings quickly after backend syncs
+    const interval = setInterval(fetchLiveData, 15000);
 
     return () => clearInterval(interval);
   }, [dateRange, isLiveConnected, fetchLiveData]);
@@ -410,15 +422,16 @@ export function Dashboard({ readings, onNewUpload, onDataUpdated }: DashboardPro
             initial={{ scale: 0.95, opacity: 0 }}
             animate={{ scale: 1, opacity: 1 }}
             exit={{ scale: 0.95, opacity: 0 }}
-            className="w-full max-w-4xl max-h-[90vh] overflow-hidden"
+            className="w-full max-w-4xl h-[85vh] flex flex-col"
             onClick={(e) => e.stopPropagation()}
           >
-            <div className="relative">
+            <div className="relative h-full flex flex-col">
               <Button
                 variant="ghost"
                 size="sm"
-                className="absolute -top-2 -right-2 z-10 bg-background rounded-full shadow-lg"
+                className="absolute -top-2 -right-2 z-10 bg-background rounded-full shadow-lg hover:bg-destructive hover:text-destructive-foreground"
                 onClick={() => setShowChat(false)}
+                title="Close chat (ESC)"
               >
                 <X className="h-4 w-4" />
               </Button>

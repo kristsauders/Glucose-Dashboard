@@ -8,6 +8,7 @@ const envSchema = z.object({
   NODE_ENV: z.enum(['development', 'production', 'test']).default('development'),
   DATABASE_URL: z.string(),
   JWT_SECRET: z.string().min(32),
+  ENCRYPTION_KEY: z.string().optional(),
   AI_PROVIDER: z.enum(['openrouter', 'ollama']).default('ollama'),
   OPENROUTER_API_KEY: z.string().optional(),
   OPENROUTER_MODEL: z.string().default('anthropic/claude-sonnet-4.5'),

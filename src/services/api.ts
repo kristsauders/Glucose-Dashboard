@@ -1,4 +1,5 @@
 import type { GlucoseReading } from '@/types/glucose';
+import type { Conversation, ConversationWithMessages } from '@/types/chat';
 
 const API_BASE_URL = 'http://localhost:3002/api';
 
@@ -74,9 +75,9 @@ class APIService {
   }
 
   private async request<T>(endpoint: string, options: RequestInit = {}): Promise<T> {
-    const headers: HeadersInit = {
+    const headers: Record<string, string> = {
       'Content-Type': 'application/json',
-      ...options.headers,
+      ...(options.headers as Record<string, string>),
     };
 
     // Add auth token if available
@@ -192,6 +193,37 @@ class APIService {
 
   async clearChatHistory(): Promise<void> {
     await this.request('/chat/history', { method: 'DELETE' });
+  }
+
+  // Conversation methods
+  async getConversations(): Promise<Conversation[]> {
+    const response = await this.request<{ conversations: Conversation[]; count: number }>(
+      '/conversations'
+    );
+    return response.conversations;
+  }
+
+  async createConversation(): Promise<Conversation> {
+    return this.request<Conversation>('/conversations', {
+      method: 'POST',
+    });
+  }
+
+  async getConversation(id: string): Promise<ConversationWithMessages> {
+    return this.request<ConversationWithMessages>(`/conversations/${id}`);
+  }
+
+  async updateConversation(id: string, title: string): Promise<Conversation> {
+    return this.request<Conversation>(`/conversations/${id}`, {
+      method: 'PATCH',
+      body: JSON.stringify({ title }),
+    });
+  }
+
+  async deleteConversation(id: string): Promise<void> {
+    await this.request(`/conversations/${id}`, {
+      method: 'DELETE',
+    });
   }
 
   // Settings methods

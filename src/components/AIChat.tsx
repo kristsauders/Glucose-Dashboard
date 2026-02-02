@@ -1,54 +1,124 @@
 import { useState, useEffect, useRef } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
+import ReactMarkdown from 'react-markdown';
+import remarkGfm from 'remark-gfm';
+import rehypeHighlight from 'rehype-highlight';
+import 'highlight.js/styles/github-dark.css';
 import { Button } from './ui/button';
 import { Input } from './ui/input';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from './ui/card';
 import { Alert, AlertDescription } from './ui/alert';
-import { Bot, Send, Trash2, Loader2, User, MessageSquare } from 'lucide-react';
+import { Bot, Send, Trash2, Loader2, User, MessageSquare, Menu, Plus, X, Edit2, Check } from 'lucide-react';
 import { apiService } from '@/services/api';
 import { format } from 'date-fns';
-
-interface Message {
-  id: number;
-  role: 'user' | 'assistant';
-  content: string;
-  metadata: {
-    timestamp: string;
-    duration?: number;
-    toolCalls?: number;
-  };
-  created_at: string;
-}
+import type { Conversation, Message } from '@/types/chat';
 
 export function AIChat() {
+  const [conversations, setConversations] = useState<Conversation[]>([]);
+  const [activeConversationId, setActiveConversationId] = useState<string | null>(null);
   const [messages, setMessages] = useState<Message[]>([]);
   const [input, setInput] = useState('');
   const [isLoading, setIsLoading] = useState(false);
-  const [isFetchingHistory, setIsFetchingHistory] = useState(true);
+  const [isFetchingConversations, setIsFetchingConversations] = useState(true);
   const [error, setError] = useState('');
+  const [streamingMessage, setStreamingMessage] = useState('');
+  const [status, setStatus] = useState('');
+  const [showSidebar, setShowSidebar] = useState(true);
+  const [editingTitleId, setEditingTitleId] = useState<string | null>(null);
+  const [editingTitleValue, setEditingTitleValue] = useState('');
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLInputElement>(null);
 
-  // Fetch chat history on mount
+  // Fetch conversations on mount
   useEffect(() => {
-    const fetchHistory = async () => {
+    const fetchConversations = async () => {
       try {
-        const history = await apiService.getChatHistory();
-        setMessages(history);
+        const convos = await apiService.getConversations();
+        setConversations(convos);
+
+        // Auto-select most recent conversation if any exist
+        if (convos.length > 0 && !activeConversationId) {
+          await loadConversation(convos[0].id);
+        }
       } catch (err) {
-        console.error('Failed to fetch chat history:', err);
+        console.error('Failed to fetch conversations:', err);
       } finally {
-        setIsFetchingHistory(false);
+        setIsFetchingConversations(false);
       }
     };
 
-    fetchHistory();
+    fetchConversations();
   }, []);
 
   // Scroll to bottom when messages change
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
   }, [messages]);
+
+  const loadConversation = async (conversationId: string) => {
+    try {
+      const conversation = await apiService.getConversation(conversationId);
+      setActiveConversationId(conversationId);
+      setMessages(conversation.messages);
+    } catch (err) {
+      console.error('Failed to load conversation:', err);
+      setError('Failed to load conversation');
+    }
+  };
+
+  const handleNewChat = async () => {
+    try {
+      const newConversation = await apiService.createConversation();
+      setConversations((prev) => [newConversation, ...prev]);
+      setActiveConversationId(newConversation.id);
+      setMessages([]);
+      setError('');
+    } catch (err) {
+      console.error('Failed to create conversation:', err);
+      setError('Failed to create new conversation');
+    }
+  };
+
+  const handleDeleteConversation = async (conversationId: string) => {
+    if (!confirm('Are you sure you want to delete this conversation?')) return;
+
+    try {
+      await apiService.deleteConversation(conversationId);
+      setConversations((prev) => prev.filter((c) => c.id !== conversationId));
+
+      // If deleting active conversation, switch to another or create new
+      if (conversationId === activeConversationId) {
+        const remaining = conversations.filter((c) => c.id !== conversationId);
+        if (remaining.length > 0) {
+          await loadConversation(remaining[0].id);
+        } else {
+          setActiveConversationId(null);
+          setMessages([]);
+        }
+      }
+    } catch (err) {
+      console.error('Failed to delete conversation:', err);
+      setError('Failed to delete conversation');
+    }
+  };
+
+  const handleUpdateTitle = async (conversationId: string, newTitle: string) => {
+    try {
+      await apiService.updateConversation(conversationId, newTitle);
+      setConversations((prev) =>
+        prev.map((c) => (c.id === conversationId ? { ...c, title: newTitle } : c))
+      );
+      setEditingTitleId(null);
+    } catch (err) {
+      console.error('Failed to update title:', err);
+      setError('Failed to update title');
+    }
+  };
+
+  const startEditingTitle = (conversation: Conversation) => {
+    setEditingTitleId(conversation.id);
+    setEditingTitleValue(conversation.title || '');
+  };
 
   const handleSend = async () => {
     const message = input.trim();
@@ -57,10 +127,13 @@ export function AIChat() {
     setInput('');
     setError('');
     setIsLoading(true);
+    setStreamingMessage('');
+    setStatus('');
 
     // Add user message optimistically
     const tempUserMessage: Message = {
-      id: Date.now(),
+      id: `temp-${Date.now()}`,
+      conversation_id: activeConversationId || '',
       role: 'user',
       content: message,
       metadata: { timestamp: new Date().toISOString() },
@@ -69,42 +142,101 @@ export function AIChat() {
     setMessages((prev) => [...prev, tempUserMessage]);
 
     try {
-      const response = await apiService.sendChatMessage(message);
+      const token = localStorage.getItem('t1d_auth_token');
+      const response = await fetch('http://localhost:3002/api/chat/stream', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${token}`,
+        },
+        body: JSON.stringify({
+          message,
+          conversationId: activeConversationId,
+        }),
+      });
 
-      // Add assistant response
+      if (!response.ok) {
+        throw new Error('Failed to send message');
+      }
+
+      const reader = response.body?.getReader();
+      const decoder = new TextDecoder();
+
+      if (!reader) {
+        throw new Error('No response stream');
+      }
+
+      let buffer = '';
+      let fullContent = '';
+      let metadata: any = {};
+
+      while (true) {
+        const { done, value } = await reader.read();
+        if (done) break;
+
+        buffer += decoder.decode(value, { stream: true });
+        const lines = buffer.split('\n\n');
+        buffer = lines.pop() || '';
+
+        for (const line of lines) {
+          if (line.startsWith('data: ')) {
+            const data = JSON.parse(line.slice(6));
+
+            if (data.type === 'status') {
+              setStatus(data.content);
+            } else if (data.type === 'content') {
+              fullContent += data.content;
+              setStreamingMessage(fullContent);
+            } else if (data.type === 'done') {
+              metadata = data.metadata;
+            } else if (data.type === 'error') {
+              throw new Error(data.content);
+            }
+          }
+        }
+      }
+
+      // If a new conversation was created, update state
+      if (metadata.conversationId && metadata.conversationId !== activeConversationId) {
+        setActiveConversationId(metadata.conversationId);
+        // Refresh conversations list to get the new conversation with title
+        const updatedConversations = await apiService.getConversations();
+        setConversations(updatedConversations);
+      } else if (activeConversationId) {
+        // Update conversation's updated_at by refreshing the list
+        const updatedConversations = await apiService.getConversations();
+        setConversations(updatedConversations);
+      }
+
+      // Add final assistant message
       const assistantMessage: Message = {
-        id: Date.now() + 1,
+        id: `${Date.now() + 1}`,
+        conversation_id: metadata.conversationId || activeConversationId || '',
         role: 'assistant',
-        content: response.message,
+        content: fullContent,
         metadata: {
           timestamp: new Date().toISOString(),
-          duration: response.metadata.duration,
-          toolCalls: response.metadata.toolCalls,
+          duration: metadata.duration,
+          toolCalls: metadata.toolCalls,
         },
         created_at: new Date().toISOString(),
       };
 
       setMessages((prev) => [...prev, assistantMessage]);
+      setStreamingMessage('');
+      setStatus('');
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to send message');
       // Remove optimistic user message on error
       setMessages((prev) => prev.slice(0, -1));
+      setStreamingMessage('');
+      setStatus('');
     } finally {
       setIsLoading(false);
       inputRef.current?.focus();
     }
   };
 
-  const handleClearHistory = async () => {
-    if (!confirm('Are you sure you want to clear your chat history?')) return;
-
-    try {
-      await apiService.clearChatHistory();
-      setMessages([]);
-    } catch (err) {
-      setError('Failed to clear history');
-    }
-  };
 
   const handleKeyPress = (e: React.KeyboardEvent) => {
     if (e.key === 'Enter' && !e.shiftKey) {
@@ -113,43 +245,174 @@ export function AIChat() {
     }
   };
 
-  if (isFetchingHistory) {
+  if (isFetchingConversations) {
     return (
-      <Card className="h-[600px] flex items-center justify-center">
+      <Card className="h-full flex items-center justify-center">
         <Loader2 className="h-8 w-8 animate-spin text-primary" />
       </Card>
     );
   }
 
-  return (
-    <Card className="h-[600px] flex flex-col">
-      <CardHeader className="border-b pb-4">
-        <div className="flex items-center justify-between">
-          <div className="flex items-center gap-2">
-            <Bot className="h-5 w-5 text-primary" />
-            <div>
-              <CardTitle>AI Assistant</CardTitle>
-              <CardDescription className="text-xs mt-0.5">
-                Ask about your glucose patterns, trends, and management
-              </CardDescription>
-            </div>
-          </div>
-          {messages.length > 0 && (
-            <Button
-              variant="ghost"
-              size="sm"
-              onClick={handleClearHistory}
-              disabled={isLoading}
-            >
-              <Trash2 className="h-4 w-4" />
-            </Button>
-          )}
-        </div>
-      </CardHeader>
+  const activeConversation = conversations.find((c) => c.id === activeConversationId);
 
-      <CardContent className="flex-1 flex flex-col p-0">
+  return (
+    <div className="h-full flex gap-0">
+      {/* Sidebar */}
+      <AnimatePresence>
+        {showSidebar && (
+          <motion.div
+            initial={{ width: 0, opacity: 0 }}
+            animate={{ width: 280, opacity: 1 }}
+            exit={{ width: 0, opacity: 0 }}
+            transition={{ duration: 0.2 }}
+            className="border-r bg-card overflow-hidden"
+          >
+            <div className="h-full flex flex-col">
+              {/* Sidebar Header */}
+              <div className="p-4 border-b">
+                <Button
+                  onClick={handleNewChat}
+                  className="w-full"
+                  size="sm"
+                >
+                  <Plus className="h-4 w-4 mr-2" />
+                  New Chat
+                </Button>
+              </div>
+
+              {/* Conversations List */}
+              <div className="flex-1 overflow-y-auto p-2">
+                {conversations.length === 0 ? (
+                  <div className="text-center text-sm text-muted-foreground p-4">
+                    No conversations yet
+                  </div>
+                ) : (
+                  <div className="space-y-1">
+                    {conversations.map((conversation) => (
+                      <div
+                        key={conversation.id}
+                        className={`group relative rounded-lg p-3 cursor-pointer transition-colors ${
+                          conversation.id === activeConversationId
+                            ? 'bg-primary/10 border border-primary/20'
+                            : 'hover:bg-muted'
+                        }`}
+                        onClick={() => loadConversation(conversation.id)}
+                      >
+                        {editingTitleId === conversation.id ? (
+                          <div className="flex items-center gap-1">
+                            <Input
+                              value={editingTitleValue}
+                              onChange={(e) => setEditingTitleValue(e.target.value)}
+                              onKeyDown={(e) => {
+                                if (e.key === 'Enter') {
+                                  handleUpdateTitle(conversation.id, editingTitleValue);
+                                } else if (e.key === 'Escape') {
+                                  setEditingTitleId(null);
+                                }
+                              }}
+                              className="h-6 text-xs"
+                              autoFocus
+                              onClick={(e) => e.stopPropagation()}
+                            />
+                            <Button
+                              size="sm"
+                              variant="ghost"
+                              className="h-6 w-6 p-0"
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                handleUpdateTitle(conversation.id, editingTitleValue);
+                              }}
+                            >
+                              <Check className="h-3 w-3" />
+                            </Button>
+                          </div>
+                        ) : (
+                          <>
+                            <div className="flex items-start justify-between gap-2">
+                              <div className="flex-1 min-w-0">
+                                <p className="text-sm font-medium truncate">
+                                  {conversation.title || 'New Conversation'}
+                                </p>
+                                <p className="text-xs text-muted-foreground">
+                                  {format(new Date(conversation.updated_at), 'MMM d, h:mm a')}
+                                </p>
+                              </div>
+                              <div className="flex gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+                                <Button
+                                  size="sm"
+                                  variant="ghost"
+                                  className="h-6 w-6 p-0"
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    startEditingTitle(conversation);
+                                  }}
+                                >
+                                  <Edit2 className="h-3 w-3" />
+                                </Button>
+                                <Button
+                                  size="sm"
+                                  variant="ghost"
+                                  className="h-6 w-6 p-0 text-destructive hover:text-destructive"
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    handleDeleteConversation(conversation.id);
+                                  }}
+                                >
+                                  <Trash2 className="h-3 w-3" />
+                                </Button>
+                              </div>
+                            </div>
+                          </>
+                        )}
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+            </div>
+          </motion.div>
+        )}
+      </AnimatePresence>
+
+      {/* Main Chat Area */}
+      <Card className="flex-1 flex flex-col border-0 rounded-none">
+        <CardHeader className="border-b pb-4">
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-2">
+              <Button
+                variant="ghost"
+                size="sm"
+                onClick={() => setShowSidebar(!showSidebar)}
+                className="h-8 w-8 p-0"
+              >
+                {showSidebar ? <X className="h-4 w-4" /> : <Menu className="h-4 w-4" />}
+              </Button>
+              <Bot className="h-5 w-5 text-primary" />
+              <div>
+                <CardTitle>
+                  {activeConversation?.title || 'AI Assistant'}
+                </CardTitle>
+                <CardDescription className="text-xs mt-0.5">
+                  Ask about your glucose patterns, trends, and management
+                </CardDescription>
+              </div>
+            </div>
+            {activeConversationId && (
+              <Button
+                variant="ghost"
+                size="sm"
+                onClick={() => handleDeleteConversation(activeConversationId)}
+                disabled={isLoading}
+              >
+                <Trash2 className="h-4 w-4" />
+              </Button>
+            )}
+          </div>
+        </CardHeader>
+
+      <CardContent className="flex-1 flex flex-col p-0 min-h-0">
         {/* Messages */}
-        <div className="flex-1 overflow-y-auto p-4 space-y-4">
+        <div className="flex-1 overflow-y-auto p-4 space-y-4" style={{ overflowY: 'auto' }}>
           {messages.length === 0 ? (
             <div className="h-full flex flex-col items-center justify-center text-center p-8">
               <MessageSquare className="h-12 w-12 text-muted-foreground mb-4" />
@@ -199,7 +462,18 @@ export function AIChat() {
                           : 'bg-muted'
                       }`}
                     >
-                      <p className="text-sm whitespace-pre-wrap break-words">{message.content}</p>
+                      {message.role === 'user' ? (
+                        <p className="text-sm whitespace-pre-wrap break-words">{message.content}</p>
+                      ) : (
+                        <div className="text-sm prose prose-sm dark:prose-invert max-w-none">
+                          <ReactMarkdown
+                            remarkPlugins={[remarkGfm]}
+                            rehypePlugins={[rehypeHighlight]}
+                          >
+                            {message.content}
+                          </ReactMarkdown>
+                        </div>
+                      )}
                     </div>
                     <div className="flex items-center gap-2 mt-1 text-xs text-muted-foreground">
                       <span>
@@ -235,8 +509,29 @@ export function AIChat() {
                   <Bot className="h-4 w-4 text-primary" />
                 </div>
               </div>
-              <div className="bg-muted rounded-lg p-3">
-                <Loader2 className="h-4 w-4 animate-spin" />
+              <div className="flex-1 max-w-[80%]">
+                {status && (
+                  <div className="text-xs text-muted-foreground mb-2 flex items-center gap-2">
+                    <Loader2 className="h-3 w-3 animate-spin" />
+                    {status}
+                  </div>
+                )}
+                {streamingMessage ? (
+                  <div className="bg-muted rounded-lg p-3">
+                    <div className="text-sm prose prose-sm dark:prose-invert max-w-none">
+                      <ReactMarkdown
+                        remarkPlugins={[remarkGfm]}
+                        rehypePlugins={[rehypeHighlight]}
+                      >
+                        {streamingMessage}
+                      </ReactMarkdown>
+                    </div>
+                  </div>
+                ) : (
+                  <div className="bg-muted rounded-lg p-3">
+                    <Loader2 className="h-4 w-4 animate-spin" />
+                  </div>
+                )}
               </div>
             </motion.div>
           )}
@@ -271,5 +566,6 @@ export function AIChat() {
         </div>
       </CardContent>
     </Card>
+    </div>
   );
 }

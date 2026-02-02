@@ -78,31 +78,3 @@ export function parseLibreCSV(csvContent: string): GlucoseReading[] {
 
   return readings;
 }
-
-export function saveGlucoseData(readings: GlucoseReading[]): void {
-  try {
-    const serializedData = readings.map(r => ({
-      ...r,
-      timestamp: r.timestamp.toISOString(),
-    }));
-    localStorage.setItem('glucoseData', JSON.stringify(serializedData));
-  } catch (error) {
-    console.error('Error saving glucose data:', error);
-  }
-}
-
-export function loadGlucoseData(): GlucoseReading[] | null {
-  try {
-    const data = localStorage.getItem('glucoseData');
-    if (!data) return null;
-
-    const parsed = JSON.parse(data);
-    return parsed.map((r: any) => ({
-      ...r,
-      timestamp: new Date(r.timestamp),
-    }));
-  } catch (error) {
-    console.error('Error loading glucose data:', error);
-    return null;
-  }
-}

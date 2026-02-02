@@ -87,16 +87,28 @@ CREATE TABLE IF NOT EXISTS insights (
 );
 CREATE INDEX IF NOT EXISTS idx_insights_user_created ON insights(user_id, created_at DESC);
 
+-- Conversations
+CREATE TABLE IF NOT EXISTS conversations (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  user_id UUID REFERENCES users(id) ON DELETE CASCADE,
+  title TEXT,
+  created_at TIMESTAMPTZ DEFAULT NOW(),
+  updated_at TIMESTAMPTZ DEFAULT NOW()
+);
+CREATE INDEX IF NOT EXISTS idx_conversations_user_updated ON conversations(user_id, updated_at DESC);
+
 -- Chat messages
 CREATE TABLE IF NOT EXISTS chat_messages (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   user_id UUID REFERENCES users(id) ON DELETE CASCADE,
+  conversation_id UUID REFERENCES conversations(id) ON DELETE CASCADE,
   role TEXT NOT NULL,
   content TEXT NOT NULL,
   metadata JSONB,
   created_at TIMESTAMPTZ DEFAULT NOW()
 );
 CREATE INDEX IF NOT EXISTS idx_chat_user_time ON chat_messages(user_id, created_at DESC);
+CREATE INDEX IF NOT EXISTS idx_chat_conversation ON chat_messages(conversation_id, created_at ASC);
 
 -- Agent memory
 CREATE TABLE IF NOT EXISTS agent_memory (
@@ -128,5 +140,12 @@ CREATE TRIGGER update_users_updated_at
 DROP TRIGGER IF EXISTS update_agent_memory_updated_at ON agent_memory;
 CREATE TRIGGER update_agent_memory_updated_at
   BEFORE UPDATE ON agent_memory
+  FOR EACH ROW
+  EXECUTE FUNCTION update_updated_at();
+
+-- Trigger for conversations table
+DROP TRIGGER IF EXISTS update_conversations_updated_at ON conversations;
+CREATE TRIGGER update_conversations_updated_at
+  BEFORE UPDATE ON conversations
   FOR EACH ROW
   EXECUTE FUNCTION update_updated_at();
