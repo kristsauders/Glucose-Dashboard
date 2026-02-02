@@ -82,6 +82,11 @@ router.post('/', async (req, res, next) => {
       ? assistantMessage.content
       : JSON.stringify(assistantMessage.content);
 
+    // Count all tool calls across all messages
+    const totalToolCalls = result.messages.filter((m: any) =>
+      m.role === 'tool' || (m.tool_calls && m.tool_calls.length > 0)
+    ).length;
+
     // Save messages to database
     await query(
       `INSERT INTO chat_messages (user_id, role, content, metadata)
@@ -94,7 +99,7 @@ router.post('/', async (req, res, next) => {
         JSON.stringify({
           timestamp: new Date().toISOString(),
           duration,
-          toolCalls: assistantMessage.tool_calls?.length || 0,
+          toolCalls: totalToolCalls,
         }),
       ]
     );
@@ -103,7 +108,7 @@ router.post('/', async (req, res, next) => {
       message: responseContent,
       metadata: {
         duration,
-        toolCalls: assistantMessage.tool_calls?.length || 0,
+        toolCalls: totalToolCalls,
       },
     });
   } catch (error) {

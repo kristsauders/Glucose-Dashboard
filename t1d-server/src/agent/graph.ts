@@ -23,7 +23,7 @@ export function createAgentGraph() {
   console.log(`✓ Using AI provider: ${provider.name}`);
 
   // Bind tools to the model
-  const modelWithTools = provider.model.bind({ tools: allTools });
+  const modelWithTools = provider.model.bindTools(allTools);
 
   // Define the agent node
   async function agentNode(state: AgentState): Promise<Partial<AgentState>> {
