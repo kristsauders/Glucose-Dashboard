@@ -8,6 +8,7 @@ import authRoutes from './routes/auth.js';
 import glucoseRoutes from './routes/glucose.js';
 import importRoutes from './routes/import.js';
 import settingsRoutes from './routes/settings.js';
+import chatRoutes from './routes/chat.js';
 
 const app = express();
 
@@ -34,6 +35,7 @@ app.use('/api/auth', authRoutes);
 app.use('/api/glucose', glucoseRoutes);
 app.use('/api/import', importRoutes);
 app.use('/api/settings', settingsRoutes);
+app.use('/api/chat', chatRoutes);
 
 // Error handler (must be last)
 app.use(errorHandler);
