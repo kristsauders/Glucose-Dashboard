@@ -13,7 +13,7 @@ router.use(authMiddleware);
 router.get('/readings', async (req, res, next) => {
   try {
     const authReq = req as AuthRequest;
-    const { start, end, limit = '100000' } = req.query;
+    const { start, end, limit = '500000' } = req.query;
 
     let sql = 'SELECT * FROM glucose_readings WHERE user_id = $1';
     const params: any[] = [authReq.user!.id];
