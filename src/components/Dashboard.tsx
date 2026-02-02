@@ -29,7 +29,6 @@ import { ThemeToggle } from './ThemeToggle';
 import { Upload, MessageSquare, LogOut, X } from 'lucide-react';
 import { apiService } from '@/services/api';
 import { subDays, subWeeks, startOfDay, setHours, setMinutes, setSeconds, setMilliseconds } from 'date-fns';
-import { libreViewService } from '@/services/libreview';
 
 interface DashboardProps {
   readings: GlucoseReading[];
@@ -39,7 +38,6 @@ interface DashboardProps {
 
 export function Dashboard({ readings, onNewUpload, onDataUpdated }: DashboardProps) {
   const [dateRange, setDateRange] = useState<DateRangePreset>('30d');
-  const [liveReadings, setLiveReadings] = useState<GlucoseReading[]>([]);
   const [isLiveConnected, setIsLiveConnected] = useState(false);
   const [showChat, setShowChat] = useState(false);
 
@@ -65,104 +63,15 @@ export function Dashboard({ readings, onNewUpload, onDataUpdated }: DashboardPro
     }
   };
 
-  // Fetch LibreView data
+  // Reload data from backend (backend poller handles LibreView syncing automatically)
   const fetchLiveData = useCallback(async () => {
     if (!isLiveConnected) return;
 
     try {
-      // Ensure we're authenticated
-      const authenticated = await libreViewService.ensureAuthenticated();
-      if (!authenticated) {
-        setIsLiveConnected(false);
-        return;
-      }
-
-      // Fetch glucose data
-      const data = await libreViewService.getGlucoseData();
-
-      // Convert LibreView format to our format
-      const convertedReadings: GlucoseReading[] = data.graphData
-        .filter((reading) => reading.ValueInMgPerDl > 0)
-        .map((reading) => ({
-          glucose: reading.ValueInMgPerDl,
-          timestamp: new Date(reading.Timestamp),
-          device: 'LibreView',
-          recordType: 0,
-          trend: reading.type === 1 ? reading.MeasurementColor : undefined,
-        } as GlucoseReading))
-        .sort((a, b) => a.timestamp.getTime() - b.timestamp.getTime());
-
-      // Merge with stored readings to preserve older data that API no longer returns
-      // This is important for bedtime data which may expire from the API after ~12 hours
-      const storedReadingsJson = localStorage.getItem('liveReadings');
-      let mergedReadings = [...convertedReadings];
-
-      if (storedReadingsJson) {
-        try {
-          const storedReadings = (JSON.parse(storedReadingsJson) as Array<Omit<GlucoseReading, 'timestamp'> & { timestamp: string }>).map((r) => ({
-            ...r,
-            timestamp: new Date(r.timestamp)
-          }));
-
-          // Merge stored and new readings, removing duplicates
-          const readingMap = new Map<number, GlucoseReading>();
-          [...storedReadings, ...convertedReadings].forEach(reading => {
-            readingMap.set(reading.timestamp.getTime(), reading);
-          });
-
-          // Filter to last 24 hours and sort
-          const now = Date.now();
-          const oneDayAgo = now - (24 * 60 * 60 * 1000);
-          mergedReadings = Array.from(readingMap.values())
-            .filter(r => r.timestamp.getTime() >= oneDayAgo)
-            .sort((a, b) => a.timestamp.getTime() - b.timestamp.getTime());
-        } catch (error) {
-          console.error('Failed to parse stored readings:', error);
-        }
-      }
-
-      // Store merged readings for next time (24-hour cache for live mode)
-      localStorage.setItem('liveReadings', JSON.stringify(mergedReadings));
-
-      // Also merge into main glucose data storage so historical views include live data
-      const mainDataJson = localStorage.getItem('glucoseData');
-      if (mainDataJson) {
-        try {
-          const mainData = (JSON.parse(mainDataJson) as Array<Omit<GlucoseReading, 'timestamp'> & { timestamp: string }>).map((r) => ({
-            ...r,
-            timestamp: new Date(r.timestamp)
-          }));
-
-          // Merge main data with new live readings, removing duplicates
-          const allReadingsMap = new Map<number, GlucoseReading>();
-          [...mainData, ...mergedReadings].forEach(reading => {
-            allReadingsMap.set(reading.timestamp.getTime(), reading);
-          });
-
-          // Convert back to array and sort
-          const combinedData = Array.from(allReadingsMap.values())
-            .sort((a, b) => a.timestamp.getTime() - b.timestamp.getTime());
-
-          // Save merged data back to main storage
-          localStorage.setItem('glucoseData', JSON.stringify(combinedData));
-
-          // Notify parent that data has been updated
-          onDataUpdated?.();
-        } catch (error) {
-          console.error('Failed to merge live data into main storage:', error);
-        }
-      } else {
-        // No CSV data exists yet, so save live data as the main data
-        localStorage.setItem('glucoseData', JSON.stringify(mergedReadings));
-
-        // Notify parent that data has been updated
-        onDataUpdated?.();
-      }
-
-      setLiveReadings(mergedReadings);
+      // Backend poller automatically syncs LibreView data, just reload from API
+      onDataUpdated?.();
     } catch (error) {
-      console.error('Failed to fetch live data:', error);
-      setIsLiveConnected(false);
+      console.error('Failed to reload live data:', error);
     }
   }, [isLiveConnected, onDataUpdated]);
 
@@ -170,8 +79,7 @@ export function Dashboard({ readings, onNewUpload, onDataUpdated }: DashboardPro
   useEffect(() => {
     if (dateRange !== 'live' || !isLiveConnected) return;
 
-    // Initial fetch (async setState is acceptable in effects)
-    // eslint-disable-next-line react-hooks/set-state-in-effect
+    // Initial fetch
     fetchLiveData();
 
     // Poll every minute
@@ -180,16 +88,8 @@ export function Dashboard({ readings, onNewUpload, onDataUpdated }: DashboardPro
     return () => clearInterval(interval);
   }, [dateRange, isLiveConnected, fetchLiveData]);
 
-  // Check for stored credentials on mount
-  useEffect(() => {
-    const hasCredentials = libreViewService.hasStoredCredentials();
-    const isAuth = libreViewService.isAuthenticated();
-    // eslint-disable-next-line react-hooks/set-state-in-effect
-    setIsLiveConnected(hasCredentials && isAuth);
-  }, []);
-
-  // Combine readings based on mode
-  const allReadings = dateRange === 'live' ? liveReadings : readings;
+  // All readings come from the backend (includes LibreView-synced data)
+  const allReadings = readings;
 
   // Get date range for filtering
   const { filteredReadings } = useMemo(() => {

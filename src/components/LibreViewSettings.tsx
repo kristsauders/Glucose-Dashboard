@@ -5,57 +5,51 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { AlertCircle, CheckCircle2, Settings, Wifi, WifiOff } from 'lucide-react';
-import { libreViewService, type LibreViewCredentials } from '@/services/libreview';
+import { apiService } from '@/services/api';
 
 interface LibreViewSettingsProps {
   onConnectionChange?: (connected: boolean) => void;
 }
 
 export function LibreViewSettings({ onConnectionChange }: LibreViewSettingsProps) {
-  const [credentials, setCredentials] = useState<LibreViewCredentials>({
-    email: '',
-    password: '',
-    region: 'us',
-  });
-  const [corsProxy] = useState<string>(() => {
-    // Use current hostname so it works from any device on the network
-    const hostname = window.location.hostname;
-    return `http://${hostname}:3001/proxy?url=`;
-  });
+  const [email, setEmail] = useState('');
+  const [password, setPassword] = useState('');
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [isConnected, setIsConnected] = useState(false);
+  const [connectedEmail, setConnectedEmail] = useState<string>('');
+  const [lastSync, setLastSync] = useState<string>('');
   const [showSettings, setShowSettings] = useState(false);
 
   useEffect(() => {
-    // Load stored credentials
-    const stored = libreViewService.getStoredCredentials();
-    if (stored) {
-      setCredentials(stored);
-      setIsConnected(libreViewService.isAuthenticated());
-    }
+    checkConnectionStatus();
   }, []);
+
+  const checkConnectionStatus = async () => {
+    try {
+      const status = await apiService.getLibreViewStatus();
+      setIsConnected(status.isConnected);
+      if (status.isConnected) {
+        setConnectedEmail(status.email || '');
+        setLastSync(status.lastSync || '');
+        onConnectionChange?.(true);
+      }
+    } catch (err) {
+      console.error('Failed to check LibreView status:', err);
+      setIsConnected(false);
+      onConnectionChange?.(false);
+    }
+  };
 
   const handleConnect = async () => {
     setIsLoading(true);
     setError(null);
 
     try {
-      // Save credentials and proxy
-      libreViewService.saveCredentials(credentials, corsProxy);
-
-      // Attempt login with proxy
-      const success = await libreViewService.login(credentials, corsProxy);
-
-      if (success) {
-        setIsConnected(true);
-        setShowSettings(false);
-        onConnectionChange?.(true);
-      } else {
-        setError('Login failed. Please check your credentials.');
-        setIsConnected(false);
-        onConnectionChange?.(false);
-      }
+      await apiService.connectLibreView(email, password);
+      await checkConnectionStatus();
+      setShowSettings(false);
+      setPassword(''); // Clear password after successful connection
     } catch (err) {
       const errorMessage = err instanceof Error ? err.message : 'Connection failed';
       setError(errorMessage);
@@ -66,30 +60,20 @@ export function LibreViewSettings({ onConnectionChange }: LibreViewSettingsProps
     }
   };
 
-  const handleDisconnect = () => {
-    libreViewService.clearCredentials();
-    setIsConnected(false);
-    setCredentials({ email: '', password: '', region: 'us' });
-    onConnectionChange?.(false);
-  };
-
-  const handleTestConnection = async () => {
+  const handleDisconnect = async () => {
     setIsLoading(true);
     setError(null);
 
     try {
-      const authenticated = await libreViewService.ensureAuthenticated();
-      setIsConnected(authenticated);
-
-      if (!authenticated) {
-        setError('Not connected. Please enter your credentials.');
-      }
-
-      onConnectionChange?.(authenticated);
-    } catch (err) {
-      setError(err instanceof Error ? err.message : 'Connection test failed');
+      await apiService.disconnectLibreView();
       setIsConnected(false);
+      setConnectedEmail('');
+      setLastSync('');
+      setEmail('');
+      setPassword('');
       onConnectionChange?.(false);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Disconnect failed');
     } finally {
       setIsLoading(false);
     }
@@ -112,27 +96,18 @@ export function LibreViewSettings({ onConnectionChange }: LibreViewSettingsProps
                 <div>
                   <p className="font-semibold text-sm">LibreView Connected</p>
                   <p className="text-xs text-muted-foreground">
-                    Auto-updating every minute
+                    {connectedEmail}
+                    {lastSync && ` • Last sync: ${new Date(lastSync).toLocaleString()}`}
                   </p>
                 </div>
               </div>
-              <div className="flex gap-2">
-                <Button
-                  variant="ghost"
-                  size="sm"
-                  onClick={handleTestConnection}
-                  disabled={isLoading}
-                >
-                  Test
-                </Button>
-                <Button
-                  variant="ghost"
-                  size="sm"
-                  onClick={() => setShowSettings(true)}
-                >
-                  <Settings className="h-4 w-4" />
-                </Button>
-              </div>
+              <Button
+                variant="ghost"
+                size="sm"
+                onClick={() => setShowSettings(true)}
+              >
+                <Settings className="h-4 w-4" />
+              </Button>
             </div>
           </CardContent>
         </Card>
@@ -155,7 +130,7 @@ export function LibreViewSettings({ onConnectionChange }: LibreViewSettingsProps
                 LibreView Connection
               </CardTitle>
               <CardDescription>
-                Connect to LibreView to enable live glucose monitoring
+                Connect to LibreView for automatic data syncing
               </CardDescription>
             </div>
             {isConnected && (
@@ -178,10 +153,8 @@ export function LibreViewSettings({ onConnectionChange }: LibreViewSettingsProps
                 id="email"
                 type="email"
                 placeholder="your@email.com"
-                value={credentials.email}
-                onChange={(e) =>
-                  setCredentials({ ...credentials, email: e.target.value })
-                }
+                value={email}
+                onChange={(e) => setEmail(e.target.value)}
                 disabled={isLoading}
               />
             </div>
@@ -192,43 +165,15 @@ export function LibreViewSettings({ onConnectionChange }: LibreViewSettingsProps
                 id="password"
                 type="password"
                 placeholder="••••••••"
-                value={credentials.password}
-                onChange={(e) =>
-                  setCredentials({ ...credentials, password: e.target.value })
-                }
+                value={password}
+                onChange={(e) => setPassword(e.target.value)}
                 disabled={isLoading}
                 onKeyDown={(e) => {
-                  if (e.key === 'Enter' && credentials.email && credentials.password) {
+                  if (e.key === 'Enter' && email && password) {
                     handleConnect();
                   }
                 }}
               />
-            </div>
-
-            <div className="space-y-2">
-              <Label htmlFor="region">Region</Label>
-              <select
-                id="region"
-                className="flex h-9 w-full rounded-md border border-input bg-transparent px-3 py-1 text-sm shadow-sm transition-colors focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring disabled:cursor-not-allowed disabled:opacity-50"
-                value={credentials.region}
-                onChange={(e) =>
-                  setCredentials({
-                    ...credentials,
-                    region: e.target.value as LibreViewCredentials['region'],
-                  })
-                }
-                disabled={isLoading}
-              >
-                <option value="us">United States</option>
-                <option value="eu">Europe</option>
-                <option value="de">Germany</option>
-                <option value="fr">France</option>
-                <option value="jp">Japan</option>
-                <option value="ap">Asia-Pacific</option>
-                <option value="au">Australia</option>
-                <option value="ae">Middle East</option>
-                <option value="ca">Canada</option>
-              </select>
             </div>
           </div>
 
@@ -248,7 +193,7 @@ export function LibreViewSettings({ onConnectionChange }: LibreViewSettingsProps
               <div className="flex gap-2">
                 <CheckCircle2 className="h-4 w-4 text-[hsl(var(--chart-2))] flex-shrink-0 mt-0.5" />
                 <p className="text-sm text-[hsl(var(--chart-2))]">
-                  Successfully connected to LibreView!
+                  Successfully connected to LibreView! Data will sync automatically in the background.
                 </p>
               </div>
             </div>
@@ -257,30 +202,19 @@ export function LibreViewSettings({ onConnectionChange }: LibreViewSettingsProps
           {/* Action Buttons */}
           <div className="flex gap-2 pt-2">
             {isConnected ? (
-              <>
-                <Button
-                  onClick={handleDisconnect}
-                  variant="destructive"
-                  disabled={isLoading}
-                  className="flex-1"
-                >
-                  <WifiOff className="h-4 w-4 mr-2" />
-                  Disconnect
-                </Button>
-                <Button
-                  onClick={handleTestConnection}
-                  variant="outline"
-                  disabled={isLoading}
-                >
-                  Test Connection
-                </Button>
-              </>
+              <Button
+                onClick={handleDisconnect}
+                variant="destructive"
+                disabled={isLoading}
+                className="w-full"
+              >
+                <WifiOff className="h-4 w-4 mr-2" />
+                Disconnect
+              </Button>
             ) : (
               <Button
                 onClick={handleConnect}
-                disabled={
-                  isLoading || !credentials.email || !credentials.password
-                }
+                disabled={isLoading || !email || !password}
                 className="w-full"
               >
                 <Wifi className="h-4 w-4 mr-2" />
