@@ -1,36 +1,47 @@
 import { useState, useEffect, useCallback } from 'react';
 import type { GlucoseReading } from './types/glucose';
-import { loadGlucoseData } from './lib/csvParser';
-import { CSVUpload } from './components/CSVUpload';
+import { Auth } from './components/Auth';
 import { Dashboard } from './components/Dashboard';
+import { apiService } from './services/api';
 
 function App() {
-  const [readings, setReadings] = useState<GlucoseReading[] | null>(null);
+  const [isAuthenticated, setIsAuthenticated] = useState(false);
+  const [readings, setReadings] = useState<GlucoseReading[]>([]);
   const [isLoading, setIsLoading] = useState(true);
 
   useEffect(() => {
-    // Try to load existing data from localStorage
-    const savedData = loadGlucoseData();
-    if (savedData && savedData.length > 0) {
-      setReadings(savedData);
+    // Check if user is authenticated
+    const authenticated = apiService.isAuthenticated();
+    setIsAuthenticated(authenticated);
+
+    if (authenticated) {
+      // Load glucose data from backend
+      loadGlucoseData();
+    } else {
+      setIsLoading(false);
     }
-    setIsLoading(false);
   }, []);
 
-  const handleDataLoaded = (newReadings: GlucoseReading[]) => {
-    setReadings(newReadings);
+  const loadGlucoseData = async () => {
+    try {
+      const data = await apiService.getGlucoseReadings();
+      setReadings(data);
+    } catch (err) {
+      console.error('Failed to load glucose data:', err);
+    } finally {
+      setIsLoading(false);
+    }
   };
 
-  const handleNewUpload = () => {
-    setReadings(null);
+  const handleAuthenticated = () => {
+    setIsAuthenticated(true);
+    setIsLoading(true);
+    loadGlucoseData();
   };
 
   const handleDataUpdated = useCallback(() => {
-    // Reload data from localStorage (used when live mode merges new data)
-    const savedData = loadGlucoseData();
-    if (savedData && savedData.length > 0) {
-      setReadings(savedData);
-    }
+    // Reload data from backend
+    loadGlucoseData();
   }, []);
 
   if (isLoading) {
@@ -44,15 +55,11 @@ function App() {
     );
   }
 
-  if (!readings || readings.length === 0) {
-    return (
-      <div className="min-h-screen flex items-center justify-center bg-background p-4">
-        <CSVUpload onDataLoaded={handleDataLoaded} />
-      </div>
-    );
+  if (!isAuthenticated) {
+    return <Auth onAuthenticated={handleAuthenticated} />;
   }
 
-  return <Dashboard readings={readings} onNewUpload={handleNewUpload} onDataUpdated={handleDataUpdated} />;
+  return <Dashboard readings={readings} onDataUpdated={handleDataUpdated} />;
 }
 
 export default App;
