@@ -15,6 +15,7 @@ export function getAIProvider(): AIProvider {
         baseUrl: env.OLLAMA_BASE_URL,
         model: env.OLLAMA_MODEL,
         temperature: 0.7,
+        streaming: true, // Enable streaming
       }),
     };
   } else {
@@ -28,6 +29,7 @@ export function getAIProvider(): AIProvider {
           baseURL: 'https://openrouter.ai/api/v1',
         },
         temperature: 0.7,
+        streaming: true, // Enable streaming
       }),
     };
   }

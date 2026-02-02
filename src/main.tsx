@@ -6,7 +6,7 @@ import { ThemeProvider } from './components/ThemeProvider'
 
 createRoot(document.getElementById('root')!).render(
   <StrictMode>
-    <ThemeProvider defaultTheme="system" storageKey="glucose-dashboard-theme">
+    <ThemeProvider defaultTheme="system" storageKey="sage-theme">
       <App />
     </ThemeProvider>
   </StrictMode>,

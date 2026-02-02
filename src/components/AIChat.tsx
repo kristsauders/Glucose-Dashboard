@@ -390,10 +390,10 @@ export function AIChat() {
               <Bot className="h-5 w-5 text-primary" />
               <div>
                 <CardTitle>
-                  {activeConversation?.title || 'AI Assistant'}
+                  {activeConversation?.title || 'Sage'}
                 </CardTitle>
                 <CardDescription className="text-xs mt-0.5">
-                  Ask about your glucose patterns, trends, and management
+                  Your AI diabetes assistant
                 </CardDescription>
               </div>
             </div>
@@ -418,7 +418,7 @@ export function AIChat() {
               <MessageSquare className="h-12 w-12 text-muted-foreground mb-4" />
               <h3 className="font-semibold text-lg mb-2">No messages yet</h3>
               <p className="text-sm text-muted-foreground max-w-md">
-                Start a conversation with your AI assistant. Ask questions about your glucose data,
+                Start a conversation with Sage. Ask questions about your glucose data,
                 patterns, or get personalized insights.
               </p>
               <div className="mt-6 space-y-2 text-xs text-muted-foreground text-left w-full max-w-md">

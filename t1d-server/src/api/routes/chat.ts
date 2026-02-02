@@ -101,7 +101,7 @@ router.post('/stream', async (req, res, next) => {
     let isFirstChunk = true;
 
     try {
-      // Use stream() and extract content from messages
+      // Use stream() for content streaming
       const stream = await agent.stream({
         messages,
         userId: authReq.user!.id,
@@ -117,25 +117,15 @@ router.post('/stream', async (req, res, next) => {
       let chunkCount = 0;
       for await (const chunk of stream) {
         chunkCount++;
-        console.log(`\n=== Chunk ${chunkCount} ===`);
-        console.log('Chunk keys:', Object.keys(chunk));
 
         // LangGraph streams chunks keyed by node name (agent or tools)
-        // Extract messages from the node-specific update
         const nodeUpdate = chunk.agent || chunk.tools;
 
         if (nodeUpdate && nodeUpdate.messages && nodeUpdate.messages.length > 0) {
           const lastMessage = nodeUpdate.messages[nodeUpdate.messages.length - 1];
-          console.log('Last message type:', lastMessage.constructor.name);
-          console.log('Last message has content:', !!lastMessage.content);
-          console.log('Content type:', typeof lastMessage.content);
-          console.log('Content length:', lastMessage.content?.length || 0);
-          console.log('Has tool_calls:', !!lastMessage.tool_calls);
-          console.log('Tool calls count:', lastMessage.tool_calls?.length || 0);
 
-          // Only process AIMessage instances, not tool messages
+          // Only process AIMessage instances
           const isAIMessage = lastMessage.constructor.name === 'AIMessage';
-          console.log('Is AI Message:', isAIMessage);
 
           if (isAIMessage) {
             // Check for tool calls
@@ -144,18 +134,15 @@ router.post('/stream', async (req, res, next) => {
               if (newToolCalls > 0) {
                 toolCallCount = lastMessage.tool_calls.length;
                 const toolNames = lastMessage.tool_calls.slice(-newToolCalls).map((tc: any) => tc.name).join(', ');
-                console.log('Sending tool status:', toolNames);
                 res.write(`data: ${JSON.stringify({ type: 'status', content: `Using tool: ${toolNames}` })}\n\n`);
               }
             }
 
-            // Stream content incrementally (only from AI messages)
+            // Stream content incrementally
             if (lastMessage.content && typeof lastMessage.content === 'string') {
               const currentContent = lastMessage.content;
-              console.log('Current content preview:', currentContent.substring(0, 100));
               if (currentContent.length > lastContent.length) {
                 const delta = currentContent.slice(lastContent.length);
-                console.log('Delta length:', delta.length);
                 lastContent = currentContent;
                 fullResponse = currentContent;
 
@@ -168,8 +155,6 @@ router.post('/stream', async (req, res, next) => {
               }
             }
           }
-        } else {
-          console.log('Chunk has no messages or empty messages array');
         }
       }
 

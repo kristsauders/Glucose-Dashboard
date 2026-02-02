@@ -86,8 +86,8 @@ export function Auth({ onAuthenticated }: AuthProps) {
             </CardTitle>
             <CardDescription className="text-center">
               {isLogin
-                ? 'Enter your credentials to access your glucose dashboard'
-                : 'Sign up to start tracking your glucose data with AI assistance'}
+                ? 'Enter your credentials to access Sage'
+                : 'Sign up to get personalized diabetes insights from Sage'}
             </CardDescription>
           </CardHeader>
           <form onSubmit={handleSubmit}>

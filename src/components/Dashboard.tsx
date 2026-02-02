@@ -219,10 +219,10 @@ export function Dashboard({ readings, onDataUpdated }: DashboardProps) {
           <div className="flex flex-row items-center justify-between gap-2">
             <div className="flex-1 min-w-0">
               <h1 className="text-xl md:text-3xl font-bold bg-gradient-to-r from-primary to-primary/60 bg-clip-text text-transparent truncate">
-                Glucose Dashboard
+                Sage
               </h1>
               <p className="text-xs md:text-sm text-muted-foreground">
-                {filteredReadings.length.toLocaleString()} readings
+                Your AI diabetes assistant • {filteredReadings.length.toLocaleString()} readings
               </p>
             </div>
             <div className="flex gap-2 flex-shrink-0">
