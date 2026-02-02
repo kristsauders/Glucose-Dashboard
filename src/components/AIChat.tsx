@@ -143,7 +143,8 @@ export function AIChat() {
 
     try {
       const token = localStorage.getItem('t1d_auth_token');
-      const response = await fetch('http://localhost:3002/api/chat/stream', {
+      const apiUrl = import.meta.env.VITE_API_URL || 'http://localhost:3002';
+      const response = await fetch(`${apiUrl}/api/chat/stream`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',

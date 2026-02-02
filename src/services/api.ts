@@ -1,7 +1,7 @@
 import type { GlucoseReading } from '@/types/glucose';
 import type { Conversation, ConversationWithMessages } from '@/types/chat';
 
-const API_BASE_URL = 'http://localhost:3002/api';
+const API_BASE_URL = `${import.meta.env.VITE_API_URL || 'http://localhost:3002'}/api`;
 
 // Auth token management
 const TOKEN_KEY = 't1d_auth_token';
