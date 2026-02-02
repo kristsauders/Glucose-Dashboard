@@ -32,9 +32,10 @@ import { libreViewService } from '@/services/libreview';
 interface DashboardProps {
   readings: GlucoseReading[];
   onNewUpload: () => void;
+  onDataUpdated?: () => void;
 }
 
-export function Dashboard({ readings, onNewUpload }: DashboardProps) {
+export function Dashboard({ readings, onNewUpload, onDataUpdated }: DashboardProps) {
   const [dateRange, setDateRange] = useState<DateRangePreset>('30d');
   const [liveReadings, setLiveReadings] = useState<GlucoseReading[]>([]);
   const [isLiveConnected, setIsLiveConnected] = useState(false);
@@ -95,15 +96,50 @@ export function Dashboard({ readings, onNewUpload }: DashboardProps) {
         }
       }
 
-      // Store merged readings for next time
+      // Store merged readings for next time (24-hour cache for live mode)
       localStorage.setItem('liveReadings', JSON.stringify(mergedReadings));
+
+      // Also merge into main glucose data storage so historical views include live data
+      const mainDataJson = localStorage.getItem('glucoseData');
+      if (mainDataJson) {
+        try {
+          const mainData = (JSON.parse(mainDataJson) as Array<Omit<GlucoseReading, 'timestamp'> & { timestamp: string }>).map((r) => ({
+            ...r,
+            timestamp: new Date(r.timestamp)
+          }));
+
+          // Merge main data with new live readings, removing duplicates
+          const allReadingsMap = new Map<number, GlucoseReading>();
+          [...mainData, ...mergedReadings].forEach(reading => {
+            allReadingsMap.set(reading.timestamp.getTime(), reading);
+          });
+
+          // Convert back to array and sort
+          const combinedData = Array.from(allReadingsMap.values())
+            .sort((a, b) => a.timestamp.getTime() - b.timestamp.getTime());
+
+          // Save merged data back to main storage
+          localStorage.setItem('glucoseData', JSON.stringify(combinedData));
+
+          // Notify parent that data has been updated
+          onDataUpdated?.();
+        } catch (error) {
+          console.error('Failed to merge live data into main storage:', error);
+        }
+      } else {
+        // No CSV data exists yet, so save live data as the main data
+        localStorage.setItem('glucoseData', JSON.stringify(mergedReadings));
+
+        // Notify parent that data has been updated
+        onDataUpdated?.();
+      }
 
       setLiveReadings(mergedReadings);
     } catch (error) {
       console.error('Failed to fetch live data:', error);
       setIsLiveConnected(false);
     }
-  }, [isLiveConnected]);
+  }, [isLiveConnected, onDataUpdated]);
 
   // Polling effect for live mode
   useEffect(() => {

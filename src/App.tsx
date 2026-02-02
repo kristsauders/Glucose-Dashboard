@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import type { GlucoseReading } from './types/glucose';
 import { loadGlucoseData } from './lib/csvParser';
 import { CSVUpload } from './components/CSVUpload';
@@ -25,6 +25,14 @@ function App() {
     setReadings(null);
   };
 
+  const handleDataUpdated = useCallback(() => {
+    // Reload data from localStorage (used when live mode merges new data)
+    const savedData = loadGlucoseData();
+    if (savedData && savedData.length > 0) {
+      setReadings(savedData);
+    }
+  }, []);
+
   if (isLoading) {
     return (
       <div className="min-h-screen flex items-center justify-center bg-background">
@@ -44,7 +52,7 @@ function App() {
     );
   }
 
-  return <Dashboard readings={readings} onNewUpload={handleNewUpload} />;
+  return <Dashboard readings={readings} onNewUpload={handleNewUpload} onDataUpdated={handleDataUpdated} />;
 }
 
 export default App;
