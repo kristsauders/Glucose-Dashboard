@@ -25,6 +25,11 @@ function App() {
   const loadGlucoseData = async () => {
     try {
       const data = await apiService.getGlucoseReadings();
+      console.log(`Loaded ${data.length} readings from API`);
+      if (data.length > 0) {
+        console.log('First reading:', data[0]);
+        console.log('Timestamp type:', typeof data[0].timestamp, data[0].timestamp instanceof Date);
+      }
       setReadings(data);
     } catch (err) {
       console.error('Failed to load glucose data:', err);

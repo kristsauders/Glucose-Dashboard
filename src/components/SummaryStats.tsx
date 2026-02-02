@@ -10,7 +10,19 @@ interface SummaryStatsProps {
 
 export function SummaryStats({ readings, dailyMetrics }: SummaryStatsProps) {
   // Calculate overall statistics
-  const allGlucose = readings.map(r => r.glucose);
+  const allGlucose = readings.map(r => r.glucose).filter(g => !isNaN(g) && isFinite(g) && g > 0);
+
+  // Handle empty dataset
+  if (allGlucose.length === 0) {
+    return (
+      <Card>
+        <CardContent className="p-6 text-center text-muted-foreground">
+          No glucose data available for the selected time period.
+        </CardContent>
+      </Card>
+    );
+  }
+
   const overallAvg = allGlucose.reduce((sum, val) => sum + val, 0) / allGlucose.length;
   const overallMin = Math.min(...allGlucose);
   const overallMax = Math.max(...allGlucose);
@@ -28,8 +40,11 @@ export function SummaryStats({ readings, dailyMetrics }: SummaryStatsProps) {
   const timeHigh = (aboveRange / allGlucose.length) * 100;
   const timeAboveTarget = (aboveTarget / allGlucose.length) * 100;
 
-  // Calculate average CV
-  const avgCV = dailyMetrics.reduce((sum, d) => sum + d.coefficientOfVariation, 0) / dailyMetrics.length;
+  // Calculate average CV (handle empty dailyMetrics)
+  const validCVs = dailyMetrics.map(d => d.coefficientOfVariation).filter(cv => isFinite(cv));
+  const avgCV = validCVs.length > 0
+    ? validCVs.reduce((sum, cv) => sum + cv, 0) / validCVs.length
+    : 0;
 
   // Estimate A1C from average glucose
   // Formula: A1C ≈ (Average Glucose + 46.7) / 28.7
