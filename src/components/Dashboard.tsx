@@ -23,9 +23,11 @@ import { GlucoseDistributionCharts } from './charts/GlucoseDistributionCharts';
 import { DateRangeSelector, type DateRangePreset } from './DateRangeSelector';
 import { LibreViewSettings } from './LibreViewSettings';
 import { LatestReading } from './LatestReading';
+import { AIChat } from './AIChat';
 import { Button } from './ui/button';
 import { ThemeToggle } from './ThemeToggle';
-import { Upload } from 'lucide-react';
+import { Upload, MessageSquare, LogOut, X } from 'lucide-react';
+import { apiService } from '@/services/api';
 import { subDays, subWeeks, startOfDay, setHours, setMinutes, setSeconds, setMilliseconds } from 'date-fns';
 import { libreViewService } from '@/services/libreview';
 
@@ -39,6 +41,14 @@ export function Dashboard({ readings, onNewUpload, onDataUpdated }: DashboardPro
   const [dateRange, setDateRange] = useState<DateRangePreset>('30d');
   const [liveReadings, setLiveReadings] = useState<GlucoseReading[]>([]);
   const [isLiveConnected, setIsLiveConnected] = useState(false);
+  const [showChat, setShowChat] = useState(false);
+
+  const handleLogout = () => {
+    if (confirm('Are you sure you want to logout?')) {
+      apiService.logout();
+      window.location.reload();
+    }
+  };
 
   // Fetch LibreView data
   const fetchLiveData = useCallback(async () => {
@@ -293,10 +303,14 @@ export function Dashboard({ readings, onNewUpload, onDataUpdated }: DashboardPro
               </p>
             </div>
             <div className="flex gap-2 flex-shrink-0">
+              <Button variant="outline" size="sm" onClick={() => setShowChat(!showChat)}>
+                <MessageSquare className="h-4 w-4 md:mr-2" />
+                <span className="hidden md:inline">AI Chat</span>
+              </Button>
               <ThemeToggle />
-              <Button variant="outline" size="sm" onClick={onNewUpload}>
-                <Upload className="h-4 w-4 md:mr-2" />
-                <span className="hidden md:inline">New Upload</span>
+              <Button variant="outline" size="sm" onClick={handleLogout}>
+                <LogOut className="h-4 w-4 md:mr-2" />
+                <span className="hidden md:inline">Logout</span>
               </Button>
             </div>
           </div>
@@ -453,9 +467,40 @@ export function Dashboard({ readings, onNewUpload, onDataUpdated }: DashboardPro
       <footer className="border-t mt-12 py-6">
         <div className="container mx-auto px-2 md:px-4 text-center text-sm text-muted-foreground">
           <p>Built for proactive T1D management and LADA progression tracking</p>
-          <p className="mt-2">Data is stored locally in your browser</p>
+          <p className="mt-2">Data is synced with your secure account</p>
         </div>
       </footer>
+
+      {/* AI Chat Modal */}
+      {showChat && (
+        <motion.div
+          initial={{ opacity: 0 }}
+          animate={{ opacity: 1 }}
+          exit={{ opacity: 0 }}
+          className="fixed inset-0 bg-black/50 backdrop-blur-sm z-50 flex items-center justify-center p-4"
+          onClick={() => setShowChat(false)}
+        >
+          <motion.div
+            initial={{ scale: 0.95, opacity: 0 }}
+            animate={{ scale: 1, opacity: 1 }}
+            exit={{ scale: 0.95, opacity: 0 }}
+            className="w-full max-w-4xl max-h-[90vh] overflow-hidden"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="relative">
+              <Button
+                variant="ghost"
+                size="sm"
+                className="absolute -top-2 -right-2 z-10 bg-background rounded-full shadow-lg"
+                onClick={() => setShowChat(false)}
+              >
+                <X className="h-4 w-4" />
+              </Button>
+              <AIChat />
+            </div>
+          </motion.div>
+        </motion.div>
+      )}
     </div>
   );
 }
