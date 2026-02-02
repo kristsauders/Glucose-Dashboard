@@ -3,7 +3,11 @@ import cors from 'cors';
 import { env } from '../config/env.js';
 import { testConnection } from '../config/database.js';
 import { errorHandler } from './middleware/errorHandler.js';
+import { libreViewPoller } from '../services/libreviewPoller.js';
 import authRoutes from './routes/auth.js';
+import glucoseRoutes from './routes/glucose.js';
+import importRoutes from './routes/import.js';
+import settingsRoutes from './routes/settings.js';
 
 const app = express();
 
@@ -27,9 +31,25 @@ app.get('/api/health', async (req, res) => {
 
 // Routes
 app.use('/api/auth', authRoutes);
+app.use('/api/glucose', glucoseRoutes);
+app.use('/api/import', importRoutes);
+app.use('/api/settings', settingsRoutes);
 
 // Error handler (must be last)
 app.use(errorHandler);
+
+// Graceful shutdown
+process.on('SIGTERM', () => {
+  console.log('\n\n📴 Shutting down gracefully...');
+  libreViewPoller.stopAll();
+  process.exit(0);
+});
+
+process.on('SIGINT', () => {
+  console.log('\n\n📴 Shutting down gracefully...');
+  libreViewPoller.stopAll();
+  process.exit(0);
+});
 
 export function startServer() {
   const port = parseInt(env.PORT);
