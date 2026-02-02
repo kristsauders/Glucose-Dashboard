@@ -154,11 +154,11 @@ class APIService {
 
     // Convert API format to app format
     return response.readings.map(r => ({
-      glucose: r.glucose,
+      glucose: Number(r.glucose), // Convert string to number
       timestamp: new Date(r.timestamp),
       device: r.device,
       recordType: 0,
-      trend: r.trend,
+      trend: r.trend ? Number(r.trend) : r.trend,
     }));
   }
 
