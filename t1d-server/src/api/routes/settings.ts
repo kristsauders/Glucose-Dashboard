@@ -108,6 +108,35 @@ router.patch('/', async (req, res, next) => {
   }
 });
 
+// Get LibreView connection status
+router.get('/libreview', async (req, res, next) => {
+  try {
+    const authReq = req as AuthRequest;
+
+    const result = await query<User>(
+      `SELECT libreview_email, libreview_region
+       FROM users WHERE id = $1`,
+      [authReq.user!.id]
+    );
+
+    if (result.rows.length === 0) {
+      return res.status(404).json({ error: 'User not found' });
+    }
+
+    const user = result.rows[0];
+    const isConnected = !!user.libreview_email;
+    const lastSync = libreViewPoller.getLastPoll(authReq.user!.id);
+
+    res.json({
+      isConnected,
+      email: user.libreview_email || undefined,
+      lastSync,
+    });
+  } catch (error) {
+    next(error);
+  }
+});
+
 // Save LibreView credentials and start polling
 const libreviewSchema = z.object({
   email: z.string().email(),
