@@ -33,7 +33,7 @@ import { libreViewService } from '@/services/libreview';
 
 interface DashboardProps {
   readings: GlucoseReading[];
-  onNewUpload: () => void;
+  onNewUpload?: () => void;
   onDataUpdated?: () => void;
 }
 
@@ -279,10 +279,6 @@ export function Dashboard({ readings, onNewUpload, onDataUpdated }: DashboardPro
     if (filteredReadings.length === 0) return null;
     return [...filteredReadings].sort((a, b) => b.timestamp.getTime() - a.timestamp.getTime())[0];
   }, [filteredReadings]);
-
-  if (readings.length === 0 && dateRange !== 'live') {
-    return null;
-  }
 
   return (
     <div className="min-h-screen bg-background">
