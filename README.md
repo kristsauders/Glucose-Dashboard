@@ -102,7 +102,10 @@ You can access the dashboard from any device on your local network:
 
 **Example:** If your computer's IP is `192.168.1.100`, access the dashboard at `http://192.168.1.100:5173`
 
-**Note:** Both the dashboard and CORS proxy must be running on the host computer (`npm start`).
+**Important Notes:**
+
+- Both the dashboard and CORS proxy must be running on the host computer (`npm start`)
+- Live mode works from any device on your local network (the CORS proxy handles authentication)
 
 ### Building for Production
 
@@ -142,7 +145,8 @@ The CORS proxy (`cors-proxy` directory) is required for LibreView integration be
 
 - Runs locally on port 3001
 - Forwards requests to LibreView API with proper headers
-- Only accessible from your local machine
+- Computes authentication hashes (SHA-256) server-side for secure API access
+- Accessible from any device on your local network
 - Logs all requests for debugging
 
 **Note**: Never expose the proxy server to the internet or share your LibreView credentials.

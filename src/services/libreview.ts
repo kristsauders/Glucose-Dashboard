@@ -106,18 +106,6 @@ class LibreViewService {
     this.loadFromStorage();
   }
 
-  /**
-   * Calculate SHA256 hash of patient ID for account-id header
-   * Required by LibreView API for authenticated requests
-   */
-  private async getAccountId(patientId: string): Promise<string> {
-    const encoder = new TextEncoder();
-    const data = encoder.encode(patientId);
-    const hashBuffer = await crypto.subtle.digest('SHA-256', data);
-    const hashArray = Array.from(new Uint8Array(hashBuffer));
-    const hashHex = hashArray.map(b => b.toString(16).padStart(2, '0')).join('');
-    return hashHex;
-  }
 
   private loadFromStorage() {
     try {
@@ -216,8 +204,19 @@ class LibreViewService {
     options: RequestInit = {}
   ): Promise<T> {
     const baseUrl = `${this.baseUrl}${endpoint}`;
+
     // Apply CORS proxy if configured
-    const url = this.corsProxy ? `${this.corsProxy}${encodeURIComponent(baseUrl)}` : baseUrl;
+    // Include patient-id as query parameter so proxy can compute account-id hash
+    let url: string;
+    if (this.corsProxy) {
+      url = `${this.corsProxy}${encodeURIComponent(baseUrl)}`;
+      // Add patient-id to proxy URL if we have it (proxy will compute SHA-256 hash)
+      if (this.patientId && !endpoint.includes('/auth/login')) {
+        url += `&patient-id=${encodeURIComponent(this.patientId)}`;
+      }
+    } else {
+      url = baseUrl;
+    }
 
     const defaultHeaders: HeadersInit = {
       'Content-Type': 'application/json',
@@ -228,11 +227,6 @@ class LibreViewService {
 
     if (this.authToken && !endpoint.includes('/auth/login')) {
       defaultHeaders['Authorization'] = `Bearer ${this.authToken}`;
-
-      // Add account-id header (SHA256 of patient ID) - required by LibreView API
-      if (this.patientId) {
-        defaultHeaders['account-id'] = await this.getAccountId(this.patientId);
-      }
     }
 
     try {

@@ -1,6 +1,7 @@
 const express = require('express');
 const cors = require('cors');
 const fetch = require('node-fetch');
+const crypto = require('crypto');
 
 const app = express();
 const PORT = 3001;
@@ -57,10 +58,14 @@ app.all('/proxy', async (req, res) => {
       forwardHeaders['authorization'] = authHeader;
     }
 
-    // Forward account-id header if present (required by LibreView API)
-    const accountId = req.get('Account-Id') || req.get('account-id');
-    if (accountId) {
-      forwardHeaders['account-id'] = accountId;
+    // Compute account-id header from patient-id (required by LibreView API)
+    // Accept patient ID from query parameter or header
+    const patientId = req.query['patient-id'] || req.get('Patient-Id') || req.get('patient-id');
+    if (patientId) {
+      // Compute SHA-256 hash of patient ID for account-id header
+      const hash = crypto.createHash('sha256').update(patientId).digest('hex');
+      forwardHeaders['account-id'] = hash;
+      console.log('Computed account-id hash for patient ID:', patientId.substring(0, 8) + '...');
     }
 
     // Forward user-agent if present (some APIs require it)
