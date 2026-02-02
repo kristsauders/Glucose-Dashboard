@@ -18,8 +18,10 @@ interface AgentState {
 /**
  * Create the AI agent graph
  */
-export function createAgentGraph() {
-  const provider = getAIProvider();
+export function createAgentGraph(forceProvider?: 'ollama' | 'openrouter') {
+  const provider = forceProvider
+    ? (forceProvider === 'openrouter' ? getOpenRouterProvider() : getOllamaProvider())
+    : getAIProvider();
   console.log(`✓ Using AI provider: ${provider.name}`);
 
   // Bind tools to the model

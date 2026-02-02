@@ -227,6 +227,31 @@ class APIService {
   }
 
   // Settings methods
+  async getSettings(): Promise<{
+    settings: {
+      email: string;
+      libreview: {
+        email: string | null;
+        region: string;
+        connected: boolean;
+        polling: boolean;
+        lastPoll?: string;
+      };
+      discord: {
+        userId: string | null;
+        linked: boolean;
+      };
+      diagnosis: {
+        date?: string;
+        type?: string;
+      };
+      timezone?: string;
+      preferences: Record<string, any>;
+    };
+  }> {
+    return this.request('/settings');
+  }
+
   async updateSettings(settings: {
     diagnosisType?: string;
     diagnosisDate?: string;
@@ -261,6 +286,20 @@ class APIService {
 
   async disconnectLibreView(): Promise<void> {
     await this.request('/settings/libreview', {
+      method: 'DELETE',
+    });
+  }
+
+  // Discord integration
+  async linkDiscord(discordUserId: string): Promise<void> {
+    await this.request('/settings/discord', {
+      method: 'POST',
+      body: JSON.stringify({ discordUserId }),
+    });
+  }
+
+  async unlinkDiscord(): Promise<void> {
+    await this.request('/settings/discord', {
       method: 'DELETE',
     });
   }

@@ -8,9 +8,9 @@
     "build": "tsc -b && vite build",
     "lint": "eslint .",
     "preview": "vite preview",
-    "proxy": "cd cors-proxy && npm start",
-    "start": "concurrently \"npm run proxy\" \"npm run dev\" --names \"proxy,app\" --prefix-colors \"blue,green\"",
-    "postinstall": "cd cors-proxy && npm install"
+    "server": "cd t1d-server && npm run dev",
+    "start": "concurrently \"npm run server\" \"npm run dev\" --names \"server,app\" --prefix-colors \"magenta,green\"",
+    "postinstall": "cd t1d-server && npm install"
   },
   "dependencies": {
     "class-variance-authority": "^0.7.1",

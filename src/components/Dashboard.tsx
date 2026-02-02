@@ -21,12 +21,12 @@ import { WeeklyA1CChart } from './charts/WeeklyA1CChart';
 import { ContinuousGlucoseChart } from './charts/ContinuousGlucoseChart';
 import { GlucoseDistributionCharts } from './charts/GlucoseDistributionCharts';
 import { DateRangeSelector, type DateRangePreset } from './DateRangeSelector';
-import { LibreViewSettings } from './LibreViewSettings';
 import { LatestReading } from './LatestReading';
 import { AIChat } from './AIChat';
+import { Settings } from './Settings';
 import { Button } from './ui/button';
 import { ThemeToggle } from './ThemeToggle';
-import { Upload, MessageSquare, LogOut, X } from 'lucide-react';
+import { Upload, MessageSquare, LogOut, X, Settings as SettingsIcon } from 'lucide-react';
 import { apiService } from '@/services/api';
 import { subDays, subWeeks, startOfDay, setHours, setMinutes, setSeconds, setMilliseconds } from 'date-fns';
 
@@ -37,21 +37,25 @@ interface DashboardProps {
 }
 
 export function Dashboard({ readings, onDataUpdated }: DashboardProps) {
-  const [dateRange, setDateRange] = useState<DateRangePreset>('30d');
-  const [isLiveConnected, setIsLiveConnected] = useState(false);
+  const [dateRange, setDateRange] = useState<DateRangePreset>('live');
   const [showChat, setShowChat] = useState(false);
+  const [showSettings, setShowSettings] = useState(false);
 
-  // Close chat modal with ESC key
+  // Close modals with ESC key
   useEffect(() => {
     const handleEscape = (e: KeyboardEvent) => {
-      if (e.key === 'Escape' && showChat) {
-        setShowChat(false);
+      if (e.key === 'Escape') {
+        if (showSettings) {
+          setShowSettings(false);
+        } else if (showChat) {
+          setShowChat(false);
+        }
       }
     };
 
     document.addEventListener('keydown', handleEscape);
     return () => document.removeEventListener('keydown', handleEscape);
-  }, [showChat]);
+  }, [showChat, showSettings]);
 
   const handleLogout = () => {
     if (confirm('Are you sure you want to logout?')) {
@@ -77,19 +81,17 @@ export function Dashboard({ readings, onDataUpdated }: DashboardProps) {
 
   // Reload data from backend (backend poller handles LibreView syncing automatically)
   const fetchLiveData = useCallback(async () => {
-    if (!isLiveConnected) return;
-
     try {
       // Backend poller automatically syncs LibreView data, just reload from API
       onDataUpdated?.();
     } catch (error) {
       console.error('Failed to reload live data:', error);
     }
-  }, [isLiveConnected, onDataUpdated]);
+  }, [onDataUpdated]);
 
   // Polling effect for live mode
   useEffect(() => {
-    if (dateRange !== 'live' || !isLiveConnected) return;
+    if (dateRange !== 'live') return;
 
     // Initial fetch
     fetchLiveData();
@@ -98,7 +100,7 @@ export function Dashboard({ readings, onDataUpdated }: DashboardProps) {
     const interval = setInterval(fetchLiveData, 15000);
 
     return () => clearInterval(interval);
-  }, [dateRange, isLiveConnected, fetchLiveData]);
+  }, [dateRange, fetchLiveData]);
 
   // All readings come from the backend (includes LibreView-synced data)
   const allReadings = readings;
@@ -233,6 +235,14 @@ export function Dashboard({ readings, onDataUpdated }: DashboardProps) {
               <Button
                 variant="outline"
                 size="sm"
+                onClick={() => setShowSettings(true)}
+              >
+                <SettingsIcon className="h-4 w-4 md:mr-2" />
+                <span className="hidden md:inline">Settings</span>
+              </Button>
+              <Button
+                variant="outline"
+                size="sm"
                 onClick={() => document.getElementById('csv-upload')?.click()}
               >
                 <Upload className="h-4 w-4 md:mr-2" />
@@ -265,18 +275,6 @@ export function Dashboard({ readings, onDataUpdated }: DashboardProps) {
             dataStartDate={dataStartDate}
             dataEndDate={dataEndDate}
           />
-
-          {/* Live Mode: LibreView Settings */}
-          {dateRange === 'live' && (
-            <LibreViewSettings
-              onConnectionChange={(connected) => {
-                setIsLiveConnected(connected);
-                if (connected) {
-                  fetchLiveData();
-                }
-              }}
-            />
-          )}
 
           {/* Live Mode: Latest Reading */}
           {dateRange === 'live' && (
@@ -439,6 +437,11 @@ export function Dashboard({ readings, onDataUpdated }: DashboardProps) {
             </div>
           </motion.div>
         </motion.div>
+      )}
+
+      {/* Settings Modal */}
+      {showSettings && (
+        <Settings onClose={() => setShowSettings(false)} />
       )}
     </div>
   );
