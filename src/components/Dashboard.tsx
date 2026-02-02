@@ -50,6 +50,21 @@ export function Dashboard({ readings, onNewUpload, onDataUpdated }: DashboardPro
     }
   };
 
+  const handleCSVUpload = async (event: React.ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0];
+    if (!file) return;
+
+    try {
+      const result = await apiService.importCSV(file);
+      alert(`Successfully imported ${result.count} glucose readings!`);
+      onDataUpdated?.(); // Reload data
+      event.target.value = ''; // Reset input
+    } catch (error) {
+      alert(`Failed to import CSV: ${error instanceof Error ? error.message : 'Unknown error'}`);
+      event.target.value = ''; // Reset input
+    }
+  };
+
   // Fetch LibreView data
   const fetchLiveData = useCallback(async () => {
     if (!isLiveConnected) return;
@@ -302,6 +317,18 @@ export function Dashboard({ readings, onNewUpload, onDataUpdated }: DashboardPro
               <Button variant="outline" size="sm" onClick={() => setShowChat(!showChat)}>
                 <MessageSquare className="h-4 w-4 md:mr-2" />
                 <span className="hidden md:inline">AI Chat</span>
+              </Button>
+              <Button variant="outline" size="sm" asChild>
+                <label className="cursor-pointer">
+                  <Upload className="h-4 w-4 md:mr-2" />
+                  <span className="hidden md:inline">Import CSV</span>
+                  <input
+                    type="file"
+                    accept=".csv"
+                    onChange={handleCSVUpload}
+                    className="hidden"
+                  />
+                </label>
               </Button>
               <ThemeToggle />
               <Button variant="outline" size="sm" onClick={handleLogout}>
