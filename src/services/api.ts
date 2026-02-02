@@ -149,7 +149,7 @@ class APIService {
 
     const query = params.toString();
     const response = await this.request<GlucoseResponse>(
-      `/glucose${query ? `?${query}` : ''}`
+      `/glucose/readings${query ? `?${query}` : ''}`
     );
 
     // Convert API format to app format
