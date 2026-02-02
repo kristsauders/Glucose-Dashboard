@@ -1,0 +1,57 @@
+import express from 'express';
+import cors from 'cors';
+import { env } from '../config/env.js';
+import { testConnection } from '../config/database.js';
+import { errorHandler } from './middleware/errorHandler.js';
+import authRoutes from './routes/auth.js';
+
+const app = express();
+
+// Middleware
+app.use(cors({
+  origin: env.CORS_ORIGIN,
+  credentials: true,
+}));
+app.use(express.json());
+
+// Health check
+app.get('/api/health', async (req, res) => {
+  const dbHealthy = await testConnection();
+  res.json({
+    status: 'ok',
+    timestamp: new Date().toISOString(),
+    database: dbHealthy ? 'connected' : 'disconnected',
+    environment: env.NODE_ENV,
+  });
+});
+
+// Routes
+app.use('/api/auth', authRoutes);
+
+// Error handler (must be last)
+app.use(errorHandler);
+
+export function startServer() {
+  const port = parseInt(env.PORT);
+
+  return new Promise<void>((resolve) => {
+    app.listen(port, '0.0.0.0', () => {
+      console.log('');
+      console.log('╔════════════════════════════════════════════════════════╗');
+      console.log('║                                                        ║');
+      console.log('║              T1D AI Assistant Server                  ║');
+      console.log('║                                                        ║');
+      console.log('╚════════════════════════════════════════════════════════╝');
+      console.log('');
+      console.log(`✓ Server running on http://localhost:${port}`);
+      console.log(`✓ Health check: http://localhost:${port}/api/health`);
+      console.log(`✓ Environment: ${env.NODE_ENV}`);
+      console.log(`✓ AI Provider: ${env.AI_PROVIDER}`);
+      console.log('');
+      console.log('Press Ctrl+C to stop');
+      console.log('════════════════════════════════════════════════════════');
+      console.log('');
+      resolve();
+    });
+  });
+}

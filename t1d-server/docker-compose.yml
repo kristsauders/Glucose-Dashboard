@@ -1,0 +1,22 @@
+version: '3.8'
+
+services:
+  postgres:
+    image: postgres:16-alpine
+    container_name: t1d-postgres
+    environment:
+      POSTGRES_DB: t1d
+      POSTGRES_USER: t1d_user
+      POSTGRES_PASSWORD: t1d_password_change_in_production
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U t1d_user -d t1d"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+volumes:
+  postgres_data:
