@@ -8,7 +8,7 @@
     "build": "tsc -b && vite build",
     "lint": "eslint .",
     "preview": "vite preview",
-    "proxy": "cd ../cors-proxy && npm start",
+    "proxy": "cd cors-proxy && npm start",
     "start": "concurrently \"npm run proxy\" \"npm run dev\" --names \"proxy,app\" --prefix-colors \"blue,green\""
   },
   "dependencies": {

@@ -47,10 +47,10 @@ A comprehensive, interactive blood glucose analysis dashboard designed specifica
 
 ```bash
 git clone https://github.com/kristsauders/Glucose-Dashboard.git
-cd Glucose-Dashboard/glucose-dashboard
+cd Glucose-Dashboard
 ```
 
-2. Install dependencies:
+2. Install dashboard dependencies:
 
 ```bash
 npm install
@@ -59,9 +59,9 @@ npm install
 3. Install CORS proxy dependencies:
 
 ```bash
-cd ../cors-proxy
+cd cors-proxy
 npm install
-cd ../glucose-dashboard
+cd ..
 ```
 
 ### Running the Application
@@ -87,8 +87,7 @@ If you prefer to run them separately:
 cd cors-proxy
 npm start
 
-# Terminal 2 - Start the dashboard
-cd glucose-dashboard
+# Terminal 2 - Start the dashboard (from the root directory)
 npm run dev
 ```
 
