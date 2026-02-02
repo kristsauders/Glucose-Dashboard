@@ -9,7 +9,8 @@
     "lint": "eslint .",
     "preview": "vite preview",
     "proxy": "cd cors-proxy && npm start",
-    "start": "concurrently \"npm run proxy\" \"npm run dev\" --names \"proxy,app\" --prefix-colors \"blue,green\""
+    "start": "concurrently \"npm run proxy\" \"npm run dev\" --names \"proxy,app\" --prefix-colors \"blue,green\"",
+    "postinstall": "cd cors-proxy && npm install"
   },
   "dependencies": {
     "class-variance-authority": "^0.7.1",

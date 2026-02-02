@@ -50,19 +50,13 @@ git clone https://github.com/kristsauders/Glucose-Dashboard.git
 cd Glucose-Dashboard
 ```
 
-2. Install dashboard dependencies:
+2. Install all dependencies (dashboard + CORS proxy):
 
 ```bash
 npm install
 ```
 
-3. Install CORS proxy dependencies:
-
-```bash
-cd cors-proxy
-npm install
-cd ..
-```
+This will automatically install dependencies for both the dashboard and the CORS proxy.
 
 ### Running the Application
 
