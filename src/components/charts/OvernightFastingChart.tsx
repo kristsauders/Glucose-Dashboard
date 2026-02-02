@@ -13,6 +13,7 @@ import {
   ReferenceLine,
   Area,
   Legend,
+  LineChart,
 } from 'recharts';
 import { format, parseISO } from 'date-fns';
 
@@ -22,6 +23,171 @@ interface OvernightFastingChartProps {
 
 export function OvernightFastingChart({ data }: OvernightFastingChartProps) {
   const chartHeight = useResponsiveChartHeight(250, 350);
+  const isSingleNight = data.length === 1;
+  const lastNight = data[data.length - 1];
+
+  // Calculate average fasting glucose
+  const avgFasting = data.reduce((sum, d) => sum + d.fastingGlucose, 0) / data.length;
+
+  // Helper functions for trend display
+  const getTrendIcon = (trend?: string) => {
+    switch (trend) {
+      case 'rising':
+        return '↗';
+      case 'falling':
+        return '↘';
+      case 'stable':
+        return '→';
+      default:
+        return '→';
+    }
+  };
+
+  const getTrendColor = (trend?: string) => {
+    switch (trend) {
+      case 'rising':
+        return 'text-[hsl(var(--chart-1))]';
+      case 'falling':
+        return 'text-[hsl(var(--chart-2))]';
+      case 'stable':
+        return 'text-primary';
+      default:
+        return 'text-primary';
+    }
+  };
+
+  const getTrendLabel = (trend?: string) => {
+    switch (trend) {
+      case 'rising':
+        return 'Rising';
+      case 'falling':
+        return 'Falling';
+      case 'stable':
+        return 'Stable';
+      default:
+        return 'Unknown';
+    }
+  };
+
+  // For single night view (Live mode), show detailed readings
+  if (isSingleNight && lastNight.readings && lastNight.readings.length > 0) {
+    return (
+      <motion.div
+        initial={{ opacity: 0, y: 20 }}
+        animate={{ opacity: 1, y: 0 }}
+        transition={{ duration: 0.5, delay: 0.3 }}
+      >
+        <Card>
+          <CardHeader>
+            <CardTitle>Last Night's Overnight Fasting</CardTitle>
+            <CardDescription>
+              3am-7am glucose trend and stability
+            </CardDescription>
+          </CardHeader>
+          <CardContent>
+            {/* Metrics Grid */}
+            <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-6">
+              <div className="bg-muted rounded-lg p-3">
+                <p className="text-xs text-muted-foreground mb-1">Average</p>
+                <p className="text-2xl font-bold">
+                  {lastNight.fastingGlucose.toFixed(1)}
+                </p>
+              </div>
+              <div className="bg-muted rounded-lg p-3">
+                <p className="text-xs text-muted-foreground mb-1">Trend</p>
+                <p className={`text-2xl font-bold ${getTrendColor(lastNight.trend)}`}>
+                  {getTrendIcon(lastNight.trend)} {getTrendLabel(lastNight.trend)}
+                </p>
+              </div>
+              <div className="bg-muted rounded-lg p-3">
+                <p className="text-xs text-muted-foreground mb-1">Change</p>
+                <p className={`text-2xl font-bold ${getTrendColor(lastNight.trend)}`}>
+                  {lastNight.trendChange !== undefined && lastNight.trendChange > 0 ? '+' : ''}
+                  {lastNight.trendChange?.toFixed(0)}
+                </p>
+                <p className="text-xs text-muted-foreground mt-0.5">
+                  {lastNight.startingGlucose?.toFixed(0)} → {lastNight.endingGlucose?.toFixed(0)} mg/dL
+                </p>
+              </div>
+              <div className="bg-muted rounded-lg p-3">
+                <p className="text-xs text-muted-foreground mb-1">Stability</p>
+                <p className="text-2xl font-bold">
+                  {lastNight.stability !== undefined ? lastNight.stability.toFixed(1) : 'N/A'}
+                </p>
+                <p className="text-xs text-muted-foreground mt-0.5">
+                  {lastNight.stability !== undefined && lastNight.stability < 15
+                    ? 'Very stable'
+                    : lastNight.stability !== undefined && lastNight.stability < 25
+                    ? 'Stable'
+                    : 'Variable'}
+                </p>
+              </div>
+            </div>
+
+            {/* Detailed Time Series Chart */}
+            <ResponsiveContainer width="100%" height={chartHeight}>
+              <LineChart data={lastNight.readings} margin={{ top: 5, right: 5, bottom: 5, left: 0 }}>
+                <CartesianGrid strokeDasharray="3 3" opacity={0.3} />
+                <XAxis
+                  dataKey="time"
+                  tick={{ fontSize: 12 }}
+                  interval="preserveStartEnd"
+                />
+                <YAxis
+                  domain={[40, 200]}
+                  width={35}
+                />
+                <Tooltip
+                  contentStyle={{
+                    backgroundColor: 'hsl(var(--card))',
+                    border: '1px solid hsl(var(--border))',
+                    borderRadius: '8px',
+                  }}
+                  labelFormatter={(label) => `Time: ${label}`}
+                  formatter={(value: number | undefined) => {
+                    if (value === undefined) return ['N/A', 'Glucose'];
+                    return [`${value.toFixed(1)} mg/dL`, 'Glucose'];
+                  }}
+                />
+
+                {/* Reference lines for optimal fasting range */}
+                <ReferenceLine
+                  y={70}
+                  stroke="hsl(var(--chart-2))"
+                  strokeDasharray="3 3"
+                  label={{ value: '70', position: 'right', fontSize: 11 }}
+                />
+                <ReferenceLine
+                  y={100}
+                  stroke="hsl(var(--chart-2))"
+                  strokeDasharray="3 3"
+                  label={{ value: '100', position: 'right', fontSize: 11 }}
+                />
+
+                <Line
+                  type="monotone"
+                  dataKey="glucose"
+                  stroke="hsl(var(--primary))"
+                  strokeWidth={3}
+                  dot={{ fill: 'hsl(var(--primary))', r: 4 }}
+                  activeDot={{ r: 6 }}
+                />
+              </LineChart>
+            </ResponsiveContainer>
+
+            <div className="mt-4 flex flex-wrap gap-4 text-sm text-muted-foreground">
+              <div className="flex items-center gap-2">
+                <div className="w-4 h-0.5 bg-[hsl(var(--chart-2))]" />
+                <span>Optimal Fasting Range (70-100 mg/dL)</span>
+              </div>
+            </div>
+          </CardContent>
+        </Card>
+      </motion.div>
+    );
+  }
+
+  // Multi-night view (historical data)
   const chartData = data.map(d => ({
     date: d.date,
     displayDate: format(parseISO(d.date), 'MMM d'),
@@ -29,9 +195,6 @@ export function OvernightFastingChart({ data }: OvernightFastingChartProps) {
     lowest: d.lowestOvernight,
     highest: d.highestOvernight,
   }));
-
-  // Calculate average fasting glucose
-  const avgFasting = data.reduce((sum, d) => sum + d.fastingGlucose, 0) / data.length;
 
   return (
     <motion.div
@@ -82,7 +245,6 @@ export function OvernightFastingChart({ data }: OvernightFastingChartProps) {
                 labelFormatter={(label) => `Date: ${label}`}
                 formatter={(value: number | undefined, name: string | undefined) => {
                   if (value === undefined) return ['N/A', ''];
-                  // Return [formattedValue, label] to display as "label: formattedValue"
                   return [`${value.toFixed(1)} mg/dL`, name || ''];
                 }}
               />

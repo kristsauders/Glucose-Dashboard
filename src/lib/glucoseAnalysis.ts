@@ -147,7 +147,7 @@ export function calculateOvernightMetrics(readings: GlucoseReading[]): Overnight
     const fastingReadings = dayReadings.filter(r => {
       const hour = getHours(r.timestamp);
       return hour >= 3 && hour < 7;
-    });
+    }).sort((a, b) => a.timestamp.getTime() - b.timestamp.getTime());
 
     // Get all overnight readings (midnight to 7am)
     const overnightReadings = dayReadings.filter(r => {
@@ -164,11 +164,43 @@ export function calculateOvernightMetrics(readings: GlucoseReading[]): Overnight
     const lowestOvernight = overnightValues.length > 0 ? Math.min(...overnightValues) : fastingGlucose;
     const highestOvernight = overnightValues.length > 0 ? Math.max(...overnightValues) : fastingGlucose;
 
+    // Calculate trend metrics
+    const startingGlucose = fastingReadings[0].glucose;
+    const endingGlucose = fastingReadings[fastingReadings.length - 1].glucose;
+    const trendChange = endingGlucose - startingGlucose;
+
+    // Determine trend direction (using 10 mg/dL threshold for significance)
+    let trend: 'rising' | 'falling' | 'stable';
+    if (trendChange > 10) {
+      trend = 'rising';
+    } else if (trendChange < -10) {
+      trend = 'falling';
+    } else {
+      trend = 'stable';
+    }
+
+    // Calculate stability (standard deviation)
+    const squaredDiffs = fastingValues.map(val => Math.pow(val - fastingGlucose, 2));
+    const variance = squaredDiffs.reduce((sum, val) => sum + val, 0) / fastingValues.length;
+    const stability = Math.sqrt(variance);
+
+    // Prepare individual readings for chart
+    const readingsForChart = fastingReadings.map(r => ({
+      time: format(r.timestamp, 'h:mm a'),
+      glucose: r.glucose,
+    }));
+
     overnightMetrics.push({
       date: dateKey,
       fastingGlucose,
       lowestOvernight,
       highestOvernight,
+      readings: readingsForChart,
+      startingGlucose,
+      endingGlucose,
+      trend,
+      trendChange,
+      stability,
     });
   }
 

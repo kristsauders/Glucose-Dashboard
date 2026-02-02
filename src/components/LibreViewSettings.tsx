@@ -17,23 +17,22 @@ export function LibreViewSettings({ onConnectionChange }: LibreViewSettingsProps
     password: '',
     region: 'us',
   });
-  const [corsProxy, setCorsProxy] = useState<string>('https://corsproxy.io/?');
+  const [corsProxy] = useState<string>(() => {
+    // Use current hostname so it works from any device on the network
+    const hostname = window.location.hostname;
+    return `http://${hostname}:3001/proxy?url=`;
+  });
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [isConnected, setIsConnected] = useState(false);
   const [showSettings, setShowSettings] = useState(false);
 
   useEffect(() => {
-    // Load stored credentials and proxy
+    // Load stored credentials
     const stored = libreViewService.getStoredCredentials();
     if (stored) {
       setCredentials(stored);
       setIsConnected(libreViewService.isAuthenticated());
-    }
-
-    const storedProxy = libreViewService.getCorsProxy();
-    if (storedProxy) {
-      setCorsProxy(storedProxy);
     }
   }, []);
 
@@ -59,14 +58,7 @@ export function LibreViewSettings({ onConnectionChange }: LibreViewSettingsProps
       }
     } catch (err) {
       const errorMessage = err instanceof Error ? err.message : 'Connection failed';
-
-      // Provide helpful guidance for CORS errors
-      if (errorMessage.includes('CORS')) {
-        setError(errorMessage + '\n\nTry using a CORS proxy like: https://corsproxy.io/?');
-      } else {
-        setError(errorMessage);
-      }
-
+      setError(errorMessage);
       setIsConnected(false);
       onConnectionChange?.(false);
     } finally {
@@ -178,24 +170,6 @@ export function LibreViewSettings({ onConnectionChange }: LibreViewSettingsProps
           </div>
         </CardHeader>
         <CardContent className="space-y-4">
-          {/* Warning Banner */}
-          <div className="bg-yellow-500/10 border border-yellow-500/20 rounded-lg p-4">
-            <div className="flex gap-3">
-              <AlertCircle className="h-5 w-5 text-yellow-600 dark:text-yellow-500 flex-shrink-0 mt-0.5" />
-              <div className="space-y-1 text-sm">
-                <p className="font-semibold text-yellow-900 dark:text-yellow-200">
-                  Important Security Notice
-                </p>
-                <ul className="text-yellow-800 dark:text-yellow-300 space-y-1 text-xs">
-                  <li>• This uses an unofficial, reverse-engineered API</li>
-                  <li>• Your credentials are stored locally in your browser</li>
-                  <li>• The API may stop working at any time</li>
-                  <li>• Only use if you understand and accept these risks</li>
-                </ul>
-              </div>
-            </div>
-          </div>
-
           {/* Connection Form */}
           <div className="space-y-4">
             <div className="space-y-2">
@@ -255,24 +229,6 @@ export function LibreViewSettings({ onConnectionChange }: LibreViewSettingsProps
                 <option value="ae">Middle East</option>
                 <option value="ca">Canada</option>
               </select>
-            </div>
-
-            <div className="space-y-2">
-              <Label htmlFor="corsProxy">
-                CORS Proxy URL{' '}
-                <span className="text-xs text-muted-foreground">(required for browser access)</span>
-              </Label>
-              <Input
-                id="corsProxy"
-                type="text"
-                placeholder="https://corsproxy.io/?"
-                value={corsProxy}
-                onChange={(e) => setCorsProxy(e.target.value)}
-                disabled={isLoading}
-              />
-              <p className="text-xs text-muted-foreground">
-                Default: https://corsproxy.io/? (public proxy, use at your own risk)
-              </p>
             </div>
           </div>
 

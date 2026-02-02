@@ -33,6 +33,12 @@ export interface OvernightMetrics {
   fastingGlucose: number; // average from 3am-7am
   lowestOvernight: number;
   highestOvernight: number;
+  readings?: Array<{ time: string; glucose: number }>; // individual readings for trend analysis
+  startingGlucose?: number; // first reading after 3am
+  endingGlucose?: number; // last reading before 7am
+  trend?: 'rising' | 'falling' | 'stable'; // overall direction
+  trendChange?: number; // glucose change from start to end
+  stability?: number; // standard deviation of readings
 }
 
 export interface BedtimeMetrics {

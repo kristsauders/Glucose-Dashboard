@@ -99,6 +99,18 @@ npm run dev
 3. Enter your LibreView credentials
 4. The dashboard will fetch and display real-time glucose data, updating every minute
 
+### Accessing from Other Devices
+
+You can access the dashboard from any device on your local network:
+
+1. Find your computer's local IP address (e.g., `192.168.1.100`)
+2. On another device (phone, tablet, etc.), open `http://YOUR-IP:5173`
+3. The app automatically detects the correct hostname and connects to the CORS proxy
+
+**Example:** If your computer's IP is `192.168.1.100`, access the dashboard at `http://192.168.1.100:5173`
+
+**Note:** Both the dashboard and CORS proxy must be running on the host computer (`npm start`).
+
 ### Building for Production
 
 ```bash

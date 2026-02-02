@@ -96,10 +96,13 @@ class LibreViewService {
   private authToken: string | null = null;
   private tokenExpires: number | null = null;
   private patientId: string | null = null;
-  private corsProxy: string = '';
+  private corsProxy: string;
 
   constructor() {
     this.baseUrl = REGION_URLS.us; // Default to US
+    // Use current hostname for CORS proxy so it works on any device on the network
+    const hostname = typeof window !== 'undefined' ? window.location.hostname : 'localhost';
+    this.corsProxy = `http://${hostname}:3001/proxy?url=`;
     this.loadFromStorage();
   }
 
@@ -121,11 +124,6 @@ class LibreViewService {
       const token = localStorage.getItem(STORAGE_KEYS.AUTH_TOKEN);
       const expires = localStorage.getItem(STORAGE_KEYS.TOKEN_EXPIRES);
       const patientId = localStorage.getItem(STORAGE_KEYS.PATIENT_ID);
-      const corsProxy = localStorage.getItem(STORAGE_KEYS.CORS_PROXY);
-
-      if (corsProxy) {
-        this.corsProxy = corsProxy;
-      }
 
       if (token && expires) {
         const expiresNum = parseInt(expires, 10);
@@ -254,9 +252,9 @@ class LibreViewService {
       return await response.json();
     } catch (error) {
       if (error instanceof Error) {
-        // Provide helpful error message for CORS issues
+        // Provide helpful error message for connection issues
         if (error.message.includes('Failed to fetch') || error.message.includes('NetworkError')) {
-          throw new Error('Connection blocked by CORS policy. Please configure a CORS proxy in settings.');
+          throw new Error('Connection failed. Make sure the CORS proxy server is running (npm start).');
         }
         throw new Error(`Failed to connect to LibreView: ${error.message}`);
       }
