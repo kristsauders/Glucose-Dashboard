@@ -318,18 +318,21 @@ export function Dashboard({ readings, onNewUpload, onDataUpdated }: DashboardPro
                 <MessageSquare className="h-4 w-4 md:mr-2" />
                 <span className="hidden md:inline">AI Chat</span>
               </Button>
-              <Button variant="outline" size="sm" asChild>
-                <label className="cursor-pointer">
-                  <Upload className="h-4 w-4 md:mr-2" />
-                  <span className="hidden md:inline">Import CSV</span>
-                  <input
-                    type="file"
-                    accept=".csv"
-                    onChange={handleCSVUpload}
-                    className="hidden"
-                  />
-                </label>
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => document.getElementById('csv-upload')?.click()}
+              >
+                <Upload className="h-4 w-4 md:mr-2" />
+                <span className="hidden md:inline">Import CSV</span>
               </Button>
+              <input
+                id="csv-upload"
+                type="file"
+                accept=".csv"
+                onChange={handleCSVUpload}
+                className="hidden"
+              />
               <ThemeToggle />
               <Button variant="outline" size="sm" onClick={handleLogout}>
                 <LogOut className="h-4 w-4 md:mr-2" />
