@@ -14,7 +14,7 @@ router.use(authMiddleware);
 // Send a message to the AI agent (streaming)
 const chatSchema = z.object({
   message: z.string().min(1).max(10000),
-  conversationId: z.string().uuid().optional(),
+  conversationId: z.string().uuid().nullish(), // Accept undefined or null
 });
 
 router.post('/stream', async (req, res, next) => {
