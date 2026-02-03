@@ -1,6 +1,7 @@
 import { query } from '../config/database.js';
 import { createAgentGraph } from '../agent/graph.js';
 import { HumanMessage } from '@langchain/core/messages';
+import { logContextSize } from '../utils/token-counter.js';
 
 /**
  * ProactiveMonitor service
@@ -291,15 +292,22 @@ Write a complete, thoughtful message with:
 
 Be creative, conversational, and helpful. Include specific numbers from the data.`;
 
+      // Log context size
+      const userCtx = {
+        email: user.email,
+        diagnosisType: user.diagnosis_type || undefined,
+        diagnosisDate: user.diagnosis_date || undefined,
+        timezone: user.timezone || undefined,
+      };
+      logContextSize([new HumanMessage(analysisPrompt)], userCtx, {
+        label: 'Proactive Monitor - Generate Message',
+        isFirstMessage: true,
+      });
+
       const analysisStream = await this.agent.stream({
         messages: [new HumanMessage(analysisPrompt)],
         userId: user.id,
-        userContext: {
-          email: user.email,
-          diagnosisType: user.diagnosis_type || undefined,
-          diagnosisDate: user.diagnosis_date || undefined,
-          timezone: user.timezone || undefined,
-        },
+        userContext: userCtx,
       });
 
       // Collect the generated message
@@ -340,15 +348,16 @@ ${generatedMessage}
 
 Respond with ONLY "SEND" or "DONT_SEND" (no explanation needed).`;
 
+      // Log context size for decision call
+      logContextSize([new HumanMessage(decisionPrompt)], userCtx, {
+        label: 'Proactive Monitor - Send Decision',
+        isFirstMessage: true,
+      });
+
       const decisionStream = await this.agent.stream({
         messages: [new HumanMessage(decisionPrompt)],
         userId: user.id,
-        userContext: {
-          email: user.email,
-          diagnosisType: user.diagnosis_type || undefined,
-          diagnosisDate: user.diagnosis_date || undefined,
-          timezone: user.timezone || undefined,
-        },
+        userContext: userCtx,
       });
 
       // Get the decision

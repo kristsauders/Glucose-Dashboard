@@ -5,6 +5,7 @@ import { authMiddleware } from '../middleware/auth.js';
 import { createAgentGraph } from '../../agent/graph.js';
 import { query } from '../../config/database.js';
 import type { AuthRequest, User } from '../../types/index.js';
+import { logContextSize } from '../../utils/token-counter.js';
 
 const router = Router();
 
@@ -89,6 +90,17 @@ router.post('/stream', async (req, res, next) => {
       ),
       new HumanMessage(message),
     ];
+
+    // Log context size for monitoring
+    logContextSize(messages, {
+      email: user.email,
+      diagnosisType: user.diagnosis_type || undefined,
+      diagnosisDate: user.diagnosis_date || undefined,
+      timezone: user.timezone || undefined,
+    }, {
+      label: 'Chat Request',
+      isFirstMessage,
+    });
 
     console.log(`Running streaming agent for user ${authReq.user!.id}...`);
     const startTime = Date.now();

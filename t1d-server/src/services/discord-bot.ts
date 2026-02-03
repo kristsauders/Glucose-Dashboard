@@ -3,6 +3,7 @@ import { env } from '../config/env.js';
 import { query } from '../config/database.js';
 import { createAgentGraph } from '../agent/graph.js';
 import { HumanMessage } from '@langchain/core/messages';
+import { logContextSize } from '../utils/token-counter.js';
 
 /**
  * Discord Bot Service
@@ -176,15 +177,23 @@ export class DiscordBot {
    * Process message through agent
    */
   private async processMessage(userId: string, user: any, content: string): Promise<string> {
+    const userCtx = {
+      email: user.email,
+      diagnosisType: user.diagnosis_type || undefined,
+      diagnosisDate: user.diagnosis_date || undefined,
+      timezone: user.timezone || undefined,
+    };
+
+    // Log context size
+    logContextSize([new HumanMessage(content)], userCtx, {
+      label: 'Discord Bot Message',
+      isFirstMessage: true,
+    });
+
     const stream = await this.agent.stream({
       messages: [new HumanMessage(content)],
       userId,
-      userContext: {
-        email: user.email,
-        diagnosisType: user.diagnosis_type || undefined,
-        diagnosisDate: user.diagnosis_date || undefined,
-        timezone: user.timezone || undefined,
-      },
+      userContext: userCtx,
     });
 
     let fullResponse = '';

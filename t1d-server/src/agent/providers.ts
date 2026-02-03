@@ -17,7 +17,8 @@ export function getAIProvider(forceProvider?: 'ollama' | 'openrouter'): AIProvid
         baseUrl: env.OLLAMA_BASE_URL,
         model: env.OLLAMA_MODEL,
         temperature: 0.7,
-        streaming: true, // Enable streaming
+        streaming: true,
+        numCtx: 32768, // Context window: 32k tokens
       }),
     };
   } else {
