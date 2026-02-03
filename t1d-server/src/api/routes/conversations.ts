@@ -79,7 +79,7 @@ router.get('/:id', async (req, res, next) => {
       `SELECT id, user_id, conversation_id, role, content, metadata, created_at
        FROM chat_messages
        WHERE conversation_id = $1
-       ORDER BY created_at ASC`,
+       ORDER BY created_at ASC, id ASC`,
       [id]
     );
 

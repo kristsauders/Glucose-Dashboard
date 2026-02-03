@@ -105,7 +105,7 @@ export function getHybridAIProvider(): HybridAIProvider {
       },
     },
     temperature: 0.7,
-    streaming: true, // Stream final messages
+    streaming: false, // Use invoke, not streaming (LangGraph handles the streaming)
     maxTokens: 4096,
   });
   largeModel.getNumTokens = async () => 0;

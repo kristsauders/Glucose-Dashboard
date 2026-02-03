@@ -128,6 +128,7 @@ router.post('/stream', async (req, res, next) => {
       let lastContent = '';
       let chunkCount = 0;
       let aiMessageCount = 0; // Track how many AI messages we've seen
+      let currentStreamingNode = null; // Track which node we're streaming from
 
       for await (const chunk of stream) {
         chunkCount++;
@@ -188,17 +189,25 @@ router.post('/stream', async (req, res, next) => {
               }
             }
 
-            // Only stream content from the FINAL AI message (no tool calls = final message)
+            // Only stream content from the SYNTHESIS node (hybrid) or final message (standard)
+            // In hybrid mode, skip the "Analysis complete" from analysis node
+            const isFromSynthesis = !!chunk.synthesis;
+            const isFromStandardAgent = !!chunk.agent;
             const isFinalMessage = !lastMessage.tool_calls || lastMessage.tool_calls.length === 0;
 
-            if (isFinalMessage && lastMessage.content && typeof lastMessage.content === 'string') {
-              const currentContent = lastMessage.content;
+            // Stream if: (synthesis node) OR (standard agent with no tool calls)
+            const shouldStream = (isFromSynthesis || isFromStandardAgent) && isFinalMessage;
 
-              // Reset lastContent when we get to the final message (ignore intermediate messages)
-              if (aiMessageCount > 1 && lastContent.length === 0) {
-                // This is the first content of the final message after tool calls
+            if (shouldStream && lastMessage.content && typeof lastMessage.content === 'string') {
+              // Detect node transition - reset lastContent when switching to a new node
+              const nodeKey = isFromSynthesis ? 'synthesis' : 'agent';
+              if (currentStreamingNode !== nodeKey) {
+                console.log(`Switching to ${nodeKey} node, resetting lastContent`);
+                currentStreamingNode = nodeKey;
                 lastContent = '';
               }
+
+              const currentContent = lastMessage.content;
 
               if (currentContent.length > lastContent.length) {
                 const delta = currentContent.slice(lastContent.length);

@@ -161,12 +161,60 @@ When asked to analyze: Use tools to gather comprehensive data, then respond with
 
     console.log('[synthesisNode] Invoking large model for final message synthesis');
 
-    // Create a synthesis prompt that includes all gathered information
-    const synthesisPrompt = new SystemMessage(`You are Sage, an AI assistant for Type 1 Diabetes management.
+    // Transform the conversation for the synthesis model
+    // Convert tool_calls + tool_results into a natural format (SystemMessage with context)
+    // The large model doesn't have tools bound, so we present data as additional context
+    const transformedMessages: BaseMessage[] = [];
+    let toolResultsContext = '';
 
-The analysis model has gathered comprehensive data using various tools. Your job is to synthesize this information into a clear, helpful message for the user.
+    for (let i = 0; i < messages.length; i++) {
+      const msg = messages[i];
 
-Communication Guidelines:
+      // Keep HumanMessages (user questions)
+      if (msg.constructor.name === 'HumanMessage') {
+        transformedMessages.push(msg);
+        continue;
+      }
+
+      // Skip AIMessages with tool_calls (they're internal scaffolding)
+      if (msg.constructor.name === 'AIMessage') {
+        const content = typeof msg.content === 'string' ? msg.content : '';
+
+        // Skip if it has tool calls or is "Analysis complete"
+        if (('tool_calls' in msg && msg.tool_calls && msg.tool_calls.length > 0) ||
+            content === 'Analysis complete' || content.length < 20) {
+          continue;
+        }
+
+        // Keep substantial AI messages (from previous conversation turns)
+        if (content.length >= 20) {
+          transformedMessages.push(msg);
+        }
+      }
+
+      // Convert ToolMessages into context (they can't exist without tool_calls)
+      if (msg.constructor.name === 'ToolMessage') {
+        const toolContent = typeof msg.content === 'string' ? msg.content : JSON.stringify(msg.content);
+        toolResultsContext += `\n\nAnalysis Data:\n${toolContent}`;
+      }
+    }
+
+    // Add accumulated tool results as a system message with context
+    if (toolResultsContext) {
+      transformedMessages.push(new SystemMessage(`The analysis phase gathered the following data:${toolResultsContext}
+
+Now synthesize this data into a natural, conversational response for the user. Write in plain prose - NO XML tags, NO thinking blocks, NO tool references. Start your response directly with the insights.`));
+    }
+
+    console.log(`[synthesisNode] Transformed messages: ${messages.length} → ${transformedMessages.length}`);
+
+    // Create a synthesis-specific system prompt (without tool descriptions)
+    const synthesisSystemPrompt = new SystemMessage(`You are Sage, an AI assistant specialized in Type 1 Diabetes (T1D) and LADA management.
+
+## Your Role
+You synthesize glucose data analysis into clear, helpful insights for users. The analysis phase has already gathered all necessary data - your job is to present it in a user-friendly way.
+
+## Communication Style
 - Be analytical and objective - focus on data, trends, patterns
 - Lead with insights, not encouragement
 - Explain physiological mechanisms when relevant
@@ -174,17 +222,54 @@ Communication Guidelines:
 - Be direct and factual about concerning trends
 - Provide actionable recommendations based on the data
 
-Review the tool results in the conversation history and create a comprehensive, insightful response.`);
+## Key Metrics to Monitor
+- **Time in Range (TIR)**: Target 70-180 mg/dL or 70-140 mg/dL (tighter control)
+- **Coefficient of Variation (CV)**: Target <36% for good glucose stability
+- **Estimated A1C**: Calculated from average glucose
+- **Fasting Glucose**: 3am-7am average, optimal 70-100 mg/dL
 
-    // Send system prompt + user context + all conversation history to large model
+## Physiological Explanations
+When you observe patterns, explain the underlying mechanisms:
+- **First-Phase Insulin Response Loss**: Early LADA indicator
+- **Basal Insulin Adequacy**: Too low causes overnight rises
+- **Dawn Phenomenon**: Morning glucose rise from hormones
+- **Exercise Effects**: Increased insulin sensitivity lasts 24-48 hours
+- **Meal Composition Impact**: Carbs/protein/fat affect timing and peaks
+
+## Guidelines
+- Be specific with numbers and timeframes
+- Explain medical terms in simple language
+- Acknowledge uncertainty when appropriate
+- Focus on actionable insights
+- Never reference tools, data sources, or analysis methods - just present the insights directly
+
+## CRITICAL: Response Format
+- Write in natural prose only - NO XML tags, NO structured formats
+- Do NOT use tags like <analysis>, <thinking>, <get_data>, etc.
+- Do NOT reference or mention data gathering, tool calls, or analysis steps
+- Jump directly into presenting the insights as if you already know them
+- Your response should read like a polished report, not a thought process
+
+${userContext.diagnosisType === 'LADA' ? `
+This user has LADA (Latent Autoimmune Diabetes in Adults):
+- Progresses slower than typical T1D
+- May have longer honeymoon period
+- Requires monitoring of progression over time
+` : ''}`);
+
+    // Send synthesis-specific prompt + user context + transformed conversation history to large model
     const messagesToSend = [
-      new SystemMessage(SYSTEM_PROMPT),
+      synthesisSystemPrompt,
       new SystemMessage(USER_CONTEXT_PROMPT(userContext)),
-      synthesisPrompt,
-      ...messages,
+      ...transformedMessages,
     ];
 
     const response = await providers.largeModel.invoke(messagesToSend);
+
+    console.log(`[synthesisNode] Response received, length: ${typeof response.content === 'string' ? response.content.length : 0} chars`);
+    if (typeof response.content === 'string' && response.content.length > 0) {
+      console.log(`[synthesisNode] Content preview: ${response.content.substring(0, 200)}...`);
+    }
 
     // Only return NEW message, not the full array
     return {
