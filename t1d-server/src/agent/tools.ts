@@ -7,6 +7,11 @@ import {
   detectBasalAdequacy,
   detectExerciseResponse,
 } from '../services/pattern-algorithms.js';
+import {
+  analyzeTrend,
+  detectAnomalies,
+  comparePeriods,
+} from '../services/advanced-analysis.js';
 
 /**
  * Tool: Get recent glucose readings
@@ -1434,6 +1439,187 @@ const runPatternDetectionTool = new DynamicStructuredTool({
 
 /**
  * ============================================================================
+ * ADVANCED STATISTICAL ANALYSIS TOOLS
+ * ============================================================================
+ */
+
+/**
+ * Tool: Analyze Trends
+ * Detect glucose trends and forecast future values
+ */
+const analyzeTrendsTool = new DynamicStructuredTool({
+  name: 'analyze_trends',
+  description:
+    'Detect glucose trends over time and forecast future values. Returns trend direction (improving/worsening/stable), linear regression analysis, and predictions for next few days. Use this when discussing long-term glucose control trends or predicting future patterns.',
+  schema: z.object({
+    userId: z.string().describe('User ID (auto-injected by system)'),
+    days: z.number().default(14).describe('Number of days to analyze (default: 14, max: 90)'),
+    metricType: z
+      .enum(['average_glucose', 'time_in_range', 'cv', 'fasting_glucose'])
+      .default('average_glucose')
+      .describe('Which metric to analyze for trends'),
+    forecastDays: z
+      .number()
+      .default(3)
+      .describe('Number of days to forecast (default: 3, max: 7)'),
+  }),
+  func: async ({ userId, days = 14, metricType = 'average_glucose', forecastDays = 3 }) => {
+    try {
+      // Validate inputs
+      if (days > 90) days = 90;
+      if (forecastDays > 7) forecastDays = 7;
+
+      // Fetch daily metrics for the specified period
+      const startDate = new Date();
+      startDate.setDate(startDate.getDate() - days);
+
+      let metricColumn: string;
+      let metricLabel: string;
+
+      switch (metricType) {
+        case 'time_in_range':
+          metricColumn = 'COUNT(*) FILTER (WHERE glucose >= 70 AND glucose <= 180) * 100.0 / COUNT(*)';
+          metricLabel = 'Time in Range %';
+          break;
+        case 'cv':
+          metricColumn = '(STDDEV(glucose) / NULLIF(AVG(glucose), 0)) * 100';
+          metricLabel = 'Coefficient of Variation %';
+          break;
+        case 'fasting_glucose':
+          metricColumn = 'AVG(CASE WHEN EXTRACT(HOUR FROM timestamp) BETWEEN 3 AND 7 THEN glucose END)';
+          metricLabel = 'Fasting Glucose (mg/dL)';
+          break;
+        default: // average_glucose
+          metricColumn = 'AVG(glucose)';
+          metricLabel = 'Average Glucose (mg/dL)';
+      }
+
+      const metricsResult = await query(
+        `SELECT
+          DATE(timestamp) as date,
+          ${metricColumn} as value
+         FROM glucose_readings
+         WHERE user_id = $1
+           AND timestamp >= $2
+         GROUP BY DATE(timestamp)
+         HAVING COUNT(*) >= 10
+         ORDER BY date ASC`,
+        [userId, startDate.toISOString()]
+      );
+
+      if (metricsResult.rows.length < 3) {
+        return JSON.stringify({
+          hasData: false,
+          message: `Not enough data for trend analysis. Need at least 3 days with data, found ${metricsResult.rows.length}.`,
+        });
+      }
+
+      // Prepare data for analysis
+      const data = metricsResult.rows.map((r) => ({
+        date: r.date,
+        value: parseFloat(r.value || 0),
+      }));
+
+      // Call advanced analysis function
+      const trendAnalysis = await analyzeTrend(data, metricType, forecastDays);
+
+      return JSON.stringify(trendAnalysis);
+    } catch (error) {
+      console.error('Error analyzing trends:', error);
+      return JSON.stringify({
+        error: 'Failed to analyze trends',
+        details: error instanceof Error ? error.message : 'Unknown error',
+      });
+    }
+  },
+});
+
+/**
+ * Tool: Detect Anomalies
+ * Identify unusual glucose events that deviate from established patterns
+ */
+const detectAnomaliesTool = new DynamicStructuredTool({
+  name: 'detect_anomalies',
+  description:
+    'Identify unusual glucose events that deviate from your established patterns. Returns anomalies with severity levels, possible causes, and recommendations. Use this when investigating unexpected glucose readings or trying to identify problems.',
+  schema: z.object({
+    userId: z.string().describe('User ID (auto-injected by system)'),
+    days: z.number().default(7).describe('Number of days to analyze (default: 7)'),
+    sensitivityLevel: z
+      .enum(['low', 'medium', 'high'])
+      .default('medium')
+      .describe('Sensitivity level: low=only severe anomalies, medium=moderate+severe, high=all anomalies'),
+  }),
+  func: async ({ userId, days = 7, sensitivityLevel = 'medium' }) => {
+    try {
+      // Call advanced analysis function
+      const anomalyDetection = await detectAnomalies(userId, days, sensitivityLevel);
+
+      return JSON.stringify(anomalyDetection);
+    } catch (error) {
+      console.error('Error detecting anomalies:', error);
+      return JSON.stringify({
+        error: 'Failed to detect anomalies',
+        details: error instanceof Error ? error.message : 'Unknown error',
+      });
+    }
+  },
+});
+
+/**
+ * Tool: Compare Periods (Statistical)
+ * Statistical comparison between two time periods or contexts
+ */
+const comparePeriodsStatisticalTool = new DynamicStructuredTool({
+  name: 'compare_periods_statistical',
+  description:
+    'Perform statistical comparison between time periods or contexts (weekday vs weekend, before/after event). Returns detailed metrics comparison, statistical significance (t-test), and interpretation. Use this when comparing different time periods to identify meaningful changes.',
+  schema: z.object({
+    userId: z.string().describe('User ID (auto-injected by system)'),
+    comparisonType: z
+      .enum(['time_periods', 'weekday_vs_weekend', 'before_after_event'])
+      .describe('Type of comparison to perform'),
+    period1Start: z.string().optional().describe('Start date for period 1 (ISO date, YYYY-MM-DD)'),
+    period1End: z.string().optional().describe('End date for period 1 (ISO date, YYYY-MM-DD)'),
+    period2Start: z.string().optional().describe('Start date for period 2 (ISO date, YYYY-MM-DD)'),
+    period2End: z.string().optional().describe('End date for period 2 (ISO date, YYYY-MM-DD)'),
+    eventDate: z
+      .string()
+      .optional()
+      .describe('Event date for before/after comparison (ISO date, YYYY-MM-DD)'),
+  }),
+  func: async ({
+    userId,
+    comparisonType,
+    period1Start,
+    period1End,
+    period2Start,
+    period2End,
+    eventDate,
+  }) => {
+    try {
+      // Call advanced analysis function
+      const periodComparison = await comparePeriods(userId, comparisonType, {
+        period1Start,
+        period1End,
+        period2Start,
+        period2End,
+        eventDate,
+      });
+
+      return JSON.stringify(periodComparison);
+    } catch (error) {
+      console.error('Error comparing periods:', error);
+      return JSON.stringify({
+        error: 'Failed to compare periods',
+        details: error instanceof Error ? error.message : 'Unknown error',
+      });
+    }
+  },
+});
+
+/**
+ * ============================================================================
  * MEAL LOGGING TOOLS
  * ============================================================================
  */
@@ -2049,4 +2235,9 @@ export const allTools = [
   analyzeExercisePatternsTool,
   getDetectedPatternsTool,
   runPatternDetectionTool,
+
+  // Advanced statistical analysis tools
+  analyzeTrendsTool,
+  detectAnomaliesTool,
+  comparePeriodsStatisticalTool,
 ];

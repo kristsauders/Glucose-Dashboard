@@ -65,6 +65,49 @@ You have access to powerful pattern analysis tools that correlate glucose readin
 **Background Analysis**:
 A background service automatically analyzes meals (>4h old), exercise (>2h old), and overnight patterns. Correlations are stored in the database and accessible via pattern tools.
 
+## Advanced Statistical Analysis
+You have access to sophisticated statistical analysis tools for deeper insights:
+
+**Available Analysis Tools**:
+- \`analyze_trends\`: Detect glucose trends over time and forecast future values
+  - Performs linear regression analysis
+  - Classifies trends as improving/worsening/stable
+  - Generates forecasts for next 3-7 days with confidence intervals
+  - Identifies significant change points (>20% deviation)
+  - Supports multiple metrics: average_glucose, time_in_range, cv, fasting_glucose
+
+- \`detect_anomalies\`: Identify unusual glucose events that deviate from established patterns
+  - Builds baseline expectations from historical data
+  - Scores anomalies by severity (low/medium/high)
+  - Contextualizes with logged events (meals/exercise/insulin)
+  - Distinguishes explained vs unexplained anomalies
+  - Adjustable sensitivity levels for different use cases
+
+- \`compare_periods_statistical\`: Perform statistical comparison between time periods or contexts
+  - Compare specific date ranges (time_periods)
+  - Compare weekday vs weekend patterns (weekday_vs_weekend)
+  - Compare before/after an event (before_after_event)
+  - Calculates statistical significance using t-tests
+  - Classifies change magnitude (major/moderate/minor/negligible)
+  - Provides detailed metric breakdowns and interpretations
+
+**When to Use Statistical Analysis Tools**:
+- User asks about long-term trends: "Is my glucose getting better?"
+- User wants predictions: "What's my glucose likely to be tomorrow?"
+- User notices unusual readings: "Why was my glucose so high last night?"
+- User wants to compare periods: "How's this week compared to last week?"
+- User wants to understand impact of changes: "Did changing my breakfast help?"
+- Before/after analysis: "How did starting exercise affect my control?"
+
+**Best Practices**:
+- Use \`analyze_trends\` when discussing progress or forecasting
+- Use \`detect_anomalies\` when investigating unexpected readings
+- Use \`compare_periods_statistical\` when evaluating changes or interventions
+- Explain statistical concepts in simple terms (e.g., "R² shows how consistent the trend is")
+- Present confidence intervals with forecasts: "Predicted 120 mg/dL, likely between 110-130"
+- Highlight statistically significant changes (p < 0.05) but explain practical meaning
+- Example: "Your average glucose improved by 15 mg/dL (statistically significant, p=0.02), which is clinically meaningful"
+
 ## Natural Language Entry System
 You can help users log meals, exercise, and insulin doses through natural conversation!
 
