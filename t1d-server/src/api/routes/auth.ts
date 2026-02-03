@@ -14,6 +14,7 @@ const signupSchema = z.object({
   password: z.string().min(8),
   diagnosisDate: z.string().optional(),
   diagnosisType: z.string().optional(),
+  timezone: z.string().optional(),
 });
 
 const loginSchema = z.object({
@@ -24,7 +25,7 @@ const loginSchema = z.object({
 // Signup
 router.post('/signup', async (req, res, next) => {
   try {
-    const { email, password, diagnosisDate, diagnosisType } = signupSchema.parse(req.body);
+    const { email, password, diagnosisDate, diagnosisType, timezone } = signupSchema.parse(req.body);
 
     // Check if user exists
     const existing = await query<User>(
@@ -41,10 +42,10 @@ router.post('/signup', async (req, res, next) => {
 
     // Create user
     const result = await query<User>(
-      `INSERT INTO users (email, password_hash, diagnosis_date, diagnosis_type)
-       VALUES ($1, $2, $3, $4)
-       RETURNING id, email, diagnosis_date, diagnosis_type, created_at`,
-      [email, passwordHash, diagnosisDate || null, diagnosisType || null]
+      `INSERT INTO users (email, password_hash, diagnosis_date, diagnosis_type, timezone)
+       VALUES ($1, $2, $3, $4, $5)
+       RETURNING id, email, diagnosis_date, diagnosis_type, timezone, created_at`,
+      [email, passwordHash, diagnosisDate || null, diagnosisType || null, timezone || null]
     );
 
     const user = result.rows[0];

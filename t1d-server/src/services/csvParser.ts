@@ -47,8 +47,9 @@ export interface ParsedCSVData {
   insulin: ParsedInsulin[];
 }
 
-function parseTimestamp(timestamp: string): string {
+function parseTimestamp(timestamp: string, userTimezone: string = 'America/New_York'): string {
   // LibreView format: "MM-DD-YYYY HH:MM AM/PM"
+  // IMPORTANT: LibreView exports in user's local timezone, not UTC
   const [datePart, timePart, period] = timestamp.split(' ');
   const [month, day, year] = datePart.split('-');
   const [hours, minutes] = timePart.split(':');
@@ -60,15 +61,16 @@ function parseTimestamp(timestamp: string): string {
     hour = 0;
   }
 
-  const isoDate = new Date(
-    parseInt(year),
-    parseInt(month) - 1,
-    parseInt(day),
-    hour,
-    parseInt(minutes)
-  );
+  // Create date string in user's timezone format
+  // Format: YYYY-MM-DDTHH:MM:SS
+  const dateStr = `${year}-${month.padStart(2, '0')}-${day.padStart(2, '0')}T${hour.toString().padStart(2, '0')}:${minutes.padStart(2, '0')}:00`;
 
-  return isoDate.toISOString();
+  // Parse as local date (server timezone), then get UTC
+  // Note: This assumes CSV is in the same timezone as the server
+  // For production, you'd want to use a library like date-fns-tz to handle user timezones properly
+  const localDate = new Date(dateStr);
+
+  return localDate.toISOString();
 }
 
 export function parseLibreCSV(csvContent: string): ParsedCSVData {

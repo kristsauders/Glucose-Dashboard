@@ -10,7 +10,7 @@ export const getRecentGlucoseTool = new DynamicStructuredTool({
   name: 'get_recent_glucose',
   description: 'Get recent glucose readings for the user. Returns up to the specified number of recent readings.',
   schema: z.object({
-    userId: z.string().describe('The user ID'),
+    userId: z.string().optional().describe('The user ID (automatically provided)'),
     limit: z.number().default(20).describe('Number of readings to return (default 20)'),
   }),
   func: async ({ userId, limit }) => {
@@ -42,7 +42,7 @@ export const getGlucoseStatsTool = new DynamicStructuredTool({
   name: 'get_glucose_stats',
   description: 'Calculate glucose statistics (avg, min, max, std dev, time in range, etc.) for a specified time period.',
   schema: z.object({
-    userId: z.string().describe('The user ID'),
+    userId: z.string().optional().describe('The user ID (automatically provided)'),
     days: z.number().default(7).describe('Number of days to analyze (default 7)'),
   }),
   func: async ({ userId, days }) => {
@@ -106,7 +106,7 @@ export const analyzeOvernightTool = new DynamicStructuredTool({
   name: 'analyze_overnight',
   description: 'Analyze overnight fasting glucose patterns (3am-7am). Returns average, trends, and stability metrics.',
   schema: z.object({
-    userId: z.string().describe('The user ID'),
+    userId: z.string().optional().describe('The user ID (automatically provided)'),
     days: z.number().default(7).describe('Number of days to analyze'),
   }),
   func: async ({ userId, days }) => {
@@ -155,7 +155,7 @@ export const detectPatternsTool = new DynamicStructuredTool({
   name: 'detect_patterns',
   description: 'Detect common glucose patterns like dawn phenomenon, post-meal spikes, overnight lows, etc.',
   schema: z.object({
-    userId: z.string().describe('The user ID'),
+    userId: z.string().optional().describe('The user ID (automatically provided)'),
     days: z.number().default(14).describe('Number of days to analyze'),
   }),
   func: async ({ userId, days }) => {
@@ -245,7 +245,7 @@ export const comparePeriodsTool = new DynamicStructuredTool({
   name: 'compare_periods',
   description: 'Compare glucose metrics between two time periods to track improvement or changes.',
   schema: z.object({
-    userId: z.string().describe('The user ID'),
+    userId: z.string().optional().describe('The user ID (automatically provided)'),
     recentDays: z.number().default(7).describe('Recent period (e.g., last 7 days)'),
     comparisonDays: z.number().default(14).describe('Comparison period (e.g., 7-14 days ago)'),
   }),
@@ -310,7 +310,7 @@ export const storeMemoryTool = new DynamicStructuredTool({
   name: 'store_user_memory',
   description: 'Store a fact or preference about the user for long-term memory (habits, preferences, medical info). This persists across all conversations.',
   schema: z.object({
-    userId: z.string().describe('The user ID'),
+    userId: z.string().optional().describe('The user ID (automatically provided)'),
     key: z.string()
       .min(1)
       .max(50)
@@ -365,7 +365,7 @@ export const retrieveMemoryTool = new DynamicStructuredTool({
   name: 'retrieve_user_memory',
   description: 'Retrieve stored facts/memories about the user. Can get specific memory by key or all memories. Always check this before giving advice.',
   schema: z.object({
-    userId: z.string().describe('The user ID'),
+    userId: z.string().optional().describe('The user ID (automatically provided)'),
     key: z.string().optional()
       .describe('Optional specific memory key. If omitted, returns all memories.'),
   }),
@@ -427,7 +427,7 @@ export const deleteMemoryTool = new DynamicStructuredTool({
   name: 'delete_user_memory',
   description: 'Delete a specific stored memory. Use when user asks to forget something or when correcting outdated information.',
   schema: z.object({
-    userId: z.string().describe('The user ID'),
+    userId: z.string().optional().describe('The user ID (automatically provided)'),
     key: z.string()
       .describe('Memory key to delete'),
   }),
@@ -468,7 +468,7 @@ export const analyzeLiveTrendTool = new DynamicStructuredTool({
   name: 'analyze_live_trend',
   description: 'Analyze recent glucose trend (last 1-3 hours) to detect rapid changes, patterns, or concerning trends.',
   schema: z.object({
-    userId: z.string().describe('The user ID'),
+    userId: z.string().optional().describe('The user ID (automatically provided)'),
     hours: z.number().default(2).describe('Hours to analyze (default 2)'),
   }),
   func: async ({ userId, hours }) => {
@@ -535,7 +535,7 @@ export const checkAlertConditionsTool = new DynamicStructuredTool({
   name: 'check_alert_conditions',
   description: 'Check if any conditions warrant proactive outreach (not critical alerts). Returns insights about patterns worth discussing.',
   schema: z.object({
-    userId: z.string().describe('The user ID'),
+    userId: z.string().optional().describe('The user ID (automatically provided)'),
   }),
   func: async ({ userId }) => {
     const conditions = [];
@@ -624,7 +624,7 @@ export const getRecentSageMessagesTool = new DynamicStructuredTool({
   name: 'get_recent_sage_messages',
   description: 'Get recent proactive messages sent to the user. Use this to avoid sending duplicate messages or spamming.',
   schema: z.object({
-    userId: z.string().describe('The user ID'),
+    userId: z.string().optional().describe('The user ID (automatically provided)'),
     hours: z.number().default(24).describe('Hours to look back (default 24)'),
     type: z.string().optional().describe('Optional filter by message type'),
   }),
@@ -667,7 +667,7 @@ export const sendProactiveMessageTool = new DynamicStructuredTool({
   name: 'send_proactive_message',
   description: 'Send a proactive message to the user via Discord. Use this to reach out with insights, questions, or suggestions.',
   schema: z.object({
-    userId: z.string().describe('The user ID'),
+    userId: z.string().optional().describe('The user ID (automatically provided)'),
     type: z.enum(['insight', 'question', 'suggestion', 'daily_summary'])
       .describe('Type of message'),
     title: z.string().describe('Message title'),
@@ -728,7 +728,7 @@ export const getUserContextTool = new DynamicStructuredTool({
   name: 'get_user_context',
   description: 'Get comprehensive user context including profile, recent stats, and stored memories. Use this when preparing proactive outreach.',
   schema: z.object({
-    userId: z.string().describe('The user ID'),
+    userId: z.string().optional().describe('The user ID (automatically provided)'),
   }),
   func: async ({ userId }) => {
     // Get user profile
@@ -812,17 +812,617 @@ export const getUserContextTool = new DynamicStructuredTool({
   },
 });
 
+/**
+ * ============================================================================
+ * MEAL LOGGING TOOLS
+ * ============================================================================
+ */
+
+/**
+ * Tool: Estimate meal carbs from description
+ */
+export const estimateMealCarbsTool = new DynamicStructuredTool({
+  name: 'estimate_meal_carbs',
+  description: 'Estimate carbohydrates and nutrition from a meal description. Uses food database and AI knowledge to estimate portions.',
+  schema: z.object({
+    userId: z.string().optional().describe('The user ID (automatically provided)'),
+    description: z.string().describe('Meal description (e.g., "noodles and sausage", "bagel with cream cheese")'),
+    portionHints: z.string().optional().describe('Optional portion hints (e.g., "large bowl", "2 cups", "small")'),
+    mealType: z.enum(['breakfast', 'lunch', 'dinner', 'snack']).optional()
+      .describe('Optional meal type'),
+  }),
+  func: async ({ userId, description, portionHints, mealType }) => {
+    try {
+      // Search food database for matching items
+      const searchTerms = description.toLowerCase().split(/\s+/);
+      const foodMatches = [];
+
+      for (const term of searchTerms) {
+        const result = await query(
+          `SELECT name, serving_size, carbs_per_serving, protein_per_serving, fat_per_serving, calories_per_serving
+           FROM food_database
+           WHERE LOWER(name) LIKE $1
+           LIMIT 3`,
+          [`%${term}%`]
+        );
+
+        if (result.rows.length > 0) {
+          foodMatches.push(...result.rows);
+        }
+      }
+
+      // Estimate totals from matched foods
+      let totalCarbs = 0;
+      let totalProtein = 0;
+      let totalFat = 0;
+      let totalCalories = 0;
+      let confidence = 0.5; // Base confidence
+      const breakdown = [];
+
+      if (foodMatches.length > 0) {
+        // Found matches in database
+        for (const food of foodMatches) {
+          const portionMultiplier = portionHints?.toLowerCase().includes('large') ? 1.5 :
+                                   portionHints?.toLowerCase().includes('small') ? 0.75 : 1.0;
+
+          const carbs = parseFloat(food.carbs_per_serving || 0) * portionMultiplier;
+          const protein = parseFloat(food.protein_per_serving || 0) * portionMultiplier;
+          const fat = parseFloat(food.fat_per_serving || 0) * portionMultiplier;
+          const calories = parseFloat(food.calories_per_serving || 0) * portionMultiplier;
+
+          totalCarbs += carbs;
+          totalProtein += protein;
+          totalFat += fat;
+          totalCalories += calories;
+
+          breakdown.push({
+            name: food.name,
+            serving: food.serving_size,
+            carbsEstimate: Math.round(carbs),
+          });
+        }
+
+        confidence = portionHints ? 0.75 : 0.65;
+      } else {
+        // No database matches - use heuristic estimates
+        // This is a simple fallback - in production would use LLM here
+        const hasCarbs = /bread|rice|pasta|noodle|potato|bagel|cereal|oat|pizza|taco|burrito/i.test(description);
+        const hasProtein = /meat|chicken|beef|fish|egg|sausage|bacon|tofu/i.test(description);
+
+        if (hasCarbs) {
+          totalCarbs = 45; // Rough estimate for typical carb portion
+          confidence = 0.4;
+        }
+        if (hasProtein) {
+          totalProtein = 25;
+          totalCarbs += 5; // Small carbs from protein source
+        }
+
+        breakdown.push({
+          name: 'Estimated from description',
+          carbsEstimate: Math.round(totalCarbs),
+        });
+
+        confidence = 0.3; // Low confidence without database match
+      }
+
+      const needsMoreInfo = confidence < 0.6 || breakdown.length === 0;
+
+      return JSON.stringify({
+        success: true,
+        description,
+        portionHints,
+        mealType,
+        estimates: {
+          carbs: Math.round(totalCarbs),
+          protein: Math.round(totalProtein),
+          fat: Math.round(totalFat),
+          calories: Math.round(totalCalories),
+        },
+        confidence,
+        breakdown,
+        needsMoreInfo,
+        suggestedQuestions: needsMoreInfo ? [
+          'How large was the portion?',
+          'Can you describe the serving size?',
+          'Was this a full meal or a snack?',
+        ] : [],
+      });
+    } catch (error) {
+      return JSON.stringify({
+        success: false,
+        error: error instanceof Error ? error.message : 'Unknown error',
+      });
+    }
+  },
+});
+
+/**
+ * Tool: Log a meal
+ */
+export const logMealTool = new DynamicStructuredTool({
+  name: 'log_meal',
+  description: 'Save a meal to the database with nutrition estimates. Always confirm with user before saving.',
+  schema: z.object({
+    userId: z.string().optional().describe('The user ID (automatically provided)'),
+    timestamp: z.string().optional().describe('Meal timestamp (ISO format). Defaults to now.'),
+    description: z.string().describe('Meal description'),
+    estimatedCarbs: z.number().describe('Estimated carbohydrates (grams)'),
+    estimatedProtein: z.number().optional().describe('Estimated protein (grams)'),
+    estimatedFat: z.number().optional().describe('Estimated fat (grams)'),
+    estimatedCalories: z.number().optional().describe('Estimated calories'),
+    carbConfidence: z.number().min(0).max(1).describe('Confidence in carb estimate (0-1)'),
+    estimationMethod: z.string().describe('How carbs were estimated'),
+    mealType: z.enum(['breakfast', 'lunch', 'dinner', 'snack']).optional()
+      .describe('Meal type'),
+    tags: z.array(z.string()).optional().describe('Tags for categorization'),
+    notes: z.string().optional().describe('Additional notes'),
+  }),
+  func: async ({ userId, timestamp, description, estimatedCarbs, estimatedProtein, estimatedFat, estimatedCalories, carbConfidence, estimationMethod, mealType, tags, notes }) => {
+    try {
+      const mealTimestamp = timestamp || new Date().toISOString();
+
+      const result = await query(
+        `INSERT INTO meals (
+          user_id, timestamp, description,
+          estimated_carbs, estimated_protein, estimated_fat, estimated_calories,
+          carb_confidence, estimation_method, meal_type, tags, notes, source
+        )
+        VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, 'agent')
+        RETURNING id, timestamp, description, estimated_carbs`,
+        [
+          userId, mealTimestamp, description,
+          estimatedCarbs, estimatedProtein, estimatedFat, estimatedCalories,
+          carbConfidence, estimationMethod, mealType, tags, notes,
+        ]
+      );
+
+      return JSON.stringify({
+        success: true,
+        meal: {
+          id: result.rows[0].id,
+          timestamp: result.rows[0].timestamp,
+          description: result.rows[0].description,
+          carbs: parseFloat(result.rows[0].estimated_carbs),
+        },
+        message: `Logged: ${description} (~${estimatedCarbs}g carbs)`,
+      });
+    } catch (error) {
+      return JSON.stringify({
+        success: false,
+        error: error instanceof Error ? error.message : 'Unknown error',
+      });
+    }
+  },
+});
+
+/**
+ * Tool: Get meal history
+ */
+export const getMealHistoryTool = new DynamicStructuredTool({
+  name: 'get_meal_history',
+  description: 'Retrieve past meals for analysis or comparison',
+  schema: z.object({
+    userId: z.string().optional().describe('The user ID (automatically provided)'),
+    days: z.number().default(7).describe('Number of days to look back'),
+    mealType: z.string().optional().describe('Filter by meal type'),
+    limit: z.number().default(20).describe('Max meals to return'),
+  }),
+  func: async ({ userId, days, mealType, limit }) => {
+    // Get user's timezone
+    const userResult = await query(
+      'SELECT timezone FROM users WHERE id = $1',
+      [userId]
+    );
+    const userTimezone = userResult.rows[0]?.timezone || 'America/New_York';
+
+    // Use date arithmetic for full calendar days
+    let queryText = `
+      SELECT id, timestamp, description, estimated_carbs, meal_type, tags, notes
+      FROM meals
+      WHERE user_id = $1
+        AND timestamp >= DATE_TRUNC('day', NOW() AT TIME ZONE '${userTimezone}') - INTERVAL '${days} days'
+        AND timestamp < DATE_TRUNC('day', NOW() AT TIME ZONE '${userTimezone}') + INTERVAL '1 day'
+    `;
+    const params = [userId];
+
+    if (mealType) {
+      queryText += ` AND meal_type = $2`;
+      params.push(mealType);
+    }
+
+    queryText += ` ORDER BY timestamp DESC LIMIT $${params.length + 1}`;
+    params.push(limit);
+
+    const result = await query(queryText, params);
+
+    return JSON.stringify({
+      count: result.rows.length,
+      timezone: userTimezone,
+      meals: result.rows.map(r => ({
+        id: r.id,
+        timestamp: r.timestamp,
+        localTime: new Date(r.timestamp).toLocaleString('en-US', {
+          timeZone: userTimezone,
+          month: 'numeric',
+          day: 'numeric',
+          year: 'numeric',
+          hour: 'numeric',
+          minute: '2-digit',
+          hour12: true,
+        }),
+        description: r.description,
+        carbs: parseFloat(r.estimated_carbs || 0),
+        mealType: r.meal_type,
+        tags: r.tags,
+        notes: r.notes,
+      })),
+    });
+  },
+});
+
+/**
+ * ============================================================================
+ * EXERCISE LOGGING TOOLS
+ * ============================================================================
+ */
+
+/**
+ * Tool: Estimate exercise intensity from description
+ */
+export const estimateExerciseIntensityTool = new DynamicStructuredTool({
+  name: 'estimate_exercise_intensity',
+  description: 'Estimate exercise type, intensity, and duration from description',
+  schema: z.object({
+    userId: z.string().optional().describe('The user ID (automatically provided)'),
+    description: z.string().describe('Exercise description (e.g., "30 min run", "played basketball")'),
+  }),
+  func: async ({ userId, description }) => {
+    const lower = description.toLowerCase();
+
+    // Extract duration if mentioned
+    let durationMinutes = null;
+    const durationMatch = lower.match(/(\d+)\s*(min|minute|hour|hr)/i);
+    if (durationMatch) {
+      const value = parseInt(durationMatch[1]);
+      const unit = durationMatch[2];
+      durationMinutes = unit.startsWith('h') ? value * 60 : value;
+    }
+
+    // Estimate activity type
+    let activityType = 'cardio'; // default
+    if (/walk|jog|run|bike|cycle|swim/i.test(lower)) {
+      activityType = 'cardio';
+    } else if (/weight|lift|strength|gym/i.test(lower)) {
+      activityType = 'strength';
+    } else if (/yoga|stretch|flexibility/i.test(lower)) {
+      activityType = 'flexibility';
+    } else if (/basketball|soccer|tennis|sport|game/i.test(lower)) {
+      activityType = 'sports';
+    }
+
+    // Estimate intensity
+    let intensity: 'low' | 'moderate' | 'high' | 'intense' = 'moderate';
+    if (/light|easy|gentle|slow/i.test(lower)) {
+      intensity = 'low';
+    } else if (/intense|hard|vigorous|sprint/i.test(lower)) {
+      intensity = 'intense';
+    } else if (/moderate|normal|regular/i.test(lower)) {
+      intensity = 'moderate';
+    } else if (/high|fast|quick/i.test(lower)) {
+      intensity = 'high';
+    }
+
+    // If duration not specified, estimate based on activity
+    if (!durationMinutes) {
+      if (/quick|short/i.test(lower)) {
+        durationMinutes = 15;
+      } else if (/long/i.test(lower)) {
+        durationMinutes = 60;
+      } else {
+        durationMinutes = 30; // Default estimate
+      }
+    }
+
+    const needsMoreInfo = !durationMatch; // If duration wasn't explicitly stated
+
+    return JSON.stringify({
+      success: true,
+      description,
+      estimates: {
+        activityType,
+        durationMinutes,
+        intensity,
+      },
+      needsMoreInfo,
+      suggestedQuestions: needsMoreInfo ? [
+        'How long did you exercise?',
+        'Was it a short or long session?',
+      ] : [],
+    });
+  },
+});
+
+/**
+ * Tool: Log exercise
+ */
+export const logExerciseTool = new DynamicStructuredTool({
+  name: 'log_exercise',
+  description: 'Save an exercise session to the database. Always confirm with user before saving.',
+  schema: z.object({
+    userId: z.string().optional().describe('The user ID (automatically provided)'),
+    timestamp: z.string().optional().describe('Exercise timestamp (ISO format). Defaults to now.'),
+    description: z.string().describe('Exercise description'),
+    activityType: z.enum(['cardio', 'strength', 'flexibility', 'sports'])
+      .describe('Activity type'),
+    durationMinutes: z.number().describe('Duration in minutes'),
+    intensity: z.enum(['low', 'moderate', 'high', 'intense'])
+      .describe('Exercise intensity'),
+    notes: z.string().optional().describe('Additional notes'),
+  }),
+  func: async ({ userId, timestamp, description, activityType, durationMinutes, intensity, notes }) => {
+    try {
+      const exerciseTimestamp = timestamp || new Date().toISOString();
+
+      const result = await query(
+        `INSERT INTO exercise_logs (
+          user_id, timestamp, description, activity_type, duration_minutes, intensity, notes, source
+        )
+        VALUES ($1, $2, $3, $4, $5, $6, $7, 'agent')
+        RETURNING id, timestamp, description, duration_minutes, intensity`,
+        [userId, exerciseTimestamp, description, activityType, durationMinutes, intensity, notes]
+      );
+
+      return JSON.stringify({
+        success: true,
+        exercise: {
+          id: result.rows[0].id,
+          timestamp: result.rows[0].timestamp,
+          description: result.rows[0].description,
+          duration: result.rows[0].duration_minutes,
+          intensity: result.rows[0].intensity,
+        },
+        message: `Logged: ${description} (${durationMinutes} min, ${intensity} intensity)`,
+      });
+    } catch (error) {
+      return JSON.stringify({
+        success: false,
+        error: error instanceof Error ? error.message : 'Unknown error',
+      });
+    }
+  },
+});
+
+/**
+ * Tool: Get exercise history
+ */
+export const getExerciseHistoryTool = new DynamicStructuredTool({
+  name: 'get_exercise_history',
+  description: 'Retrieve past exercise sessions for analysis',
+  schema: z.object({
+    userId: z.string().optional().describe('The user ID (automatically provided)'),
+    days: z.number().default(7).describe('Number of days to look back'),
+    limit: z.number().default(20).describe('Max sessions to return'),
+  }),
+  func: async ({ userId, days, limit }) => {
+    // Get user's timezone
+    const userResult = await query(
+      'SELECT timezone FROM users WHERE id = $1',
+      [userId]
+    );
+    const userTimezone = userResult.rows[0]?.timezone || 'America/New_York';
+
+    // Use date arithmetic for full calendar days
+    const result = await query(
+      `SELECT id, timestamp, description, activity_type, duration_minutes, intensity, notes
+       FROM exercise_logs
+       WHERE user_id = $1
+         AND timestamp >= DATE_TRUNC('day', NOW() AT TIME ZONE '${userTimezone}') - INTERVAL '${days} days'
+         AND timestamp < DATE_TRUNC('day', NOW() AT TIME ZONE '${userTimezone}') + INTERVAL '1 day'
+       ORDER BY timestamp DESC
+       LIMIT $2`,
+      [userId, limit]
+    );
+
+    return JSON.stringify({
+      count: result.rows.length,
+      timezone: userTimezone,
+      sessions: result.rows.map(r => ({
+        id: r.id,
+        timestamp: r.timestamp,
+        localTime: new Date(r.timestamp).toLocaleString('en-US', {
+          timeZone: userTimezone,
+          month: 'numeric',
+          day: 'numeric',
+          year: 'numeric',
+          hour: 'numeric',
+          minute: '2-digit',
+          hour12: true,
+        }),
+        description: r.description,
+        activityType: r.activity_type,
+        duration: r.duration_minutes,
+        intensity: r.intensity,
+        notes: r.notes,
+      })),
+    });
+  },
+});
+
+/**
+ * ============================================================================
+ * INSULIN LOGGING TOOLS
+ * ============================================================================
+ */
+
+/**
+ * Tool: Log insulin dose
+ */
+export const logInsulinTool = new DynamicStructuredTool({
+  name: 'log_insulin',
+  description: 'Log an insulin dose. Always confirm exact details with user before saving.',
+  schema: z.object({
+    userId: z.string().optional().describe('The user ID (automatically provided)'),
+    timestamp: z.string().optional().describe('Dose timestamp (ISO format). Defaults to now.'),
+    insulinType: z.enum(['rapid', 'long', 'ultra_long', 'mixed'])
+      .describe('Insulin type'),
+    brandName: z.string().optional().describe('Brand name (e.g., Humalog, Novolog, Lantus)'),
+    units: z.number().describe('Number of units'),
+    purpose: z.enum(['meal', 'correction', 'basal'])
+      .describe('Purpose of dose'),
+    relatedMealId: z.string().optional().describe('Related meal ID if meal bolus'),
+    notes: z.string().optional().describe('Additional notes'),
+  }),
+  func: async ({ userId, timestamp, insulinType, brandName, units, purpose, relatedMealId, notes }) => {
+    try {
+      const doseTimestamp = timestamp || new Date().toISOString();
+
+      const result = await query(
+        `INSERT INTO insulin_doses (
+          user_id, timestamp, insulin_type, brand_name, units, purpose, related_meal_id, notes, source
+        )
+        VALUES ($1, $2, $3, $4, $5, $6, $7, $8, 'agent')
+        RETURNING id, timestamp, insulin_type, units, purpose`,
+        [userId, doseTimestamp, insulinType, brandName, units, purpose, relatedMealId, notes]
+      );
+
+      return JSON.stringify({
+        success: true,
+        dose: {
+          id: result.rows[0].id,
+          timestamp: result.rows[0].timestamp,
+          type: result.rows[0].insulin_type,
+          units: parseFloat(result.rows[0].units),
+          purpose: result.rows[0].purpose,
+        },
+        message: `Logged: ${units} units ${insulinType} insulin (${purpose})`,
+      });
+    } catch (error) {
+      return JSON.stringify({
+        success: false,
+        error: error instanceof Error ? error.message : 'Unknown error',
+      });
+    }
+  },
+});
+
+/**
+ * Tool: Get insulin history
+ */
+export const getInsulinHistoryTool = new DynamicStructuredTool({
+  name: 'get_insulin_history',
+  description: 'Retrieve past insulin doses for analysis',
+  schema: z.object({
+    userId: z.string().optional().describe('The user ID (automatically provided)'),
+    days: z.number().default(7).describe('Number of days to look back'),
+    purpose: z.string().optional().describe('Filter by purpose'),
+    limit: z.number().default(20).describe('Max doses to return'),
+  }),
+  func: async ({ userId, days, purpose, limit }) => {
+    // Get user's timezone
+    const userResult = await query(
+      'SELECT timezone FROM users WHERE id = $1',
+      [userId]
+    );
+    const userTimezone = userResult.rows[0]?.timezone || 'America/New_York';
+
+    // Use date arithmetic to get full calendar days, not just 24-hour periods
+    // This ensures "yesterday" means "all of yesterday" not "last 24 hours"
+    let queryText = `
+      SELECT id, timestamp, insulin_type, brand_name, units, purpose, notes
+      FROM insulin_doses
+      WHERE user_id = $1
+        AND timestamp >= DATE_TRUNC('day', NOW() AT TIME ZONE '${userTimezone}') - INTERVAL '${days} days'
+        AND timestamp < DATE_TRUNC('day', NOW() AT TIME ZONE '${userTimezone}') + INTERVAL '1 day'
+    `;
+    const params = [userId];
+
+    if (purpose) {
+      queryText += ` AND purpose = $2`;
+      params.push(purpose);
+    }
+
+    queryText += ` ORDER BY timestamp DESC LIMIT $${params.length + 1}`;
+    params.push(limit);
+
+    const result = await query(queryText, params);
+
+    // Debug logging
+    if (result.rows.length > 0) {
+      const firstRow = result.rows[0];
+      console.log('=== TIMEZONE DEBUG ===');
+      console.log('Raw timestamp from DB:', firstRow.timestamp);
+      console.log('Type:', typeof firstRow.timestamp);
+      console.log('As Date:', new Date(firstRow.timestamp));
+      console.log('As ISO:', new Date(firstRow.timestamp).toISOString());
+      console.log('User timezone:', userTimezone);
+      console.log('Formatted:', new Date(firstRow.timestamp).toLocaleString('en-US', {
+        timeZone: userTimezone,
+        month: 'numeric',
+        day: 'numeric',
+        year: 'numeric',
+        hour: 'numeric',
+        minute: '2-digit',
+        hour12: true,
+      }));
+      console.log('===================');
+    }
+
+    return JSON.stringify({
+      count: result.rows.length,
+      timezone: userTimezone,
+      doses: result.rows.map(r => ({
+        id: r.id,
+        timestamp: r.timestamp,
+        localTime: new Date(r.timestamp).toLocaleString('en-US', {
+          timeZone: userTimezone,
+          month: 'numeric',
+          day: 'numeric',
+          year: 'numeric',
+          hour: 'numeric',
+          minute: '2-digit',
+          hour12: true,
+        }),
+        type: r.insulin_type,
+        brand: r.brand_name,
+        units: parseFloat(r.units),
+        purpose: r.purpose,
+        notes: r.notes,
+      })),
+    });
+  },
+});
+
 export const allTools = [
+  // Glucose analysis tools
   getRecentGlucoseTool,
   getGlucoseStatsTool,
   analyzeOvernightTool,
   detectPatternsTool,
   comparePeriodsTool,
+  analyzeLiveTrendTool,
+  checkAlertConditionsTool,
+
+  // Memory tools
   storeMemoryTool,
   retrieveMemoryTool,
   deleteMemoryTool,
-  analyzeLiveTrendTool,
-  checkAlertConditionsTool,
+
+  // Meal logging tools
+  estimateMealCarbsTool,
+  logMealTool,
+  getMealHistoryTool,
+
+  // Exercise logging tools
+  estimateExerciseIntensityTool,
+  logExerciseTool,
+  getExerciseHistoryTool,
+
+  // Insulin logging tools
+  logInsulinTool,
+  getInsulinHistoryTool,
+
+  // Proactive monitoring tools
   getRecentSageMessagesTool,
   sendProactiveMessageTool,
   getUserContextTool,

@@ -8,7 +8,7 @@ CREATE TABLE IF NOT EXISTS users (
   libreview_region TEXT DEFAULT 'us',
   diagnosis_date DATE,
   diagnosis_type TEXT,
-  timezone TEXT DEFAULT 'America/Los_Angeles',
+  timezone TEXT DEFAULT 'America/New_York',
   discord_user_id TEXT UNIQUE,
   preferences JSONB DEFAULT '{}',
   created_at TIMESTAMPTZ DEFAULT NOW(),

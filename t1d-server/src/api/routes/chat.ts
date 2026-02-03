@@ -115,6 +115,8 @@ router.post('/stream', async (req, res, next) => {
 
       let lastContent = '';
       let chunkCount = 0;
+      let aiMessageCount = 0; // Track how many AI messages we've seen
+
       for await (const chunk of stream) {
         chunkCount++;
 
@@ -128,6 +130,9 @@ router.post('/stream', async (req, res, next) => {
           const isAIMessage = lastMessage.constructor.name === 'AIMessage';
 
           if (isAIMessage) {
+            // Track AI message count
+            aiMessageCount++;
+
             // Check for tool calls
             if (lastMessage.tool_calls && lastMessage.tool_calls.length > 0) {
               const newToolCalls = lastMessage.tool_calls.length - toolCallCount;
@@ -138,9 +143,18 @@ router.post('/stream', async (req, res, next) => {
               }
             }
 
-            // Stream content incrementally
-            if (lastMessage.content && typeof lastMessage.content === 'string') {
+            // Only stream content from the FINAL AI message (no tool calls = final message)
+            const isFinalMessage = !lastMessage.tool_calls || lastMessage.tool_calls.length === 0;
+
+            if (isFinalMessage && lastMessage.content && typeof lastMessage.content === 'string') {
               const currentContent = lastMessage.content;
+
+              // Reset lastContent when we get to the final message (ignore intermediate messages)
+              if (aiMessageCount > 1 && lastContent.length === 0) {
+                // This is the first content of the final message after tool calls
+                lastContent = '';
+              }
+
               if (currentContent.length > lastContent.length) {
                 const delta = currentContent.slice(lastContent.length);
                 lastContent = currentContent;

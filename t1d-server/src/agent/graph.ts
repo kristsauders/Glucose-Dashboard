@@ -31,13 +31,25 @@ export function createAgentGraph(forceProvider?: 'ollama' | 'openrouter') {
   async function agentNode(state: AgentState): Promise<Partial<AgentState>> {
     const { messages, userContext } = state;
 
-    // Add system prompt and user context
-    const systemMessages = [
-      new SystemMessage(SYSTEM_PROMPT),
-      new SystemMessage(USER_CONTEXT_PROMPT(userContext)),
-    ];
+    // Only add system prompts if this is the first turn (no AI messages yet)
+    // This prevents overwhelming context in multi-turn conversations
+    const hasAIMessages = messages.some(m => m.constructor.name === 'AIMessage');
 
-    const response = await modelWithTools.invoke([...systemMessages, ...messages]);
+    let messagesToSend: BaseMessage[];
+    if (!hasAIMessages) {
+      // First turn: add full system prompts
+      const systemMessages = [
+        new SystemMessage(SYSTEM_PROMPT),
+        new SystemMessage(USER_CONTEXT_PROMPT(userContext)),
+      ];
+      messagesToSend = [...systemMessages, ...messages];
+    } else {
+      // Continuation: just use conversation history
+      // The model already has context from previous turns
+      messagesToSend = messages;
+    }
+
+    const response = await modelWithTools.invoke(messagesToSend);
 
     return {
       messages: [...messages, response],
