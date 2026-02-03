@@ -1,5 +1,6 @@
 import type { GlucoseReading } from '@/types/glucose';
 import type { Conversation, ConversationWithMessages } from '@/types/chat';
+import type { MealLog, ExerciseLog, InsulinLog } from '@/types/logs';
 
 const API_BASE_URL = `${import.meta.env.VITE_API_URL || 'http://localhost:3002'}/api`;
 
@@ -174,6 +175,58 @@ class APIService {
 
     // Return total count of imported items
     return { count: response.imported.glucose + response.imported.meals + response.imported.insulin };
+  }
+
+  // Logs methods
+  async getMealLogs(start?: Date, end?: Date, limit = 100): Promise<MealLog[]> {
+    const params = new URLSearchParams();
+    if (start) params.append('start', start.toISOString());
+    if (end) params.append('end', end.toISOString());
+    params.append('limit', limit.toString());
+
+    const query = params.toString();
+    const response = await this.request<{ meals: any[]; count: number }>(
+      `/logs/meals${query ? `?${query}` : ''}`
+    );
+
+    return response.meals.map(m => ({
+      ...m,
+      timestamp: new Date(m.timestamp),
+    }));
+  }
+
+  async getExerciseLogs(start?: Date, end?: Date, limit = 100): Promise<ExerciseLog[]> {
+    const params = new URLSearchParams();
+    if (start) params.append('start', start.toISOString());
+    if (end) params.append('end', end.toISOString());
+    params.append('limit', limit.toString());
+
+    const query = params.toString();
+    const response = await this.request<{ exercises: any[]; count: number }>(
+      `/logs/exercise${query ? `?${query}` : ''}`
+    );
+
+    return response.exercises.map(e => ({
+      ...e,
+      timestamp: new Date(e.timestamp),
+    }));
+  }
+
+  async getInsulinLogs(start?: Date, end?: Date, limit = 100): Promise<InsulinLog[]> {
+    const params = new URLSearchParams();
+    if (start) params.append('start', start.toISOString());
+    if (end) params.append('end', end.toISOString());
+    params.append('limit', limit.toString());
+
+    const query = params.toString();
+    const response = await this.request<{ doses: any[]; count: number }>(
+      `/logs/insulin${query ? `?${query}` : ''}`
+    );
+
+    return response.doses.map(d => ({
+      ...d,
+      timestamp: new Date(d.timestamp),
+    }));
   }
 
   // Chat methods

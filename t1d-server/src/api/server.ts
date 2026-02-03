@@ -10,6 +10,7 @@ import importRoutes from './routes/import.js';
 import settingsRoutes from './routes/settings.js';
 import chatRoutes from './routes/chat.js';
 import conversationsRoutes from './routes/conversations.js';
+import logsRoutes from './routes/logs.js';
 
 const app = express();
 
@@ -41,6 +42,7 @@ app.use('/api/import', importRoutes);
 app.use('/api/settings', settingsRoutes);
 app.use('/api/chat', chatRoutes);
 app.use('/api/conversations', conversationsRoutes);
+app.use('/api/logs', logsRoutes);
 
 // Error handler (must be last)
 app.use(errorHandler);

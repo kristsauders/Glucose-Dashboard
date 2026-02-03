@@ -6,7 +6,7 @@ import rehypeHighlight from 'rehype-highlight';
 import 'highlight.js/styles/github-dark.css';
 import { Button } from './ui/button';
 import { Input } from './ui/input';
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from './ui/card';
+import { Card, CardContent, CardHeader, CardTitle } from './ui/card';
 import { Alert, AlertDescription } from './ui/alert';
 import { Bot, Send, Trash2, Loader2, User, MessageSquare, Menu, Plus, X, Edit2, Check } from 'lucide-react';
 import { apiService } from '@/services/api';
@@ -28,6 +28,12 @@ export function AIChat() {
   const [editingTitleValue, setEditingTitleValue] = useState('');
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLInputElement>(null);
+
+  // Auto-hide sidebar on mobile
+  useEffect(() => {
+    const isMobile = window.innerWidth < 768;
+    setShowSidebar(!isMobile);
+  }, []);
 
   // Fetch conversations on mount
   useEffect(() => {
@@ -292,7 +298,7 @@ export function AIChat() {
                     {conversations.map((conversation) => (
                       <div
                         key={conversation.id}
-                        className={`group relative rounded-lg p-3 cursor-pointer transition-colors ${
+                        className={`group relative rounded-lg p-2 md:p-3 cursor-pointer transition-colors ${
                           conversation.id === activeConversationId
                             ? 'bg-primary/10 border border-primary/20'
                             : 'hover:bg-muted'
@@ -338,7 +344,7 @@ export function AIChat() {
                                   {format(new Date(conversation.updated_at), 'MMM d, h:mm a')}
                                 </p>
                               </div>
-                              <div className="flex gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+                              <div className="hidden md:flex gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
                                 <Button
                                   size="sm"
                                   variant="ghost"
@@ -393,9 +399,6 @@ export function AIChat() {
                 <CardTitle>
                   {activeConversation?.title || 'Sage'}
                 </CardTitle>
-                <CardDescription className="text-xs mt-0.5">
-                  Your AI diabetes assistant
-                </CardDescription>
               </div>
             </div>
             {activeConversationId && (
@@ -444,16 +447,9 @@ export function AIChat() {
                     message.role === 'user' ? 'justify-end' : 'justify-start'
                   }`}
                 >
-                  {message.role === 'assistant' && (
-                    <div className="flex-shrink-0">
-                      <div className="w-8 h-8 rounded-full bg-primary/10 flex items-center justify-center">
-                        <Bot className="h-4 w-4 text-primary" />
-                      </div>
-                    </div>
-                  )}
                   <div
-                    className={`flex-1 max-w-[80%] ${
-                      message.role === 'user' ? 'text-right' : 'text-left'
+                    className={`${
+                      message.role === 'user' ? 'flex-1 max-w-[80%] text-right' : 'w-full text-left'
                     }`}
                   >
                     <div
@@ -503,14 +499,9 @@ export function AIChat() {
             <motion.div
               initial={{ opacity: 0, y: 10 }}
               animate={{ opacity: 1, y: 0 }}
-              className="flex gap-3"
+              className="w-full"
             >
-              <div className="flex-shrink-0">
-                <div className="w-8 h-8 rounded-full bg-primary/10 flex items-center justify-center">
-                  <Bot className="h-4 w-4 text-primary" />
-                </div>
-              </div>
-              <div className="flex-1 max-w-[80%]">
+              <div className="w-full">
                 {status && (
                   <div className="text-xs text-muted-foreground mb-2 flex items-center gap-2">
                     <Loader2 className="h-3 w-3 animate-spin" />

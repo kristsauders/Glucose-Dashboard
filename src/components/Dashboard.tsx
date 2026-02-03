@@ -24,9 +24,10 @@ import { DateRangeSelector, type DateRangePreset } from './DateRangeSelector';
 import { LatestReading } from './LatestReading';
 import { AIChat } from './AIChat';
 import { Settings } from './Settings';
+import { LogsModal } from './logs/LogsModal';
 import { Button } from './ui/button';
 import { ThemeToggle } from './ThemeToggle';
-import { Upload, MessageSquare, LogOut, X, Settings as SettingsIcon } from 'lucide-react';
+import { Upload, MessageSquare, LogOut, X, Settings as SettingsIcon, ClipboardList } from 'lucide-react';
 import { apiService } from '@/services/api';
 import { subDays, subWeeks, startOfDay, setHours, setMinutes, setSeconds, setMilliseconds } from 'date-fns';
 
@@ -40,12 +41,15 @@ export function Dashboard({ readings, onDataUpdated }: DashboardProps) {
   const [dateRange, setDateRange] = useState<DateRangePreset>('live');
   const [showChat, setShowChat] = useState(false);
   const [showSettings, setShowSettings] = useState(false);
+  const [showLogs, setShowLogs] = useState(false);
 
   // Close modals with ESC key
   useEffect(() => {
     const handleEscape = (e: KeyboardEvent) => {
       if (e.key === 'Escape') {
-        if (showSettings) {
+        if (showLogs) {
+          setShowLogs(false);
+        } else if (showSettings) {
           setShowSettings(false);
         } else if (showChat) {
           setShowChat(false);
@@ -55,7 +59,7 @@ export function Dashboard({ readings, onDataUpdated }: DashboardProps) {
 
     document.addEventListener('keydown', handleEscape);
     return () => document.removeEventListener('keydown', handleEscape);
-  }, [showChat, showSettings]);
+  }, [showChat, showSettings, showLogs]);
 
   const handleLogout = () => {
     if (confirm('Are you sure you want to logout?')) {
@@ -106,7 +110,7 @@ export function Dashboard({ readings, onDataUpdated }: DashboardProps) {
   const allReadings = readings;
 
   // Get date range for filtering
-  const { filteredReadings } = useMemo(() => {
+  const { filteredReadings, startDate, endDate } = useMemo(() => {
     if (allReadings.length === 0) {
       return { filteredReadings: [], startDate: new Date(), endDate: new Date() };
     }
@@ -223,9 +227,6 @@ export function Dashboard({ readings, onDataUpdated }: DashboardProps) {
               <h1 className="text-xl md:text-3xl font-bold bg-gradient-to-r from-primary to-primary/60 bg-clip-text text-transparent truncate">
                 Sage
               </h1>
-              <p className="text-xs md:text-sm text-muted-foreground">
-                Your AI diabetes assistant • {filteredReadings.length.toLocaleString()} readings
-              </p>
             </div>
             <div className="flex gap-2 flex-shrink-0">
               <Button variant="outline" size="sm" onClick={() => setShowChat(!showChat)}>
@@ -239,6 +240,14 @@ export function Dashboard({ readings, onDataUpdated }: DashboardProps) {
               >
                 <SettingsIcon className="h-4 w-4 md:mr-2" />
                 <span className="hidden md:inline">Settings</span>
+              </Button>
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => setShowLogs(true)}
+              >
+                <ClipboardList className="h-4 w-4 md:mr-2" />
+                <span className="hidden md:inline">Logs</span>
               </Button>
               <Button
                 variant="outline"
@@ -413,14 +422,14 @@ export function Dashboard({ readings, onDataUpdated }: DashboardProps) {
           initial={{ opacity: 0 }}
           animate={{ opacity: 1 }}
           exit={{ opacity: 0 }}
-          className="fixed inset-0 bg-black/50 backdrop-blur-sm z-50 flex items-center justify-center p-4"
+          className="fixed inset-0 bg-black/50 backdrop-blur-sm z-50 flex items-center justify-center md:p-4"
           onClick={() => setShowChat(false)}
         >
           <motion.div
             initial={{ scale: 0.95, opacity: 0 }}
             animate={{ scale: 1, opacity: 1 }}
             exit={{ scale: 0.95, opacity: 0 }}
-            className="w-full max-w-4xl h-[85vh] flex flex-col"
+            className="w-full md:max-w-4xl h-full md:h-[85vh] flex flex-col"
             onClick={(e) => e.stopPropagation()}
           >
             <div className="relative h-full flex flex-col">
@@ -442,6 +451,16 @@ export function Dashboard({ readings, onDataUpdated }: DashboardProps) {
       {/* Settings Modal */}
       {showSettings && (
         <Settings onClose={() => setShowSettings(false)} />
+      )}
+
+      {/* Logs Modal */}
+      {showLogs && (
+        <LogsModal
+          onClose={() => setShowLogs(false)}
+          dateRange={dateRange === 'live' ? 'today' : dateRange}
+          startDate={startDate}
+          endDate={endDate}
+        />
       )}
     </div>
   );
