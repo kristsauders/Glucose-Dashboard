@@ -2195,6 +2195,260 @@ export const getInsulinHistoryTool = new DynamicStructuredTool({
   },
 });
 
+/**
+ * ============================================================================
+ * REPORT ACCESS TOOLS
+ * ============================================================================
+ */
+
+/**
+ * Tool: Get Daily Report
+ * Retrieve a specific daily report
+ */
+const getDailyReportTool = new DynamicStructuredTool({
+  name: 'get_daily_report',
+  description:
+    'Retrieve a daily health report for a specific date. Returns comprehensive daily metrics, patterns, and insights.',
+  schema: z.object({
+    userId: z.string().describe('User ID (auto-injected by system)'),
+    date: z.string().optional().describe('Report date (ISO date, YYYY-MM-DD). Defaults to yesterday if not specified.'),
+  }),
+  func: async ({ userId, date }) => {
+    try {
+      // Default to yesterday if no date specified
+      const reportDate = date || new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString().split('T')[0];
+
+      const result = await query(
+        `SELECT * FROM daily_reports
+         WHERE user_id = $1 AND report_date = $2`,
+        [userId, reportDate]
+      );
+
+      if (result.rows.length === 0) {
+        return JSON.stringify({
+          found: false,
+          message: `No daily report found for ${reportDate}. Reports may not have been generated yet.`,
+        });
+      }
+
+      const report = result.rows[0];
+
+      return JSON.stringify({
+        found: true,
+        report: {
+          date: report.report_date,
+          metrics: {
+            avgGlucose: parseFloat(report.avg_glucose).toFixed(1),
+            minGlucose: parseFloat(report.min_glucose).toFixed(1),
+            maxGlucose: parseFloat(report.max_glucose).toFixed(1),
+            stdDev: parseFloat(report.std_dev).toFixed(1),
+            cv: parseFloat(report.cv).toFixed(1),
+            estimatedA1c: parseFloat(report.estimated_a1c).toFixed(1),
+          },
+          timeInRange: {
+            tir_70_180: parseFloat(report.tir_70_180_pct).toFixed(1) + '%',
+            tir_70_140: parseFloat(report.tir_70_140_pct).toFixed(1) + '%',
+            timeBelow70: parseFloat(report.time_below_70_pct).toFixed(1) + '%',
+            timeAbove180: parseFloat(report.time_above_180_pct).toFixed(1) + '%',
+          },
+          events: {
+            hypoEpisodes: report.hypoglycemia_episodes,
+            hyperEpisodes: report.hyperglycemia_episodes,
+            mealsLogged: report.meals_logged,
+            exerciseSessions: report.exercise_sessions,
+          },
+          overnight: {
+            avgGlucose: report.overnight_avg_glucose ? parseFloat(report.overnight_avg_glucose).toFixed(1) : null,
+            stability: report.overnight_stability,
+          },
+          summary: report.summary,
+          highlights: report.highlights,
+          patternsDetected: report.patterns_detected,
+          generatedAt: report.generated_at,
+        },
+      });
+    } catch (error) {
+      console.error('Error retrieving daily report:', error);
+      return JSON.stringify({
+        error: 'Failed to retrieve daily report',
+        details: error instanceof Error ? error.message : 'Unknown error',
+      });
+    }
+  },
+});
+
+/**
+ * Tool: Get Weekly Report
+ * Retrieve a specific weekly report
+ */
+const getWeeklyReportTool = new DynamicStructuredTool({
+  name: 'get_weekly_report',
+  description:
+    'Retrieve a weekly health report for a specific week. Returns weekly trends, comparisons, and recommendations.',
+  schema: z.object({
+    userId: z.string().describe('User ID (auto-injected by system)'),
+    weekStart: z
+      .string()
+      .optional()
+      .describe('Week start date (ISO date, YYYY-MM-DD, should be a Monday). Defaults to last Monday if not specified.'),
+  }),
+  func: async ({ userId, weekStart }) => {
+    try {
+      // Default to last Monday if no date specified
+      const start = weekStart || (() => {
+        const today = new Date();
+        const dayOfWeek = today.getDay();
+        const daysToLastMonday = dayOfWeek === 0 ? 6 : dayOfWeek - 1;
+        const lastMonday = new Date(today);
+        lastMonday.setDate(today.getDate() - daysToLastMonday - 7);
+        return lastMonday.toISOString().split('T')[0];
+      })();
+
+      const result = await query(
+        `SELECT * FROM weekly_reports
+         WHERE user_id = $1 AND week_start_date = $2`,
+        [userId, start]
+      );
+
+      if (result.rows.length === 0) {
+        return JSON.stringify({
+          found: false,
+          message: `No weekly report found for week starting ${start}. Reports may not have been generated yet.`,
+        });
+      }
+
+      const report = result.rows[0];
+
+      return JSON.stringify({
+        found: true,
+        report: {
+          weekStart: report.week_start_date,
+          weekEnd: report.week_end_date,
+          metrics: {
+            avgGlucose: parseFloat(report.avg_glucose_week).toFixed(1),
+            avgTir: parseFloat(report.avg_tir_70_180_pct).toFixed(1) + '%',
+            avgCv: parseFloat(report.avg_cv).toFixed(1) + '%',
+            estimatedA1c: parseFloat(report.estimated_a1c).toFixed(1),
+          },
+          trend: {
+            direction: report.trend_direction,
+            slope: parseFloat(report.trend_slope || 0).toFixed(2),
+            rSquared: parseFloat(report.trend_r_squared || 0).toFixed(2),
+          },
+          comparison: report.vs_previous_week,
+          bestDay: {
+            date: report.best_day_date,
+            avg: report.best_day_avg ? parseFloat(report.best_day_avg).toFixed(1) : null,
+          },
+          worstDay: {
+            date: report.worst_day_date,
+            avg: report.worst_day_avg ? parseFloat(report.worst_day_avg).toFixed(1) : null,
+          },
+          patterns: report.patterns_summary,
+          summary: report.summary,
+          highlights: report.highlights,
+          recommendations: report.recommendations,
+          generatedAt: report.generated_at,
+        },
+      });
+    } catch (error) {
+      console.error('Error retrieving weekly report:', error);
+      return JSON.stringify({
+        error: 'Failed to retrieve weekly report',
+        details: error instanceof Error ? error.message : 'Unknown error',
+      });
+    }
+  },
+});
+
+/**
+ * Tool: Get Monthly Report
+ * Retrieve a specific monthly report
+ */
+const getMonthlyReportTool = new DynamicStructuredTool({
+  name: 'get_monthly_report',
+  description:
+    'Retrieve a comprehensive monthly health report. Returns monthly metrics, weekly breakdown, pattern evolution, and healthcare provider summary.',
+  schema: z.object({
+    userId: z.string().describe('User ID (auto-injected by system)'),
+    monthStart: z
+      .string()
+      .optional()
+      .describe('Month start date (ISO date, YYYY-MM-DD, should be 1st of month). Defaults to 1st of last month if not specified.'),
+  }),
+  func: async ({ userId, monthStart }) => {
+    try {
+      // Default to 1st of last month if no date specified
+      const start = monthStart || (() => {
+        const today = new Date();
+        const lastMonthStart = new Date(today.getFullYear(), today.getMonth() - 1, 1);
+        return lastMonthStart.toISOString().split('T')[0];
+      })();
+
+      const result = await query(
+        `SELECT * FROM monthly_reports
+         WHERE user_id = $1 AND month_start_date = $2`,
+        [userId, start]
+      );
+
+      if (result.rows.length === 0) {
+        return JSON.stringify({
+          found: false,
+          message: `No monthly report found for month starting ${start}. Reports may not have been generated yet.`,
+        });
+      }
+
+      const report = result.rows[0];
+
+      return JSON.stringify({
+        found: true,
+        report: {
+          monthStart: report.month_start_date,
+          monthEnd: report.month_end_date,
+          metrics: {
+            avgGlucose: parseFloat(report.avg_glucose_month).toFixed(1),
+            avgTir: parseFloat(report.avg_tir_70_180_pct).toFixed(1) + '%',
+            avgCv: parseFloat(report.avg_cv).toFixed(1) + '%',
+            estimatedA1c: parseFloat(report.estimated_a1c).toFixed(1),
+            a1cConfidenceInterval: {
+              lower: parseFloat(report.a1c_confidence_interval_lower).toFixed(1),
+              upper: parseFloat(report.a1c_confidence_interval_upper).toFixed(1),
+            },
+          },
+          totals: {
+            hypoEpisodes: report.total_hypoglycemia_episodes,
+            hyperEpisodes: report.total_hyperglycemia_episodes,
+            mealsLogged: report.total_meals_logged,
+            exerciseSessions: report.total_exercise_sessions,
+            insulinDoses: report.total_insulin_doses,
+          },
+          weeklyBreakdown: report.weekly_data,
+          patterns: {
+            summary: report.patterns_summary,
+            changes: report.pattern_changes,
+          },
+          comparisons: {
+            vsPreviousMonth: report.vs_previous_month,
+            vs3MonthsAgo: report.vs_3_months_ago,
+          },
+          longTermTrend: report.long_term_trend,
+          summary: report.summary,
+          highlights: report.highlights,
+          recommendations: report.recommendations,
+          providerSummary: report.provider_summary,
+          generatedAt: report.generated_at,
+        },
+      });
+    } catch (error) {
+      console.error('Error retrieving monthly report:', error);
+      return JSON.stringify({
+        error: 'Failed to retrieve monthly report',
+        details: error instanceof Error ? error.message : 'Unknown error',
+      });
+    }
+  },
+});
+
 export const allTools = [
   // Glucose analysis tools
   getRecentGlucoseTool,
@@ -2240,4 +2494,9 @@ export const allTools = [
   analyzeTrendsTool,
   detectAnomaliesTool,
   comparePeriodsStatisticalTool,
+
+  // Report access tools
+  getDailyReportTool,
+  getWeeklyReportTool,
+  getMonthlyReportTool,
 ];

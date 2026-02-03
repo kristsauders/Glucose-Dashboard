@@ -4,6 +4,7 @@ import { proactiveMonitor } from './services/proactive-monitor.js';
 import { patternDetector } from './services/pattern-detector.js';
 import { discordBot } from './services/discord-bot.js';
 import { libreViewPoller } from './services/libreviewPoller.js';
+import { reportingService } from './services/reporting-service.js';
 import type { Server } from 'http';
 
 let httpServer: Server | null = null;
@@ -32,6 +33,10 @@ async function main() {
     // Start pattern detection service
     console.log('🔍 Starting pattern detection...');
     patternDetector.start();
+
+    // Start reporting service
+    console.log('📊 Starting reporting service...');
+    reportingService.start();
 
     // Start Discord bot
     console.log('💬 Starting Discord bot...');
@@ -80,6 +85,10 @@ function setupGracefulShutdown() {
       // Stop pattern detector
       console.log('  ⏳ Stopping pattern detector...');
       patternDetector.stop();
+
+      // Stop reporting service
+      console.log('  ⏳ Stopping reporting service...');
+      reportingService.stop();
 
       // Stop LibreView polling
       console.log('  ⏳ Stopping LibreView polling...');
