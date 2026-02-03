@@ -24,7 +24,7 @@ import { DateRangeSelector, type DateRangePreset } from './DateRangeSelector';
 import { LatestReading } from './LatestReading';
 import { AIChat } from './AIChat';
 import { Settings } from './Settings';
-import { LogsModal } from './logs/LogsModal';
+import { LogsModal } from './logs';
 import { Button } from './ui/button';
 import { ThemeToggle } from './ThemeToggle';
 import { Upload, MessageSquare, LogOut, X, Settings as SettingsIcon, ClipboardList } from 'lucide-react';
