@@ -46,49 +46,27 @@ async function resetDatabase() {
     `);
     console.log('✅ All tables dropped');
 
-    // Read and execute base schema
-    console.log('📝 Creating base schema...');
+    // Read and execute schema - same as initial setup
+    console.log('📝 Creating fresh database schema...');
     const schemaPath = join(__dirname, '../src/db/schema.sql');
     const schema = readFileSync(schemaPath, 'utf-8');
     await pool.query(schema);
-    console.log('✅ Base schema created');
+    console.log('✅ Database schema created');
 
-    // Run migrations in order
-    console.log('🔄 Running migrations...');
+    // Test the connection
+    const result = await pool.query('SELECT NOW()');
+    console.log('🕐 Database time:', result.rows[0].now);
 
-    const migrations = [
-      'migrate-advanced-tracking.js',
-      'migrate-conversations.js',
-      'migrate-pattern-detection.js',
-      'migrate-reports.js',
-      'migrate-timezone-default.js',
-    ];
-
-    for (const migration of migrations) {
-      const migrationPath = join(__dirname, migration);
-      try {
-        console.log(`  Running ${migration}...`);
-        const { runMigration } = await import(`file://${migrationPath}`);
-        if (runMigration) {
-          await runMigration(pool);
-        } else {
-          // If migration doesn't export runMigration, execute it
-          await import(`file://${migrationPath}`);
-        }
-        console.log(`  ✅ ${migration} complete`);
-      } catch (error) {
-        console.log(`  ⚠️  ${migration} skipped or already applied:`, error.message);
-      }
-    }
-
-    console.log('✅ All migrations complete');
     console.log('');
     console.log('✨ Database reset complete! Fresh start ready.');
     console.log('');
     console.log('Next steps:');
-    console.log('  1. Create a user account via the registration endpoint');
-    console.log('  2. Connect to LibreView to start syncing glucose data');
-    console.log('  3. Start the server: npm run dev');
+    console.log('  1. Start the server: npm run dev');
+    console.log('  2. Register a new user account');
+    console.log('  3. Connect to LibreView to start syncing glucose data');
+    console.log('');
+    console.log('Note: If you get "relation does not exist" errors, you may need to');
+    console.log('      manually run migration scripts for additional tables.');
 
   } catch (error) {
     console.error('❌ Database reset failed:', error);
