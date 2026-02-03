@@ -120,18 +120,49 @@ router.post('/stream', async (req, res, next) => {
       for await (const chunk of stream) {
         chunkCount++;
 
+        // Debug: Log chunk structure (only first few chunks)
+        if (chunkCount <= 3) {
+          console.log('Chunk', chunkCount, 'keys:', Object.keys(chunk));
+          console.log('Chunk', chunkCount, 'structure:', JSON.stringify(chunk, null, 2).substring(0, 500));
+        }
+
         // LangGraph streams chunks keyed by node name (agent or tools)
         const nodeUpdate = chunk.agent || chunk.tools;
 
+        if (!nodeUpdate) {
+          if (chunkCount <= 5) {
+            console.log('Warning: No nodeUpdate found in chunk', chunkCount);
+          }
+          continue;
+        }
+
         if (nodeUpdate && nodeUpdate.messages && nodeUpdate.messages.length > 0) {
+          if (chunkCount <= 3) {
+            console.log('Chunk', chunkCount, 'has', nodeUpdate.messages.length, 'messages');
+          }
+
           const lastMessage = nodeUpdate.messages[nodeUpdate.messages.length - 1];
 
-          // Only process AIMessage instances
-          const isAIMessage = lastMessage.constructor.name === 'AIMessage';
+          // Process both AIMessage and AIMessageChunk instances
+          const isAIMessage = lastMessage.constructor.name === 'AIMessage' ||
+                             lastMessage.constructor.name === 'AIMessageChunk';
+
+          if (chunkCount <= 5) {
+            console.log('Chunk', chunkCount, 'message type:', lastMessage.constructor.name, 'has content:', !!lastMessage.content, 'content length:', lastMessage.content?.length || 0);
+            if (lastMessage.content) {
+              console.log('Chunk', chunkCount, 'content preview:', JSON.stringify(lastMessage.content).substring(0, 100));
+            }
+          }
 
           if (isAIMessage) {
             // Track AI message count
             aiMessageCount++;
+
+            // Debug tool calls
+            if (chunkCount <= 5) {
+              console.log('Chunk', chunkCount, 'tool_calls:', lastMessage.tool_calls);
+              console.log('Chunk', chunkCount, 'tool_calls length:', lastMessage.tool_calls?.length || 0);
+            }
 
             // Check for tool calls
             if (lastMessage.tool_calls && lastMessage.tool_calls.length > 0) {

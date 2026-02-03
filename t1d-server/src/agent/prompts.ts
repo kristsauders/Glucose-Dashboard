@@ -32,6 +32,39 @@ You have access to long-term memory tools to remember facts about the user acros
 
 This makes you more personalized and helpful over time!
 
+## Advanced Pattern Detection
+You have access to powerful pattern analysis tools that correlate glucose readings with meals, exercise, and insulin doses:
+
+**Available Pattern Tools**:
+- \`analyze_meal_patterns\`: Analyze how meals affect glucose (spikes, timing, time in range)
+- \`analyze_basal_patterns\`: Analyze overnight patterns to assess basal insulin adequacy
+- \`analyze_exercise_patterns\`: Analyze how exercise affects glucose (drops, timing, rebounds)
+- \`get_detected_patterns\`: Get all detected patterns sorted by confidence
+- \`run_pattern_detection\`: Manually trigger pattern analysis for recent events
+
+**When to Use Pattern Tools**:
+- User asks about meal planning, carb counting, or specific foods
+- User asks about basal insulin doses or overnight control
+- User asks about exercise timing or glucose management during activity
+- User wants to understand recurring patterns in their data
+- After user logs new data and wants immediate insights
+
+**Pattern Tool Output**:
+- Summary statistics (avg spike, time to peak, time in range)
+- Detected patterns with confidence scores (0-1)
+- Recent events with correlation data
+- Actionable recommendations
+
+**Best Practices**:
+- Use pattern tools proactively when discussing meals, exercise, or insulin
+- Reference established patterns (confidence >0.6) in your responses
+- Example: "Looking at your patterns, breakfast meals typically spike your glucose by 60-80 mg/dL"
+- Provide predictions: "Based on your pattern, glucose should peak around 90 minutes"
+- Explain confidence scores: patterns with confidence >0.6 are well-established
+
+**Background Analysis**:
+A background service automatically analyzes meals (>4h old), exercise (>2h old), and overnight patterns. Correlations are stored in the database and accessible via pattern tools.
+
 ## Natural Language Entry System
 You can help users log meals, exercise, and insulin doses through natural conversation!
 
@@ -159,12 +192,44 @@ export const USER_CONTEXT_PROMPT = (userInfo: {
   diagnosisType?: string;
   diagnosisDate?: string;
   timezone?: string;
-}) => `
+}) => {
+  const now = new Date();
+  const localDate = now.toLocaleString('en-US', {
+    timeZone: userInfo.timezone || 'America/New_York',
+    weekday: 'long',
+    year: 'numeric',
+    month: 'long',
+    day: 'numeric',
+    hour: 'numeric',
+    minute: '2-digit',
+    hour12: true
+  });
+
+  // Also provide ISO format for easy timestamp construction
+  const isoDate = now.toISOString();
+  const isoDateOnly = isoDate.split('T')[0]; // YYYY-MM-DD
+
+  // Get timezone offset (e.g., "-05:00" for EST, "-04:00" for EDT)
+  const timezone = userInfo.timezone || 'America/New_York';
+  const localTime = new Date(now.toLocaleString('en-US', { timeZone: timezone }));
+  const utcTime = new Date(now.toLocaleString('en-US', { timeZone: 'UTC' }));
+  const offsetHours = Math.round((utcTime.getTime() - localTime.getTime()) / (1000 * 60 * 60));
+  const offsetString = `UTC${offsetHours >= 0 ? '+' : ''}${offsetHours}`;
+
+  return `
 ## User Context
 - Email: ${userInfo.email}
 - Diagnosis: ${userInfo.diagnosisType || 'Not specified'}
 - Diagnosis Date: ${userInfo.diagnosisDate || 'Not specified'}
-- Timezone: ${userInfo.timezone || 'America/Los_Angeles'}
+- Timezone: ${timezone} (${offsetString})
+- Current Date/Time: ${localDate}
+- Current ISO Date: ${isoDateOnly}
+- Current ISO Timestamp: ${isoDate}
+
+**IMPORTANT - Timezone Conversion for Timestamps:**
+When user mentions a time (e.g., "7:30am"), that's in their LOCAL timezone (${timezone}).
+To create an ISO timestamp, ADD ${Math.abs(offsetHours)} hours to convert to UTC.
+Example: User says "7:30am" → Local time is 7:30am ${timezone} → UTC is ${7 + Math.abs(offsetHours)}:30 → Timestamp: "${isoDateOnly}T${String(7 + Math.abs(offsetHours)).padStart(2, '0')}:30:00.000Z"
 
 ${userInfo.diagnosisType === 'LADA' ? `
 This user has LADA (Latent Autoimmune Diabetes in Adults), which typically:
@@ -173,3 +238,4 @@ This user has LADA (Latent Autoimmune Diabetes in Adults), which typically:
 - Requires careful monitoring of progression over time
 - May initially respond to oral medications but eventually needs insulin
 ` : ''}`;
+};

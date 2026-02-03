@@ -19,13 +19,18 @@ interface AgentState {
  * Create the AI agent graph
  */
 export function createAgentGraph(forceProvider?: 'ollama' | 'openrouter') {
-  const provider = forceProvider
-    ? (forceProvider === 'openrouter' ? getOpenRouterProvider() : getOllamaProvider())
-    : getAIProvider();
+  const provider = getAIProvider(forceProvider);
   console.log(`✓ Using AI provider: ${provider.name}`);
 
   // Bind tools to the model
-  const modelWithTools = provider.model.bindTools(allTools);
+  // Use different method depending on what's available (older vs newer LangChain versions)
+  console.log(`  Binding ${allTools.length} tools to model`);
+  console.log(`  Tool names: ${allTools.map(t => t.name).join(', ')}`);
+  console.log(`  Using bindTools method: ${typeof provider.model.bindTools === 'function'}`);
+
+  const modelWithTools = typeof provider.model.bindTools === 'function'
+    ? provider.model.bindTools(allTools)
+    : provider.model.bind({ tools: allTools });
 
   // Define the agent node
   async function agentNode(state: AgentState): Promise<Partial<AgentState>> {
@@ -108,10 +113,18 @@ export function createAgentGraph(forceProvider?: 'ollama' | 'openrouter') {
     const { messages } = state;
     const lastMessage = messages[messages.length - 1];
 
+    console.log('[shouldContinue] Evaluating last message:');
+    console.log('  - Message type:', lastMessage?.constructor.name);
+    console.log('  - Has tool_calls property:', 'tool_calls' in (lastMessage || {}));
+    console.log('  - tool_calls value:', (lastMessage as any)?.tool_calls);
+    console.log('  - tool_calls length:', (lastMessage as any)?.tool_calls?.length || 0);
+
     if (!lastMessage || !('tool_calls' in lastMessage) || !lastMessage.tool_calls?.length) {
+      console.log('  → Routing to END (no tool calls)');
       return END;
     }
 
+    console.log('  → Routing to tools');
     return 'tools';
   }
 

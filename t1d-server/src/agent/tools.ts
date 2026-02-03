@@ -2,6 +2,11 @@ import { DynamicStructuredTool } from '@langchain/core/tools';
 import { z } from 'zod';
 import { query } from '../config/database.js';
 import { discordService } from '../services/discord.js';
+import {
+  detectMealResponse,
+  detectBasalAdequacy,
+  detectExerciseResponse,
+} from '../services/pattern-algorithms.js';
 
 /**
  * Tool: Get recent glucose readings
@@ -814,6 +819,621 @@ export const getUserContextTool = new DynamicStructuredTool({
 
 /**
  * ============================================================================
+ * PATTERN ANALYSIS TOOLS
+ * ============================================================================
+ */
+
+/**
+ * Tool: Analyze Meal Patterns
+ * Analyzes how meals affect glucose over a time period
+ */
+const analyzeMealPatternsTool = new DynamicStructuredTool({
+  name: 'analyze_meal_patterns',
+  description:
+    'Analyze how meals affect glucose over a time period. Returns patterns for meal responses, typical spikes, and meal timing insights. Use this when discussing meal planning, carb counting, or identifying problematic meals.',
+  schema: z.object({
+    userId: z.string().describe('User ID (auto-injected by system)'),
+    days: z.number().default(14).describe('Number of days to analyze (default: 14)'),
+    mealType: z
+      .enum(['breakfast', 'lunch', 'dinner', 'snack'])
+      .optional()
+      .describe('Filter by specific meal type'),
+  }),
+  func: async ({ userId, days = 14, mealType }) => {
+    try {
+      const startDate = new Date();
+      startDate.setDate(startDate.getDate() - days);
+
+      // Get meals in the time period
+      let mealQuery = `
+        SELECT
+          m.*,
+          c.baseline_glucose,
+          c.peak_glucose,
+          c.time_to_peak_minutes,
+          c.total_change,
+          c.time_in_range_pct,
+          c.matched_pattern_id
+        FROM meals m
+        LEFT JOIN glucose_correlations c ON m.correlation_id = c.id
+        WHERE m.user_id = $1
+          AND m.timestamp >= $2
+      `;
+      const params: any[] = [userId, startDate.toISOString()];
+
+      if (mealType) {
+        mealQuery += ` AND m.meal_type = $3`;
+        params.push(mealType);
+      }
+
+      mealQuery += ` ORDER BY m.timestamp DESC`;
+
+      const mealsResult = await query(mealQuery, params);
+
+      if (mealsResult.rows.length === 0) {
+        return JSON.stringify({
+          hasMeals: false,
+          message: `No meals logged in the past ${days} days.`,
+        });
+      }
+
+      // Calculate summary statistics
+      const mealsWithCorrelations = mealsResult.rows.filter((m) => m.correlation_id);
+      const avgSpike =
+        mealsWithCorrelations.length > 0
+          ? (
+              mealsWithCorrelations.reduce(
+                (sum, m) => sum + parseFloat(m.total_change || 0),
+                0
+              ) / mealsWithCorrelations.length
+            ).toFixed(1)
+          : null;
+
+      const avgTimeToPeak =
+        mealsWithCorrelations.length > 0
+          ? Math.round(
+              mealsWithCorrelations.reduce(
+                (sum, m) => sum + (m.time_to_peak_minutes || 0),
+                0
+              ) / mealsWithCorrelations.length
+            )
+          : null;
+
+      const avgTIR =
+        mealsWithCorrelations.length > 0
+          ? (
+              mealsWithCorrelations.reduce(
+                (sum, m) => sum + parseFloat(m.time_in_range_pct || 0),
+                0
+              ) / mealsWithCorrelations.length
+            ).toFixed(1)
+          : null;
+
+      // Get detected patterns
+      let patternQuery = `
+        SELECT *
+        FROM glucose_patterns
+        WHERE user_id = $1
+          AND pattern_type = 'meal_response'
+          AND confidence >= 0.4
+      `;
+      const patternParams: any[] = [userId];
+
+      if (mealType) {
+        patternQuery += ` AND trigger_event_details->>'meal_type' = $2`;
+        patternParams.push(mealType);
+      }
+
+      patternQuery += ` ORDER BY confidence DESC`;
+
+      const patternsResult = await query(patternQuery, patternParams);
+
+      return JSON.stringify({
+        hasMeals: true,
+        period: `${days} days`,
+        summary: {
+          totalMeals: mealsResult.rows.length,
+          mealsAnalyzed: mealsWithCorrelations.length,
+          avgSpike,
+          avgTimeToPeak,
+          avgTimeInRangePostMeal: avgTIR,
+        },
+        patterns: patternsResult.rows.map((p) => ({
+          id: p.id,
+          name: p.pattern_name,
+          description: p.description,
+          typicalSpike: p.typical_magnitude,
+          typicalDuration: p.typical_duration,
+          occurrences: p.occurrence_count,
+          confidence: parseFloat(p.confidence).toFixed(2),
+          lastSeen: p.last_seen,
+        })),
+        recentMeals: mealsResult.rows.slice(0, 10).map((m) => ({
+          id: m.id,
+          timestamp: m.timestamp,
+          description: m.description,
+          carbs: m.estimated_carbs,
+          mealType: m.meal_type,
+          spike: m.total_change,
+          timeToPeak: m.time_to_peak_minutes,
+          timeInRange: m.time_in_range_pct,
+        })),
+      });
+    } catch (error) {
+      console.error('Error analyzing meal patterns:', error);
+      return JSON.stringify({
+        error: 'Failed to analyze meal patterns',
+        details: error instanceof Error ? error.message : 'Unknown error',
+      });
+    }
+  },
+});
+
+/**
+ * Tool: Analyze Basal Patterns
+ * Analyzes overnight fasting patterns to assess basal insulin adequacy
+ */
+const analyzeBasalPatternsTool = new DynamicStructuredTool({
+  name: 'analyze_basal_patterns',
+  description:
+    'Analyze overnight fasting patterns (3am-7am) to assess basal insulin adequacy. Returns drift analysis, stability metrics, and recommendations. Use this when discussing basal insulin doses or overnight glucose control.',
+  schema: z.object({
+    userId: z.string().describe('User ID (auto-injected by system)'),
+    days: z.number().default(14).describe('Number of days to analyze (default: 14)'),
+  }),
+  func: async ({ userId, days = 14 }) => {
+    try {
+      const results = [];
+
+      // Analyze each night in the period
+      for (let i = 0; i < days; i++) {
+        const date = new Date();
+        date.setDate(date.getDate() - i);
+        const dateStr = date.toISOString().split('T')[0];
+
+        const analysis = await detectBasalAdequacy(userId, dateStr);
+        if (analysis) {
+          results.push({
+            date: dateStr,
+            ...analysis,
+          });
+        }
+      }
+
+      if (results.length === 0) {
+        return JSON.stringify({
+          hasData: false,
+          message: `No overnight glucose data found in the past ${days} days.`,
+        });
+      }
+
+      // Calculate summary statistics
+      const avgDrift =
+        results.reduce((sum, r) => sum + r.driftRate, 0) / results.length;
+      const avgConfidence =
+        results.reduce((sum, r) => sum + r.confidence, 0) / results.length;
+
+      // Count adequacy classifications
+      const adequacyCounts = results.reduce(
+        (acc, r) => {
+          acc[r.adequacy] = (acc[r.adequacy] || 0) + 1;
+          return acc;
+        },
+        {} as Record<string, number>
+      );
+
+      const mostCommon = Object.entries(adequacyCounts).sort(
+        (a, b) => b[1] - a[1]
+      )[0];
+
+      // Generate recommendation
+      let recommendation = '';
+      if (mostCommon[0] === 'adequate') {
+        recommendation =
+          'Basal insulin appears adequate - overnight glucose is generally stable.';
+      } else if (mostCommon[0] === 'basal_too_low') {
+        recommendation =
+          'Basal insulin may be too low - glucose tends to rise overnight. Consider discussing with your healthcare provider.';
+      } else if (mostCommon[0] === 'basal_too_high') {
+        recommendation =
+          'Basal insulin may be too high - glucose tends to fall overnight. Consider discussing with your healthcare provider.';
+      } else {
+        recommendation =
+          'Overnight glucose is unstable. Consider factors like late meals, evening exercise, or alcohol consumption.';
+      }
+
+      // Get stored pattern if it exists
+      const patternResult = await query(
+        `
+        SELECT *
+        FROM glucose_patterns
+        WHERE user_id = $1
+          AND pattern_type = 'basal_drift'
+        ORDER BY confidence DESC
+        LIMIT 1
+      `,
+        [userId]
+      );
+
+      return JSON.stringify({
+        hasData: true,
+        nightsAnalyzed: results.length,
+        summary: {
+          avgDriftPerHour: avgDrift.toFixed(1),
+          avgConfidence: avgConfidence.toFixed(2),
+          basalAssessment: mostCommon[0],
+          nightsWithIssue: results.length - (adequacyCounts.adequate || 0),
+          recommendation,
+        },
+        adequacyBreakdown: adequacyCounts,
+        pattern: patternResult.rows[0] || null,
+        recentNights: results.slice(0, 7),
+      });
+    } catch (error) {
+      console.error('Error analyzing basal patterns:', error);
+      return JSON.stringify({
+        error: 'Failed to analyze basal patterns',
+        details: error instanceof Error ? error.message : 'Unknown error',
+      });
+    }
+  },
+});
+
+/**
+ * Tool: Analyze Exercise Patterns
+ * Analyzes how exercise affects glucose
+ */
+const analyzeExercisePatternsTool = new DynamicStructuredTool({
+  name: 'analyze_exercise_patterns',
+  description:
+    'Analyze how exercise affects glucose over a time period. Returns typical drops, timing, rebound patterns, and recommendations. Use this when discussing exercise planning or glucose management during physical activity.',
+  schema: z.object({
+    userId: z.string().describe('User ID (auto-injected by system)'),
+    days: z.number().default(14).describe('Number of days to analyze (default: 14)'),
+    activityType: z
+      .string()
+      .optional()
+      .describe('Filter by specific activity type (e.g., "cardio", "strength")'),
+  }),
+  func: async ({ userId, days = 14, activityType }) => {
+    try {
+      const startDate = new Date();
+      startDate.setDate(startDate.getDate() - days);
+
+      // Get exercise sessions in the time period
+      let exerciseQuery = `
+        SELECT
+          e.*,
+          c.baseline_glucose,
+          c.lowest_glucose,
+          c.time_to_lowest_minutes,
+          c.total_change,
+          c.time_in_range_pct,
+          c.matched_pattern_id
+        FROM exercise_logs e
+        LEFT JOIN glucose_correlations c ON e.correlation_id = c.id
+        WHERE e.user_id = $1
+          AND e.timestamp >= $2
+      `;
+      const params: any[] = [userId, startDate.toISOString()];
+
+      if (activityType) {
+        exerciseQuery += ` AND e.activity_type = $3`;
+        params.push(activityType);
+      }
+
+      exerciseQuery += ` ORDER BY e.timestamp DESC`;
+
+      const exerciseResult = await query(exerciseQuery, params);
+
+      if (exerciseResult.rows.length === 0) {
+        return JSON.stringify({
+          hasExercise: false,
+          message: `No exercise logged in the past ${days} days.`,
+        });
+      }
+
+      // Calculate summary statistics
+      const exerciseWithCorrelations = exerciseResult.rows.filter(
+        (e) => e.correlation_id
+      );
+      const avgDrop =
+        exerciseWithCorrelations.length > 0
+          ? (
+              exerciseWithCorrelations.reduce(
+                (sum, e) => sum + Math.abs(parseFloat(e.total_change || 0)),
+                0
+              ) / exerciseWithCorrelations.length
+            ).toFixed(1)
+          : null;
+
+      const avgTimeToLowest =
+        exerciseWithCorrelations.length > 0
+          ? Math.round(
+              exerciseWithCorrelations.reduce(
+                (sum, e) => sum + (e.time_to_lowest_minutes || 0),
+                0
+              ) / exerciseWithCorrelations.length
+            )
+          : null;
+
+      const avgTIR =
+        exerciseWithCorrelations.length > 0
+          ? (
+              exerciseWithCorrelations.reduce(
+                (sum, e) => sum + parseFloat(e.time_in_range_pct || 0),
+                0
+              ) / exerciseWithCorrelations.length
+            ).toFixed(1)
+          : null;
+
+      // Get detected patterns
+      let patternQuery = `
+        SELECT *
+        FROM glucose_patterns
+        WHERE user_id = $1
+          AND pattern_type = 'exercise_response'
+          AND confidence >= 0.4
+      `;
+      const patternParams: any[] = [userId];
+
+      if (activityType) {
+        patternQuery += ` AND trigger_event_details->>'activity_type' = $2`;
+        patternParams.push(activityType);
+      }
+
+      patternQuery += ` ORDER BY confidence DESC`;
+
+      const patternsResult = await query(patternQuery, patternParams);
+
+      return JSON.stringify({
+        hasExercise: true,
+        period: `${days} days`,
+        summary: {
+          totalSessions: exerciseResult.rows.length,
+          sessionsAnalyzed: exerciseWithCorrelations.length,
+          avgDrop,
+          avgTimeToLowest,
+          avgTimeInRangeDuringExercise: avgTIR,
+        },
+        patterns: patternsResult.rows.map((p) => ({
+          id: p.id,
+          name: p.pattern_name,
+          description: p.description,
+          typicalDrop: Math.abs(parseFloat(p.typical_magnitude)),
+          typicalDuration: p.typical_duration,
+          occurrences: p.occurrence_count,
+          confidence: parseFloat(p.confidence).toFixed(2),
+          lastSeen: p.last_seen,
+        })),
+        recentSessions: exerciseResult.rows.slice(0, 10).map((e) => ({
+          id: e.id,
+          timestamp: e.timestamp,
+          description: e.description,
+          duration: e.duration_minutes,
+          intensity: e.intensity,
+          activityType: e.activity_type,
+          drop: e.total_change ? Math.abs(parseFloat(e.total_change)) : null,
+          timeToLowest: e.time_to_lowest_minutes,
+          timeInRange: e.time_in_range_pct,
+        })),
+      });
+    } catch (error) {
+      console.error('Error analyzing exercise patterns:', error);
+      return JSON.stringify({
+        error: 'Failed to analyze exercise patterns',
+        details: error instanceof Error ? error.message : 'Unknown error',
+      });
+    }
+  },
+});
+
+/**
+ * Tool: Get Detected Patterns
+ * Retrieves all detected glucose patterns for the user
+ */
+const getDetectedPatternsTool = new DynamicStructuredTool({
+  name: 'get_detected_patterns',
+  description:
+    'Get all detected glucose patterns for the user, sorted by confidence. Returns pattern library with details about recurring glucose behaviors. Use this to understand what patterns have been identified overall.',
+  schema: z.object({
+    userId: z.string().describe('User ID (auto-injected by system)'),
+    patternType: z
+      .enum(['meal_response', 'basal_drift', 'exercise_response', 'time_of_day'])
+      .optional()
+      .describe('Filter by specific pattern type'),
+    minConfidence: z
+      .number()
+      .default(0.3)
+      .describe('Minimum confidence threshold (0-1, default: 0.3)'),
+  }),
+  func: async ({ userId, patternType, minConfidence = 0.3 }) => {
+    try {
+      let patternQuery = `
+        SELECT
+          p.*,
+          COUNT(pe.id) as recent_events
+        FROM glucose_patterns p
+        LEFT JOIN pattern_events pe ON p.id = pe.pattern_id
+          AND pe.event_timestamp >= NOW() - INTERVAL '7 days'
+        WHERE p.user_id = $1
+          AND p.confidence >= $2
+      `;
+      const params: any[] = [userId, minConfidence];
+
+      if (patternType) {
+        patternQuery += ` AND p.pattern_type = $3`;
+        params.push(patternType);
+      }
+
+      patternQuery += `
+        GROUP BY p.id
+        ORDER BY p.confidence DESC, p.last_seen DESC
+      `;
+
+      const result = await query(patternQuery, params);
+
+      if (result.rows.length === 0) {
+        return JSON.stringify({
+          hasPatterns: false,
+          message: `No patterns detected with confidence >= ${minConfidence}.`,
+        });
+      }
+
+      return JSON.stringify({
+        hasPatterns: true,
+        totalPatterns: result.rows.length,
+        patterns: result.rows.map((p) => ({
+          id: p.id,
+          type: p.pattern_type,
+          name: p.pattern_name,
+          description: p.description,
+          typicalMagnitude: p.typical_magnitude,
+          typicalDuration: p.typical_duration,
+          timeOfDay: p.time_of_day_start
+            ? `${p.time_of_day_start} - ${p.time_of_day_end}`
+            : null,
+          triggerEventType: p.trigger_event_type,
+          triggerDetails: p.trigger_event_details,
+          firstDetected: p.first_detected,
+          lastSeen: p.last_seen,
+          occurrenceCount: p.occurrence_count,
+          confidence: parseFloat(p.confidence).toFixed(2),
+          recentEvents: parseInt(p.recent_events),
+        })),
+      });
+    } catch (error) {
+      console.error('Error getting detected patterns:', error);
+      return JSON.stringify({
+        error: 'Failed to get detected patterns',
+        details: error instanceof Error ? error.message : 'Unknown error',
+      });
+    }
+  },
+});
+
+/**
+ * Tool: Run Pattern Detection
+ * Manually trigger pattern detection analysis
+ */
+const runPatternDetectionTool = new DynamicStructuredTool({
+  name: 'run_pattern_detection',
+  description:
+    'Manually trigger pattern detection analysis for recent unanalyzed meals, exercise, or overnight periods. Useful after user logs new data and wants immediate pattern insights. Returns summary of what was analyzed.',
+  schema: z.object({
+    userId: z.string().describe('User ID (auto-injected by system)'),
+    analysisType: z
+      .enum(['meal', 'exercise', 'basal', 'all'])
+      .default('all')
+      .describe('Type of analysis to run (default: all)'),
+  }),
+  func: async ({ userId, analysisType = 'all' }) => {
+    try {
+      const results: any = {
+        analyzed: [],
+      };
+
+      // Analyze meals without correlations (>4 hours old)
+      if (analysisType === 'meal' || analysisType === 'all') {
+        const fourHoursAgo = new Date();
+        fourHoursAgo.setHours(fourHoursAgo.getHours() - 4);
+
+        const mealsResult = await query(
+          `
+          SELECT id
+          FROM meals
+          WHERE user_id = $1
+            AND correlation_id IS NULL
+            AND timestamp <= $2
+          ORDER BY timestamp DESC
+          LIMIT 10
+        `,
+          [userId, fourHoursAgo.toISOString()]
+        );
+
+        let mealsAnalyzed = 0;
+        for (const meal of mealsResult.rows) {
+          const correlation = await detectMealResponse(userId, meal.id);
+          if (correlation) mealsAnalyzed++;
+        }
+
+        results.analyzed.push({
+          type: 'meal',
+          count: mealsAnalyzed,
+        });
+      }
+
+      // Analyze exercise without correlations (>2 hours old)
+      if (analysisType === 'exercise' || analysisType === 'all') {
+        const twoHoursAgo = new Date();
+        twoHoursAgo.setHours(twoHoursAgo.getHours() - 2);
+
+        const exerciseResult = await query(
+          `
+          SELECT id
+          FROM exercise_logs
+          WHERE user_id = $1
+            AND correlation_id IS NULL
+            AND timestamp <= $2
+          ORDER BY timestamp DESC
+          LIMIT 10
+        `,
+          [userId, twoHoursAgo.toISOString()]
+        );
+
+        let exerciseAnalyzed = 0;
+        for (const exercise of exerciseResult.rows) {
+          const correlation = await detectExerciseResponse(userId, exercise.id);
+          if (correlation) exerciseAnalyzed++;
+        }
+
+        results.analyzed.push({
+          type: 'exercise',
+          count: exerciseAnalyzed,
+        });
+      }
+
+      // Analyze overnight basal for yesterday
+      if (analysisType === 'basal' || analysisType === 'all') {
+        const yesterday = new Date();
+        yesterday.setDate(yesterday.getDate() - 1);
+        const dateStr = yesterday.toISOString().split('T')[0];
+
+        const basalAnalysis = await detectBasalAdequacy(userId, dateStr);
+
+        results.analyzed.push({
+          type: 'basal',
+          count: basalAnalysis ? 1 : 0,
+          adequacy: basalAnalysis?.adequacy,
+        });
+      }
+
+      const totalAnalyzed = results.analyzed.reduce(
+        (sum: number, r: any) => sum + r.count,
+        0
+      );
+
+      return JSON.stringify({
+        success: true,
+        totalAnalyzed,
+        breakdown: results.analyzed,
+        message:
+          totalAnalyzed > 0
+            ? `Successfully analyzed ${totalAnalyzed} events.`
+            : 'No new events to analyze at this time.',
+      });
+    } catch (error) {
+      console.error('Error running pattern detection:', error);
+      return JSON.stringify({
+        error: 'Failed to run pattern detection',
+        details: error instanceof Error ? error.message : 'Unknown error',
+      });
+    }
+  },
+});
+
+/**
+ * ============================================================================
  * MEAL LOGGING TOOLS
  * ============================================================================
  */
@@ -945,7 +1565,7 @@ export const logMealTool = new DynamicStructuredTool({
   description: 'Save a meal to the database with nutrition estimates. Always confirm with user before saving.',
   schema: z.object({
     userId: z.string().optional().describe('The user ID (automatically provided)'),
-    timestamp: z.string().optional().describe('Meal timestamp (ISO format). Defaults to now.'),
+    timestamp: z.string().optional().describe('Meal timestamp in ISO format (YYYY-MM-DDTHH:mm:ss.000Z). CRITICAL: Follow the "Timezone Conversion for Timestamps" instructions in User Context. User times are in their LOCAL timezone and MUST be converted to UTC. For "yesterday", subtract 1 day. Leave empty ONLY if user wants exact current time.'),
     description: z.string().describe('Meal description'),
     estimatedCarbs: z.number().describe('Estimated carbohydrates (grams)'),
     estimatedProtein: z.number().optional().describe('Estimated protein (grams)'),
@@ -964,16 +1584,12 @@ export const logMealTool = new DynamicStructuredTool({
 
       const result = await query(
         `INSERT INTO meals (
-          user_id, timestamp, description,
-          estimated_carbs, estimated_protein, estimated_fat, estimated_calories,
-          carb_confidence, estimation_method, meal_type, tags, notes, source
+          user_id, timestamp, description, carbs, notes, source
         )
-        VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, 'agent')
-        RETURNING id, timestamp, description, estimated_carbs`,
+        VALUES ($1, $2, $3, $4, $5, 'agent')
+        RETURNING id, timestamp, description, carbs`,
         [
-          userId, mealTimestamp, description,
-          estimatedCarbs, estimatedProtein, estimatedFat, estimatedCalories,
-          carbConfidence, estimationMethod, mealType, tags, notes,
+          userId, mealTimestamp, description, estimatedCarbs, notes,
         ]
       );
 
@@ -983,7 +1599,7 @@ export const logMealTool = new DynamicStructuredTool({
           id: result.rows[0].id,
           timestamp: result.rows[0].timestamp,
           description: result.rows[0].description,
-          carbs: parseFloat(result.rows[0].estimated_carbs),
+          carbs: parseFloat(result.rows[0].carbs),
         },
         message: `Logged: ${description} (~${estimatedCarbs}g carbs)`,
       });
@@ -1151,7 +1767,7 @@ export const logExerciseTool = new DynamicStructuredTool({
   description: 'Save an exercise session to the database. Always confirm with user before saving.',
   schema: z.object({
     userId: z.string().optional().describe('The user ID (automatically provided)'),
-    timestamp: z.string().optional().describe('Exercise timestamp (ISO format). Defaults to now.'),
+    timestamp: z.string().optional().describe('Exercise timestamp in ISO format (YYYY-MM-DDTHH:mm:ss.000Z). CRITICAL: Follow the "Timezone Conversion for Timestamps" instructions in User Context. Convert user\'s local time to UTC. Leave empty ONLY if user wants exact current time.'),
     description: z.string().describe('Exercise description'),
     activityType: z.enum(['cardio', 'strength', 'flexibility', 'sports'])
       .describe('Activity type'),
@@ -1263,7 +1879,7 @@ export const logInsulinTool = new DynamicStructuredTool({
   description: 'Log an insulin dose. Always confirm exact details with user before saving.',
   schema: z.object({
     userId: z.string().optional().describe('The user ID (automatically provided)'),
-    timestamp: z.string().optional().describe('Dose timestamp (ISO format). Defaults to now.'),
+    timestamp: z.string().optional().describe('Insulin dose timestamp in ISO format (YYYY-MM-DDTHH:mm:ss.000Z). CRITICAL: Follow the "Timezone Conversion for Timestamps" instructions in User Context. Convert user\'s local time to UTC. Leave empty ONLY if user wants exact current time.'),
     insulinType: z.enum(['rapid', 'long', 'ultra_long', 'mixed'])
       .describe('Insulin type'),
     brandName: z.string().optional().describe('Brand name (e.g., Humalog, Novolog, Lantus)'),
@@ -1426,4 +2042,11 @@ export const allTools = [
   getRecentSageMessagesTool,
   sendProactiveMessageTool,
   getUserContextTool,
+
+  // Pattern analysis tools
+  analyzeMealPatternsTool,
+  analyzeBasalPatternsTool,
+  analyzeExercisePatternsTool,
+  getDetectedPatternsTool,
+  runPatternDetectionTool,
 ];
