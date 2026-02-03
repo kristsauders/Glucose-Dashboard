@@ -11,17 +11,26 @@ import { SYSTEM_PROMPT, USER_CONTEXT_PROMPT } from './prompts.js';
  */
 function truncateToolResults(messages: BaseMessage[]): BaseMessage[] {
   const MAX_TOOL_RESULT_LENGTH = 5000;
+  let truncatedCount = 0;
 
-  return messages.map(msg => {
+  const result = messages.map(msg => {
     if (msg.constructor.name === 'ToolMessage' && typeof msg.content === 'string') {
       if (msg.content.length > MAX_TOOL_RESULT_LENGTH) {
+        truncatedCount++;
         const truncated = msg.content.substring(0, MAX_TOOL_RESULT_LENGTH);
         const newContent = truncated + `\n\n[... truncated ${msg.content.length - MAX_TOOL_RESULT_LENGTH} characters]`;
+        console.log(`  [truncateToolResults] Truncated tool result: ${msg.content.length} → ${MAX_TOOL_RESULT_LENGTH} chars (-${msg.content.length - MAX_TOOL_RESULT_LENGTH})`);
         return { ...msg, content: newContent } as BaseMessage;
       }
     }
     return msg;
   });
+
+  if (truncatedCount > 0) {
+    console.log(`  [truncateToolResults] Truncated ${truncatedCount} tool result(s)`);
+  }
+
+  return result;
 }
 
 interface AgentState {
@@ -62,11 +71,8 @@ export function createHybridAgentGraph() {
     // Only add system prompts if this is the first turn
     const hasAIMessages = messages.some(m => m.constructor.name === 'AIMessage');
 
-    let messagesToSend: BaseMessage[];
-    if (!hasAIMessages) {
-      // First turn: Use MINIMAL prompt for small model (just enough for tool calling)
-      // The large synthesis model will get the full detailed prompt
-      const minimalSystemPrompt = new SystemMessage(`You are a data analysis assistant for Type 1 Diabetes glucose monitoring.
+    // Always create the system prompt (it's minimal and needed for context)
+    const minimalSystemPrompt = new SystemMessage(`You are a data analysis assistant for Type 1 Diabetes glucose monitoring.
 
 Your role: Use the available tools to gather and analyze glucose data. Call tools to collect information - you don't need to generate user-facing messages.
 
@@ -83,11 +89,20 @@ Available data sources:
 
 When asked to analyze: Use tools to gather comprehensive data, then respond with "Analysis complete" when you have enough information. The synthesis model will create the user-facing message.`);
 
+    let messagesToSend: BaseMessage[];
+    if (!hasAIMessages) {
+      // First turn: Send system prompt + user message
       messagesToSend = [minimalSystemPrompt, ...messages];
     } else {
-      // Continuation: truncate tool results to prevent context overflow
-      // (Small model doesn't need full tool results, just enough to decide next steps)
-      messagesToSend = truncateToolResults(messages);
+      // Continuation: Truncate tool results, but keep system prompt
+      const truncated = truncateToolResults(messages);
+      // Find the first system message in history (if any), otherwise use our minimal one
+      const existingSystemMsg = truncated.find(m => m.constructor.name === 'SystemMessage');
+      if (existingSystemMsg) {
+        messagesToSend = truncated; // Already has system prompt
+      } else {
+        messagesToSend = [minimalSystemPrompt, ...truncated]; // Add it
+      }
     }
 
     // Safety: Limit to 8 iterations maximum (6 suggested in prompt + 2 buffer)
@@ -95,22 +110,46 @@ When asked to analyze: Use tools to gather comprehensive data, then respond with
     if (currentIteration >= 8) {
       console.log('[analysisNode] Maximum iterations reached (8), forcing synthesis');
       return {
-        messages: [...messages, new AIMessage('Analysis complete - maximum iterations reached.')],
+        messages: [new AIMessage('Analysis complete - maximum iterations reached.')],
         readyForSynthesis: true,
         iterationCount: currentIteration + 1,
       };
     }
 
     console.log(`[analysisNode] Iteration ${currentIteration + 1}/8 - Invoking small model for tool calling/analysis`);
-    console.log(`  Context size: ${JSON.stringify(messagesToSend).length} characters (~${Math.round(JSON.stringify(messagesToSend).length / 4)} tokens)`);
+
+    // Detailed logging to debug context overflow
+    console.log(`  State messages count: ${messages.length}`);
+    console.log(`  Messages to send count: ${messagesToSend.length}`);
+
+    // Log size of each message type
+    const messageSizes = messagesToSend.map((msg, idx) => {
+      const type = msg.constructor.name;
+      const size = JSON.stringify(msg).length;
+      return { idx, type, chars: size, tokens: Math.round(size / 4) };
+    });
+    const toolMessages = messageSizes.filter(m => m.type === 'ToolMessage');
+    const totalSize = JSON.stringify(messagesToSend).length;
+
+    console.log(`  Total context: ${totalSize} chars (~${Math.round(totalSize / 4)} tokens)`);
+    console.log(`  Tool messages: ${toolMessages.length}, avg size: ${toolMessages.length > 0 ? Math.round(toolMessages.reduce((sum, m) => sum + m.chars, 0) / toolMessages.length) : 0} chars`);
+
+    if (totalSize > 100000) {
+      console.log('  ⚠️  Context very large! Message breakdown:');
+      messageSizes.forEach(m => {
+        if (m.chars > 10000) {
+          console.log(`    [${m.idx}] ${m.type}: ${m.chars} chars (${m.tokens} tokens)`);
+        }
+      });
+    }
+
     const response = await smallModelWithTools.invoke(messagesToSend);
 
-    // IMPORTANT: Apply truncation to state messages too, not just what we send
-    // This prevents unbounded context growth across iterations
-    const truncatedMessages = hasAIMessages ? truncateToolResults(messages) : messages;
-
+    // IMPORTANT: Only return NEW messages (not the full array)
+    // The state reducer uses concat, so returning the full array causes exponential duplication!
+    // We truncate in messagesToSend (what we send to model), but state keeps full history
     return {
-      messages: [...truncatedMessages, response],
+      messages: [response],
       readyForSynthesis: !response.tool_calls || response.tool_calls.length === 0,
       iterationCount: currentIteration + 1,
     };
@@ -147,8 +186,9 @@ Review the tool results in the conversation history and create a comprehensive, 
 
     const response = await providers.largeModel.invoke(messagesToSend);
 
+    // Only return NEW message, not the full array
     return {
-      messages: [...messages, response],
+      messages: [response],
     };
   }
 
@@ -194,8 +234,10 @@ Review the tool results in the conversation history and create a comprehensive, 
       }
     }
 
+    // Only return NEW tool results, not the full message array
+    // The state reducer will concat them
     return {
-      messages: [...messages, ...toolResults],
+      messages: toolResults,
     };
   }
 

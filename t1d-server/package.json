@@ -9,9 +9,12 @@
     "build": "NODE_OPTIONS='--max-old-space-size=8192' tsc",
     "start": "node dist/index.js",
     "db:setup": "node scripts/setup-db.js",
+    "db:reset": "node scripts/reset-db.js",
+    "check-config": "node scripts/check-config.js",
     "docker:up": "docker-compose up -d",
     "docker:down": "docker-compose down",
     "setup": "npm install && npm run docker:up && sleep 5 && npm run db:setup",
+    "reset": "npm run docker:up && sleep 5 && npm run db:reset",
     "full-start": "npm run docker:up && npm run dev"
   },
   "keywords": [
