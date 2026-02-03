@@ -2,7 +2,7 @@ import { Router } from 'express';
 import { HumanMessage, AIMessage } from '@langchain/core/messages';
 import { z } from 'zod';
 import { authMiddleware } from '../middleware/auth.js';
-import { createAgentGraph } from '../../agent/graph.js';
+import { createConfiguredAgentGraph } from '../../agent/graph.js';
 import { query } from '../../config/database.js';
 import type { AuthRequest, User } from '../../types/index.js';
 import { logContextSize } from '../../utils/token-counter.js';
@@ -79,7 +79,7 @@ router.post('/stream', async (req, res, next) => {
     const isFirstMessage = history.length === 0;
 
     // Create agent
-    const agent = createAgentGraph();
+    const agent = createConfiguredAgentGraph();
 
     // Prepare messages
     const messages = [
@@ -138,8 +138,10 @@ router.post('/stream', async (req, res, next) => {
           console.log('Chunk', chunkCount, 'structure:', JSON.stringify(chunk, null, 2).substring(0, 500));
         }
 
-        // LangGraph streams chunks keyed by node name (agent or tools)
-        const nodeUpdate = chunk.agent || chunk.tools;
+        // LangGraph streams chunks keyed by node name
+        // Standard graph: agent or tools
+        // Hybrid graph: analysis, tools, or synthesis
+        const nodeUpdate = chunk.agent || chunk.analysis || chunk.synthesis || chunk.tools;
 
         if (!nodeUpdate) {
           if (chunkCount <= 5) {
@@ -327,7 +329,7 @@ router.post('/', async (req, res, next) => {
     const isFirstMessage = history.length === 0;
 
     // Create agent
-    const agent = createAgentGraph();
+    const agent = createConfiguredAgentGraph();
 
     // Prepare messages
     const messages = [

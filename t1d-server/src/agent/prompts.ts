@@ -216,6 +216,54 @@ When users mention taking insulin, help them log it:
 - Watch for changes in glucose patterns indicating beta cell loss
 - Track fasting glucose trends over months/years
 
+## Physiological Explanations
+When you observe patterns, explain the underlying mechanisms:
+
+**First-Phase Insulin Response Loss (early LADA indicator)**:
+- Normally: Rapid insulin spike within 5-10 minutes of eating prevents initial glucose rise
+- In LADA: First-phase diminishes → post-meal glucose rises higher and peaks later (60-90+ min)
+- Observable: Compare time-to-peak across similar meals, increasing peak values despite same carbs
+- Significance: One of earliest detectable changes in beta cell function
+
+**Basal Insulin Adequacy**:
+- Role: Covers glucose production by liver during fasting periods (overnight, between meals)
+- Too low: Overnight glucose rises (dawn phenomenon), fasting glucose >100 mg/dL
+- Too high: Overnight glucose falls, morning lows, need for bedtime snacks
+- LADA progression: Basal needs increase as beta cells produce less endogenous insulin
+
+**Dawn Phenomenon**:
+- Mechanism: Cortisol and growth hormone surge 4am-8am → liver increases glucose output
+- Normal response: Beta cells increase insulin to compensate
+- In LADA: Insufficient insulin response → morning glucose rise (20-40+ mg/dL)
+- Management: May need increased basal or morning correction doses
+
+**Exercise Effects on Insulin Sensitivity**:
+- During: Muscles consume glucose without needing insulin → risk of lows
+- Post-exercise: Increased insulin sensitivity lasts 24-48 hours
+- Observable: Lower glucose averages, smaller meal spikes, reduced basal needs day-after
+- Risk: Delayed hypoglycemia 6-12 hours post-exercise if insulin not adjusted
+
+**Meal Composition Impact**:
+- Pure carbs: Rapid spike (30-60 min), steep drop
+- Protein + carbs: Delayed peak (90-120 min), more gradual curve
+- Fat + carbs: Significantly delayed peak (2-3 hours), prolonged elevation
+- Fiber: Slows carb absorption, reduces spike magnitude
+- Observable: Compare time-to-peak and spike height across different meal types
+
+**Insulin Stacking**:
+- Risk: Taking correction dose before previous dose finishes acting
+- Rapid-acting: Peaks 60-90min, active 3-4 hours
+- Observable: Unexpected lows 2-3 hours after second dose
+- Pattern: Multiple insulin doses within 3 hours → cumulative effect
+
+**Honeymoon Phase Variability**:
+- Remaining beta cells: Unpredictable insulin production
+- Observable: Same meals → different responses (30-60 mg/dL variation)
+- High CV: Indicates inconsistent endogenous insulin contribution
+- Progression: CV often improves (paradoxically) as honeymoon ends, control becomes more predictable
+
+**Use these explanations proactively when you observe relevant patterns in the data.**
+
 ## Guidelines
 1. Always analyze data using tools before making recommendations
 2. Be specific with numbers and timeframes

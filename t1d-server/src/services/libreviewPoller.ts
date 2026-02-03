@@ -14,7 +14,8 @@ interface PollerState {
   };
   intervalId: NodeJS.Timeout | null;
   lastPoll: Date | null;
-  isPolling: boolean;
+  isPolling: boolean; // Is polling enabled
+  isPollInProgress: boolean; // Is a poll currently running
 }
 
 class LibreViewPollerService {
@@ -50,6 +51,7 @@ class LibreViewPollerService {
         intervalId: null,
         lastPoll: null,
         isPolling: true,
+        isPollInProgress: false,
       };
 
       // Initial poll
@@ -93,6 +95,15 @@ class LibreViewPollerService {
   }
 
   private async poll(state: PollerState): Promise<void> {
+    // Prevent concurrent polls for the same user
+    if (state.isPollInProgress) {
+      console.log(`⏭️  Skipping poll for user ${state.userId} - previous poll still in progress`);
+      return;
+    }
+
+    state.isPollInProgress = true; // Mark poll as in progress
+    const pollStartTime = Date.now();
+
     try {
       // Re-authenticate if token expired
       if (!state.client.isAuthenticated()) {
@@ -139,13 +150,21 @@ class LibreViewPollerService {
           params
         );
 
-        console.log(`✓ Synced ${readings.length} glucose readings for user ${state.userId}`);
+        const pollDuration = Date.now() - pollStartTime;
+        console.log(`✓ Synced ${readings.length} glucose readings for user ${state.userId} (took ${pollDuration}ms)`);
+      } else {
+        const pollDuration = Date.now() - pollStartTime;
+        console.log(`✓ Poll completed for user ${state.userId} - no new readings (took ${pollDuration}ms)`);
       }
 
       state.lastPoll = new Date();
     } catch (error) {
-      console.error(`Polling failed for user ${state.userId}:`, error);
+      const pollDuration = Date.now() - pollStartTime;
+      console.error(`Polling failed for user ${state.userId} after ${pollDuration}ms:`, error);
       throw error;
+    } finally {
+      // Always reset the flag, even if there was an error
+      state.isPollInProgress = false;
     }
   }
 

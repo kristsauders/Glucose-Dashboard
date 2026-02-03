@@ -32,13 +32,15 @@ export class PatternDetector {
 
     console.log('🔍 Starting pattern detector service (30-minute intervals)');
 
-    // Run immediately on start
-    this.detectPatternsForAllUsers();
-
-    // Then run every 30 minutes
-    this.intervalId = setInterval(() => {
+    // Run after 2 minutes to avoid startup congestion (staggered from proactive monitor at 5 min)
+    setTimeout(() => {
       this.detectPatternsForAllUsers();
-    }, this.checkInterval);
+
+      // Then run every 30 minutes
+      this.intervalId = setInterval(() => {
+        this.detectPatternsForAllUsers();
+      }, this.checkInterval);
+    }, 2 * 60 * 1000);
   }
 
   /**

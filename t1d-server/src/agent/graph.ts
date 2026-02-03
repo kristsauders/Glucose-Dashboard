@@ -3,6 +3,8 @@ import { BaseMessage, HumanMessage, AIMessage, SystemMessage } from '@langchain/
 import { getAIProvider } from './providers.js';
 import { allTools } from './tools.js';
 import { SYSTEM_PROMPT, USER_CONTEXT_PROMPT } from './prompts.js';
+import { createHybridAgentGraph } from './hybrid-graph.js';
+import { env } from '../config/env.js';
 
 interface AgentState {
   messages: BaseMessage[];
@@ -159,4 +161,19 @@ export function createAgentGraph(forceProvider?: 'ollama' | 'openrouter') {
   workflow.addEdge('tools', 'agent');
 
   return workflow.compile();
+}
+
+/**
+ * Create the appropriate agent graph based on configuration
+ * - If AI_PROVIDER is 'hybrid', use hybrid graph (small model for tools, large for synthesis)
+ * - Otherwise, use standard single-model graph
+ */
+export function createConfiguredAgentGraph(forceProvider?: 'ollama' | 'openrouter' | 'hybrid') {
+  const provider = forceProvider || env.AI_PROVIDER;
+
+  if (provider === 'hybrid') {
+    return createHybridAgentGraph();
+  } else {
+    return createAgentGraph(provider as 'ollama' | 'openrouter');
+  }
 }

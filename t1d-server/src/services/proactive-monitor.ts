@@ -1,5 +1,5 @@
 import { query } from '../config/database.js';
-import { createAgentGraph } from '../agent/graph.js';
+import { createConfiguredAgentGraph } from '../agent/graph.js';
 import { HumanMessage } from '@langchain/core/messages';
 import { logContextSize } from '../utils/token-counter.js';
 
@@ -10,11 +10,11 @@ import { logContextSize } from '../utils/token-counter.js';
 export class ProactiveMonitor {
   private agent: any;
   private isRunning: boolean = false;
-  private checkInterval: number = 10 * 60 * 1000; // 10 minutes (reduced for testing)
+  private checkInterval: number = 30 * 60 * 1000; // 30 minutes for comprehensive analysis
   private intervalId: NodeJS.Timeout | null = null;
 
   constructor() {
-    this.agent = createAgentGraph();
+    this.agent = createConfiguredAgentGraph();
   }
 
   /**
@@ -143,12 +143,12 @@ export class ProactiveMonitor {
     const state = stateResult.rows[0];
     const now = new Date();
 
-    // Don't send more than 1 message per 1.5 hours (reduced for testing)
+    // Don't send more than 1 message per hour (allows 2-3 insights per day during active hours)
     if (state.last_message_sent_at) {
       const hoursSinceLastMessage =
         (now.getTime() - new Date(state.last_message_sent_at).getTime()) / (1000 * 60 * 60);
 
-      if (hoursSinceLastMessage < 1.5) {
+      if (hoursSinceLastMessage < 1.0) {
         return true; // Skip - too soon since last message
       }
     }
@@ -270,27 +270,67 @@ export class ProactiveMonitor {
         timeContext = "It's bedtime (10pm). Write a goodnight message reviewing today's glucose and overnight preparation.";
       }
 
-      const analysisPrompt = `Analyze my glucose data and write a proactive message. ${timeContext}
+      const analysisPrompt = `Perform glucose analysis and share insights proactively. ${timeContext}
 
-Use tools to analyze: get_user_context, analyze_live_trend, check_alert_conditions, get_recent_sage_messages
+**Analysis Framework - Use 4-6 tools maximum to stay within context limits:**
 
-**IMPORTANT - Message Format:**
-Start with a brief, notification-friendly summary line (1-2 sentences, no emojis or headers). This shows up on phone notifications.
+1. **Start with:** get_user_context, analyze_live_trend
 
-Example openings:
-- "Your glucose is at 102 and stable. Noticed 6 readings below 70 today though."
-- "Good morning! Overnight glucose was steady averaging 98. Ready for the day?"
-- "Goodnight! Today your glucose averaged 105 with good stability."
+2. **Then choose 2-3 from:**
+   - analyze_trends (7-day trends for average_glucose or time_in_range)
+   - detect_anomalies (last 3-7 days)
+   - analyze_meal_patterns OR analyze_basal_patterns OR analyze_exercise_patterns (pick most relevant)
+   - compare_periods_statistical (this week vs last week)
 
-After the opening, use formatting, emojis, sections as you like.
+3. **Optional (only if needed):**
+   - get_detected_patterns (check patterns with confidence >0.5)
+   - check_alert_conditions
 
-Write a complete, thoughtful message with:
-- Current observations (glucose level, trends, patterns)
-- Any spikes, drops, or interesting patterns
-- Questions to understand habits better
-- Supportive insights about glucose management
+**Important:** Don't call more than 6 tools total. Be selective - choose the most relevant tools for the current time of day and recent activity
 
-Be creative, conversational, and helpful. Include specific numbers from the data.`;
+**What to Look For:**
+- Interesting patterns (even if not concerning): meal responses, exercise effects, dawn phenomenon
+- Trend changes: Is TIR improving/worsening? Average glucose shifting?
+- Statistical findings: Are weekends different from weekdays?
+- Physiological insights: First-phase insulin loss indicators, basal drift, insulin sensitivity changes
+- New correlations: "That meal with X carbs spiked to Y but similar meal with Z timing only reached W"
+- Anomalies worth investigating: Unexplained highs/lows, unusual responses
+
+**Educational Explanations:**
+When you find something interesting, explain the physiology:
+- LADA progression markers (loss of first-phase insulin response, increasing basal needs)
+- Why meal timing affects spikes
+- How exercise affects insulin sensitivity for hours afterward
+- Dawn phenomenon mechanisms (cortisol, growth hormone)
+- Why protein/fat delay carb absorption
+- How stress hormones affect glucose
+
+**Message Structure:**
+1. **Opening** (1-2 sentences, notification-friendly, no emoji/headers):
+   Lead with the most interesting finding or current status
+   Examples: "Found an interesting pattern: breakfast meals spike 40mg/dL less on days you exercise in the morning."
+             "Your TIR increased 8% this week compared to last week - from 62% to 70%."
+             "Detected possible first-phase insulin loss: post-meal spikes are taking longer to peak (90min vs 60min)."
+
+2. **Analysis** (detailed findings):
+   - Present data and trends with specific numbers
+   - Compare to previous periods
+   - Show correlations and patterns
+   - Reference confidence levels and statistical significance
+
+3. **Physiological Context** (explain what's happening):
+   - Describe the mechanism behind what you observed
+   - Connect to LADA progression if relevant
+   - Explain why the pattern occurs
+
+4. **Actionable Insights** (optional):
+   - Specific observations to watch
+   - Potential adjustments to investigate
+   - Questions to understand better
+
+**Tone**: Analytical, educational, data-driven. Focus on insights and explanations, not encouragement.
+
+**Frequency**: Share interesting findings regularly, not just problems. Even subtle patterns or trends are worth discussing.`;
 
       // Log context size
       const userCtx = {
@@ -335,16 +375,25 @@ Be creative, conversational, and helpful. Include specific numbers from the data
 **The message:**
 ${generatedMessage}
 
-**Testing mode criteria - send if ANY of these are true:**
-- The message discusses specific glucose patterns or observations
-- There are readings below 70 or above 180
-- I haven't messaged them recently (check the timestamps in the message)
-- The message asks helpful questions
-- The message would be useful or interesting to the user
+**Send if ANY of these are true:**
+- Contains specific data analysis (trends, patterns, statistics, comparisons)
+- Explains physiological mechanisms or LADA progression
+- Identifies correlations between events and glucose responses
+- Discusses interesting findings (even if not concerning)
+- Shows week-over-week or period-to-period changes
+- Provides educational context about diabetes management
+- References detected patterns with confidence scores
+- Includes forecasts or predictions
+- Explains anomalies or unusual readings
+- Offers investigative insights about observed data
 
 **Only don't send if:**
-- The message is generic or has no specific observations
-- There's literally nothing of value in it
+- The message is completely generic with no specific observations
+- Contains NO actual data from analysis tools
+- Is just a greeting with no glucose insights
+- Duplicates a very recent message (within last 90 minutes)
+
+**Philosophy**: The user wants regular analytical insights and education, not just alerts. Share interesting findings proactively.
 
 Respond with ONLY "SEND" or "DONT_SEND" (no explanation needed).`;
 
