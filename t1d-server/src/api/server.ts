@@ -22,8 +22,9 @@ const __dirname = path.dirname(__filename);
 
 // Try to load HTTPS certificates if they exist
 function getHttpsConfig() {
-  const certPath = path.resolve(__dirname, '../../cert/cert.pem');
-  const keyPath = path.resolve(__dirname, '../../cert/key.pem');
+  // Certificates are in the parent glucose-dashboard directory, not in t1d-server
+  const certPath = path.resolve(__dirname, '../../../cert/cert.pem');
+  const keyPath = path.resolve(__dirname, '../../../cert/key.pem');
 
   if (fs.existsSync(certPath) && fs.existsSync(keyPath)) {
     return {
