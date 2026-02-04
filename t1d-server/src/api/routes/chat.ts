@@ -235,14 +235,25 @@ router.post('/stream', async (req, res, next) => {
       console.log(`✓ Streaming agent completed in ${duration}ms`);
 
       // Save messages to database with conversation_id
+      // Insert user message first
       await query(
         `INSERT INTO chat_messages (user_id, conversation_id, role, content, metadata)
-         VALUES ($1, $2, 'user', $3, $4), ($1, $2, 'assistant', $5, $6)`,
+         VALUES ($1, $2, 'user', $3, $4)`,
         [
           authReq.user!.id,
           conversationId,
           message,
           JSON.stringify({ timestamp: new Date().toISOString() }),
+        ]
+      );
+
+      // Insert assistant message second (ensures different created_at timestamp)
+      await query(
+        `INSERT INTO chat_messages (user_id, conversation_id, role, content, metadata)
+         VALUES ($1, $2, 'assistant', $3, $4)`,
+        [
+          authReq.user!.id,
+          conversationId,
           fullResponse,
           JSON.stringify({
             timestamp: new Date().toISOString(),
@@ -380,14 +391,25 @@ router.post('/', async (req, res, next) => {
     ).length;
 
     // Save messages to database with conversation_id
+    // Insert user message first
     await query(
       `INSERT INTO chat_messages (user_id, conversation_id, role, content, metadata)
-       VALUES ($1, $2, 'user', $3, $4), ($1, $2, 'assistant', $5, $6)`,
+       VALUES ($1, $2, 'user', $3, $4)`,
       [
         authReq.user!.id,
         conversationId,
         message,
         JSON.stringify({ timestamp: new Date().toISOString() }),
+      ]
+    );
+
+    // Insert assistant message second (ensures different created_at timestamp)
+    await query(
+      `INSERT INTO chat_messages (user_id, conversation_id, role, content, metadata)
+       VALUES ($1, $2, 'assistant', $3, $4)`,
+      [
+        authReq.user!.id,
+        conversationId,
         responseContent,
         JSON.stringify({
           timestamp: new Date().toISOString(),

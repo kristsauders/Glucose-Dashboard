@@ -416,6 +416,17 @@ export function AIChat() {
               >
                 {showSidebar ? <X className="h-4 w-4" /> : <Menu className="h-4 w-4" />}
               </Button>
+              {activeConversationId && (
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  onClick={() => handleDeleteConversation(activeConversationId)}
+                  disabled={isLoading}
+                  className="h-8 w-8 p-0 text-muted-foreground hover:text-destructive"
+                >
+                  <Trash2 className="h-4 w-4" />
+                </Button>
+              )}
               <Bot className="h-5 w-5 text-primary" />
               <div>
                 <CardTitle>
@@ -423,22 +434,12 @@ export function AIChat() {
                 </CardTitle>
               </div>
             </div>
-            {activeConversationId && (
-              <Button
-                variant="ghost"
-                size="sm"
-                onClick={() => handleDeleteConversation(activeConversationId)}
-                disabled={isLoading}
-              >
-                <Trash2 className="h-4 w-4" />
-              </Button>
-            )}
           </div>
         </CardHeader>
 
       <CardContent className="flex-1 flex flex-col p-0 min-h-0">
         {/* Messages */}
-        <div className="flex-1 overflow-y-auto p-4 space-y-4" style={{ overflowY: 'auto' }}>
+        <div className="flex-1 overflow-y-auto px-2 py-4 md:p-4 space-y-4" style={{ overflowY: 'auto' }}>
           {messages.length === 0 ? (
             <div className="h-full flex flex-col items-center justify-center text-center p-8">
               <MessageSquare className="h-12 w-12 text-muted-foreground mb-4" />
@@ -553,7 +554,7 @@ export function AIChat() {
         </div>
 
         {/* Input */}
-        <div className="border-t p-4">
+        <div className="border-t px-2 py-4 md:p-4">
           {error && (
             <Alert variant="destructive" className="mb-4">
               <AlertDescription>{error}</AlertDescription>
