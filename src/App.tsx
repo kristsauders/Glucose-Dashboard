@@ -1,7 +1,9 @@
 import { useState, useEffect, useCallback } from 'react';
+import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
 import type { GlucoseReading } from './types/glucose';
 import { Auth } from './components/Auth';
 import { Dashboard } from './components/Dashboard';
+import { ChatOnly } from './pages/ChatOnly';
 import { apiService } from './services/api';
 
 function App() {
@@ -59,7 +61,15 @@ function App() {
     return <Auth onAuthenticated={handleAuthenticated} />;
   }
 
-  return <Dashboard readings={readings} onDataUpdated={handleDataUpdated} />;
+  return (
+    <BrowserRouter>
+      <Routes>
+        <Route path="/" element={<Dashboard readings={readings} onDataUpdated={handleDataUpdated} />} />
+        <Route path="/chat" element={<ChatOnly />} />
+        <Route path="*" element={<Navigate to="/" replace />} />
+      </Routes>
+    </BrowserRouter>
+  );
 }
 
 export default App;

@@ -1,5 +1,7 @@
 import express from 'express';
 import cors from 'cors';
+import path from 'path';
+import { fileURLToPath } from 'url';
 import { env } from '../config/env.js';
 import { testConnection } from '../config/database.js';
 import { errorHandler } from './middleware/errorHandler.js';
@@ -11,6 +13,9 @@ import settingsRoutes from './routes/settings.js';
 import chatRoutes from './routes/chat.js';
 import conversationsRoutes from './routes/conversations.js';
 import logsRoutes from './routes/logs.js';
+
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
 
 const app = express();
 
@@ -43,6 +48,19 @@ app.use('/api/settings', settingsRoutes);
 app.use('/api/chat', chatRoutes);
 app.use('/api/conversations', conversationsRoutes);
 app.use('/api/logs', logsRoutes);
+
+// Serve static files in production
+if (env.NODE_ENV === 'production') {
+  const distPath = path.join(__dirname, '../../../dist');
+
+  // Serve static assets
+  app.use(express.static(distPath));
+
+  // Handle client-side routing - serve index.html for all non-API routes
+  app.get('*', (req, res) => {
+    res.sendFile(path.join(distPath, 'index.html'));
+  });
+}
 
 // Error handler (must be last)
 app.use(errorHandler);

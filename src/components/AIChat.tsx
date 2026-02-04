@@ -66,6 +66,17 @@ export function AIChat() {
       const conversation = await apiService.getConversation(conversationId);
       setActiveConversationId(conversationId);
       setMessages(conversation.messages);
+
+      // Auto-hide sidebar on mobile after selecting conversation
+      const isMobile = window.innerWidth < 768;
+      if (isMobile) {
+        setShowSidebar(false);
+      }
+
+      // Focus input after sidebar closes (especially helpful on mobile to bring up keyboard)
+      setTimeout(() => {
+        inputRef.current?.focus();
+      }, isMobile ? 250 : 100);
     } catch (err) {
       console.error('Failed to load conversation:', err);
       setError('Failed to load conversation');
@@ -79,6 +90,17 @@ export function AIChat() {
       setActiveConversationId(newConversation.id);
       setMessages([]);
       setError('');
+
+      // Auto-hide sidebar on mobile after creating new chat
+      const isMobile = window.innerWidth < 768;
+      if (isMobile) {
+        setShowSidebar(false);
+      }
+
+      // Focus input after sidebar closes
+      setTimeout(() => {
+        inputRef.current?.focus();
+      }, 250);
     } catch (err) {
       console.error('Failed to create conversation:', err);
       setError('Failed to create new conversation');
@@ -460,9 +482,9 @@ export function AIChat() {
                       }`}
                     >
                       {message.role === 'user' ? (
-                        <p className="text-sm whitespace-pre-wrap break-words">{message.content}</p>
+                        <p className="text-xs md:text-sm whitespace-pre-wrap break-words">{message.content}</p>
                       ) : (
-                        <div className="text-sm prose prose-sm dark:prose-invert max-w-none">
+                        <div className="text-xs md:text-sm prose prose-sm dark:prose-invert max-w-none">
                           <ReactMarkdown
                             remarkPlugins={[remarkGfm]}
                             rehypePlugins={[rehypeHighlight]}
@@ -510,7 +532,7 @@ export function AIChat() {
                 )}
                 {streamingMessage ? (
                   <div className="bg-muted rounded-lg p-3">
-                    <div className="text-sm prose prose-sm dark:prose-invert max-w-none">
+                    <div className="text-xs md:text-sm prose prose-sm dark:prose-invert max-w-none">
                       <ReactMarkdown
                         remarkPlugins={[remarkGfm]}
                         rehypePlugins={[rehypeHighlight]}

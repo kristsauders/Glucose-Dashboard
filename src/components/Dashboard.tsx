@@ -422,21 +422,21 @@ export function Dashboard({ readings, onDataUpdated }: DashboardProps) {
           initial={{ opacity: 0 }}
           animate={{ opacity: 1 }}
           exit={{ opacity: 0 }}
-          className="fixed inset-0 bg-black/50 backdrop-blur-sm z-50 flex items-center justify-center md:p-4"
+          className="fixed inset-0 bg-black/50 backdrop-blur-sm z-50 flex items-center justify-center md:p-4 overflow-hidden"
           onClick={() => setShowChat(false)}
         >
           <motion.div
             initial={{ scale: 0.95, opacity: 0 }}
             animate={{ scale: 1, opacity: 1 }}
             exit={{ scale: 0.95, opacity: 0 }}
-            className="w-full md:max-w-4xl h-full md:h-[85vh] flex flex-col"
+            className="w-full md:max-w-4xl h-full md:h-[85vh] md:max-h-[85vh] flex flex-col overflow-hidden"
             onClick={(e) => e.stopPropagation()}
           >
-            <div className="relative h-full flex flex-col">
+            <div className="relative h-full flex flex-col overflow-hidden">
               <Button
                 variant="ghost"
                 size="sm"
-                className="absolute -top-2 -right-2 z-10 bg-background rounded-full shadow-lg hover:bg-destructive hover:text-destructive-foreground"
+                className="absolute top-2 right-2 md:-top-2 md:-right-2 z-10 bg-background rounded-full shadow-lg hover:bg-destructive hover:text-destructive-foreground"
                 onClick={() => setShowChat(false)}
                 title="Close chat (ESC)"
               >
