@@ -30,6 +30,29 @@ export default defineConfig({
       "@": path.resolve(__dirname, "./src"),
     },
   },
+  build: {
+    // Increase chunk size warning limit to 1000kb
+    chunkSizeWarningLimit: 1000,
+    rollupOptions: {
+      output: {
+        // Manual chunk splitting for better caching
+        manualChunks: {
+          // React core
+          'react-vendor': ['react', 'react-dom', 'react-router-dom'],
+          // Large UI libraries
+          'ui-vendor': ['framer-motion', 'recharts'],
+          // Markdown rendering
+          'markdown-vendor': ['react-markdown', 'remark-gfm', 'rehype-highlight'],
+          // Utilities
+          'utils-vendor': ['date-fns', 'papaparse', 'clsx', 'tailwind-merge'],
+        },
+      },
+    },
+    // Enable minification with esbuild (faster than terser)
+    minify: 'esbuild',
+    // Generate source maps for debugging (optional, remove for smaller builds)
+    sourcemap: false,
+  },
   server: {
     host: true, // Listen on all network interfaces
     port: 5173,

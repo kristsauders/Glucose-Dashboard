@@ -1,5 +1,6 @@
 import express from 'express';
 import cors from 'cors';
+import compression from 'compression';
 import https from 'https';
 import fs from 'fs';
 import path from 'path';
@@ -42,6 +43,7 @@ const app = express();
 const connections = new Set<any>();
 
 // Middleware
+app.use(compression()); // Enable gzip compression for all responses
 app.use(cors({
   origin: env.CORS_ORIGIN,
   credentials: true,
