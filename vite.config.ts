@@ -5,8 +5,8 @@ import fs from 'fs'
 
 // Try to load HTTPS certificates if they exist
 function getHttpsConfig() {
-  const certPath = path.resolve(__dirname, '.cert/cert.pem')
-  const keyPath = path.resolve(__dirname, '.cert/key.pem')
+  const certPath = path.resolve(__dirname, 'cert/cert.pem')
+  const keyPath = path.resolve(__dirname, 'cert/key.pem')
 
   if (fs.existsSync(certPath) && fs.existsSync(keyPath)) {
     console.log('✓ HTTPS enabled with local certificates')
