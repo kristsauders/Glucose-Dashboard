@@ -165,45 +165,95 @@ When asked to analyze: Use tools to gather comprehensive data, then respond with
     // Convert tool_calls + tool_results into a natural format (SystemMessage with context)
     // The large model doesn't have tools bound, so we present data as additional context
     const transformedMessages: BaseMessage[] = [];
-    let toolResultsContext = '';
+    const toolResults: Array<{ toolName: string; content: string }> = [];
+
+    // First pass: collect tool calls and their results
+    console.log(`[synthesisNode] Processing ${messages.length} messages from state`);
 
     for (let i = 0; i < messages.length; i++) {
       const msg = messages[i];
+      const msgType = msg.constructor.name;
+      const msgRole = 'role' in msg ? (msg as any).role : undefined;
+
+      console.log(`  [synthesisNode] Message ${i}: type=${msgType}, role=${msgRole}, hasContent=${!!msg.content}`);
 
       // Keep HumanMessages (user questions)
-      if (msg.constructor.name === 'HumanMessage') {
+      if (msgType === 'HumanMessage') {
         transformedMessages.push(msg);
         continue;
       }
 
-      // Skip AIMessages with tool_calls (they're internal scaffolding)
-      if (msg.constructor.name === 'AIMessage') {
-        const content = typeof msg.content === 'string' ? msg.content : '';
-
-        // Skip if it has tool calls or is "Analysis complete"
-        if (('tool_calls' in msg && msg.tool_calls && msg.tool_calls.length > 0) ||
-            content === 'Analysis complete' || content.length < 20) {
-          continue;
+      // Track tool calls to match with results
+      if (msgType === 'AIMessage' && 'tool_calls' in msg && msg.tool_calls?.length) {
+        console.log(`  [synthesisNode] Found AIMessage with ${msg.tool_calls.length} tool calls`);
+        // Store tool names for matching with results
+        for (const toolCall of msg.tool_calls) {
+          console.log(`    - Tool call: ${toolCall.name}`);
+          toolResults.push({ toolName: toolCall.name, content: '' });
         }
-
-        // Keep substantial AI messages (from previous conversation turns)
-        if (content.length >= 20) {
-          transformedMessages.push(msg);
-        }
+        continue;
       }
 
-      // Convert ToolMessages into context (they can't exist without tool_calls)
-      if (msg.constructor.name === 'ToolMessage') {
+      // Skip other AI messages (Analysis complete, etc)
+      if (msgType === 'AIMessage') {
+        const content = typeof msg.content === 'string' ? msg.content : '';
+        // Keep substantial AI messages from previous conversation turns
+        if (content.length >= 20 && content !== 'Analysis complete') {
+          transformedMessages.push(msg);
+        }
+        continue;
+      }
+
+      // Collect ToolMessages - check both constructor name and role
+      if (msgType === 'ToolMessage' || msgRole === 'tool') {
         const toolContent = typeof msg.content === 'string' ? msg.content : JSON.stringify(msg.content);
-        toolResultsContext += `\n\nAnalysis Data:\n${toolContent}`;
+        console.log(`  [synthesisNode] Found tool result: length=${toolContent.length} chars`);
+
+        // Check if content was truncated
+        if (toolContent.includes('[... truncated')) {
+          console.log(`  [synthesisNode] WARNING: Tool result was truncated`);
+        }
+
+        // Find the corresponding tool call (match by index)
+        const resultIndex = toolResults.findIndex(r => r.content === '');
+        if (resultIndex !== -1) {
+          console.log(`  [synthesisNode] Matched to tool call ${resultIndex}: ${toolResults[resultIndex].toolName}`);
+          toolResults[resultIndex].content = toolContent;
+        } else {
+          console.log(`  [synthesisNode] WARNING: Could not match tool result to tool call (all slots filled or no slots)`);
+        }
       }
     }
 
-    // Add accumulated tool results as a system message with context
-    if (toolResultsContext) {
-      transformedMessages.push(new SystemMessage(`The analysis phase gathered the following data:${toolResultsContext}
+    // Format tool results into a clear, structured context
+    let toolResultsContext = '';
+    if (toolResults.length > 0) {
+      console.log(`[synthesisNode] Formatting ${toolResults.length} tool results for synthesis`);
 
-Now synthesize this data into a natural, conversational response for the user. Write in plain prose - NO XML tags, NO thinking blocks, NO tool references. Start your response directly with the insights.`));
+      toolResultsContext = '\n\nThe analysis phase gathered the following data:\n';
+
+      for (let i = 0; i < toolResults.length; i++) {
+        const { toolName, content } = toolResults[i];
+        console.log(`  [synthesisNode] Tool ${i + 1}: ${toolName}, content length: ${content.length} chars`);
+
+        // Parse JSON if possible for better formatting
+        try {
+          const parsed = JSON.parse(content);
+          const formatted = JSON.stringify(parsed, null, 2);
+          toolResultsContext += `\n--- Data from ${toolName} ---\n${formatted}\n`;
+        } catch (e) {
+          // If not JSON, use as-is
+          toolResultsContext += `\n--- Data from ${toolName} ---\n${content}\n`;
+        }
+      }
+
+      toolResultsContext += `\nIMPORTANT: Use the EXACT numbers and data from above. Do not make up or estimate any values. If you reference a metric, it must come directly from the tool results above.`;
+
+      transformedMessages.push(new SystemMessage(toolResultsContext));
+
+      console.log(`[synthesisNode] Tool results context length: ${toolResultsContext.length} chars`);
+    } else {
+      console.log(`[synthesisNode] WARNING: No tool results found!`);
     }
 
     console.log(`[synthesisNode] Transformed messages: ${messages.length} → ${transformedMessages.length}`);
