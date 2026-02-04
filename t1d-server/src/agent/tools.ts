@@ -2,6 +2,7 @@ import { DynamicStructuredTool } from '@langchain/core/tools';
 import { z } from 'zod';
 import { query } from '../config/database.js';
 import { discordService } from '../services/discord.js';
+import { pushNotificationService } from '../services/push-notification-service.js';
 import {
   detectMealResponse,
   detectBasalAdequacy,
@@ -682,7 +683,7 @@ export const getRecentSageMessagesTool = new DynamicStructuredTool({
  */
 export const sendProactiveMessageTool = new DynamicStructuredTool({
   name: 'send_proactive_message',
-  description: 'Send a proactive message to the user via Discord. Use this to reach out with insights, questions, or suggestions.',
+  description: 'Send a proactive message to the user via push notification and Discord. Use this to reach out with insights, questions, or suggestions.',
   schema: z.object({
     userId: z.string().optional().describe('The user ID (automatically provided)'),
     type: z.enum(['insight', 'question', 'suggestion', 'daily_summary'])
@@ -693,26 +694,75 @@ export const sendProactiveMessageTool = new DynamicStructuredTool({
   }),
   func: async ({ userId, type, title, content, metadata }) => {
     try {
-      // Check if Discord is configured
-      if (!discordService.isConfigured()) {
-        return JSON.stringify({
-          success: false,
-          error: 'Discord webhook not configured',
-        });
-      }
+      console.log('[Proactive Message] Preparing to send:', {
+        type,
+        title,
+        preview: content.substring(0, 100),
+      });
 
-      // Store message in database first
+      // 1. Create conversation for proactive message
+      const conversationTitle = `Proactive: ${title}`;
+      const conversationResult = await query(
+        `INSERT INTO conversations (user_id, title)
+         VALUES ($1, $2)
+         RETURNING id`,
+        [userId, conversationTitle]
+      );
+      const conversationId = conversationResult.rows[0].id;
+
+      // 2. Store message in sage_messages with conversation_id
       const dbResult = await query(
-        `INSERT INTO sage_messages (user_id, type, title, content, metadata)
-         VALUES ($1, $2, $3, $4, $5)
+        `INSERT INTO sage_messages (user_id, conversation_id, type, title, content, metadata)
+         VALUES ($1, $2, $3, $4, $5, $6)
          RETURNING id, sent_at`,
-        [userId, type, title, content, metadata ? JSON.stringify(metadata) : null]
+        [userId, conversationId, type, title, content, metadata ? JSON.stringify(metadata) : null]
       );
 
       const messageId = dbResult.rows[0].id;
 
-      // Send to Discord
-      await discordService.sendSageMessage(type, title, content);
+      // 3. Save to chat_messages as assistant message
+      await query(
+        `INSERT INTO chat_messages (user_id, conversation_id, role, content, metadata)
+         VALUES ($1, $2, 'assistant', $3, $4)`,
+        [
+          userId,
+          conversationId,
+          content,
+          JSON.stringify({
+            timestamp: new Date().toISOString(),
+            type: 'proactive',
+            messageType: type,
+            title,
+          }),
+        ]
+      );
+
+      // 4. Check notification preferences
+      const preferences = await pushNotificationService.getPreferences(userId);
+
+      if (preferences.proactive_enabled) {
+        // 5. Send push notification with deep-link
+        await pushNotificationService.sendToUser(userId, {
+          title: 'Sage',
+          body: content.length > 100 ? content.substring(0, 97) + '...' : content,
+          icon: '/sage-icon.png',
+          badge: '/sage-badge.png',
+          data: {
+            conversationId,
+            url: `/chat?conversation=${conversationId}`,
+          },
+        });
+
+        console.log('[Proactive Message] Push notification sent');
+      } else {
+        console.log('[Proactive Message] Push notifications disabled for user');
+      }
+
+      // 6. Optionally still send to Discord if configured
+      if (discordService.isConfigured()) {
+        await discordService.sendSageMessage(type, title, content);
+        console.log('[Proactive Message] Discord message sent');
+      }
 
       // Update monitoring state
       await query(
@@ -727,9 +777,11 @@ export const sendProactiveMessageTool = new DynamicStructuredTool({
       return JSON.stringify({
         success: true,
         messageId,
+        conversationId,
         sentAt: dbResult.rows[0].sent_at,
       });
     } catch (error) {
+      console.error('[Proactive Message] Failed to send:', error);
       return JSON.stringify({
         success: false,
         error: error instanceof Error ? error.message : 'Unknown error',

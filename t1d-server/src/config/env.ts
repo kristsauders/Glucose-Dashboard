@@ -22,6 +22,10 @@ const envSchema = z.object({
   HYBRID_SMALL_PROVIDER: z.enum(['ollama', 'openrouter']).default('ollama'),
   HYBRID_SMALL_MODEL: z.string().default('qwen2.5:32b'),
   HYBRID_LARGE_MODEL: z.string().default('anthropic/claude-sonnet-4.5'),
+  // Web Push Notification configuration
+  VAPID_PUBLIC_KEY: z.string().optional(),
+  VAPID_PRIVATE_KEY: z.string().optional(),
+  VAPID_EMAIL: z.string().optional(), // Format: mailto:email@example.com
 });
 
 export const env = envSchema.parse(process.env);

@@ -4,6 +4,7 @@ import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { LibreViewSettings } from './LibreViewSettings';
 import { DiscordSettings } from './DiscordSettings';
+import { NotificationSettings } from './NotificationSettings';
 
 interface SettingsProps {
   onClose: () => void;
@@ -44,6 +45,11 @@ export function Settings({ onClose }: SettingsProps) {
             <div>
               <h3 className="text-sm font-semibold mb-3">Data Sources</h3>
               <LibreViewSettings />
+            </div>
+
+            <div>
+              <h3 className="text-sm font-semibold mb-3">Notifications</h3>
+              <NotificationSettings />
             </div>
 
             <div>

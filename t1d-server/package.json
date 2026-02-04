@@ -41,6 +41,7 @@
     "langchain": "^0.1.25",
     "node-fetch": "^3.3.2",
     "pg": "^8.11.3",
+    "web-push": "^3.6.7",
     "zod": "^3.22.4"
   },
   "devDependencies": {

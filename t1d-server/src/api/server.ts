@@ -13,6 +13,7 @@ import settingsRoutes from './routes/settings.js';
 import chatRoutes from './routes/chat.js';
 import conversationsRoutes from './routes/conversations.js';
 import logsRoutes from './routes/logs.js';
+import notificationRoutes from './routes/notifications.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -48,6 +49,7 @@ app.use('/api/settings', settingsRoutes);
 app.use('/api/chat', chatRoutes);
 app.use('/api/conversations', conversationsRoutes);
 app.use('/api/logs', logsRoutes);
+app.use('/api/notifications', notificationRoutes);
 
 // Serve static files in production
 if (env.NODE_ENV === 'production') {

@@ -1,4 +1,5 @@
 import { useState, useEffect, useRef } from 'react';
+import { useSearchParams } from 'react-router-dom';
 import { motion, AnimatePresence } from 'framer-motion';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
@@ -14,6 +15,7 @@ import { format } from 'date-fns';
 import type { Conversation, Message } from '@/types/chat';
 
 export function AIChat() {
+  const [searchParams, setSearchParams] = useSearchParams();
   const [conversations, setConversations] = useState<Conversation[]>([]);
   const [activeConversationId, setActiveConversationId] = useState<string | null>(null);
   const [messages, setMessages] = useState<Message[]>([]);
@@ -67,6 +69,41 @@ export function AIChat() {
       }, 300);
     }
   }, [messages, activeConversationId]);
+
+  // Handle deep-link from push notification (URL parameter)
+  useEffect(() => {
+    const conversationId = searchParams.get('conversation');
+    if (conversationId && conversations.length > 0) {
+      // Find and load the conversation
+      const conversation = conversations.find(c => c.id === conversationId);
+      if (conversation) {
+        loadConversation(conversationId);
+        // Clear URL parameter after loading
+        setSearchParams({});
+        console.log('[AIChat] Loaded conversation from deep-link:', conversationId);
+      }
+    }
+  }, [searchParams, conversations]);
+
+  // Listen for messages from service worker
+  useEffect(() => {
+    const handleMessage = (event: MessageEvent) => {
+      if (event.data.type === 'OPEN_CONVERSATION') {
+        const conversationId = event.data.conversationId;
+        if (conversationId && conversations.find(c => c.id === conversationId)) {
+          loadConversation(conversationId);
+          console.log('[AIChat] Loaded conversation from service worker message:', conversationId);
+        }
+      }
+    };
+
+    if ('serviceWorker' in navigator) {
+      navigator.serviceWorker.addEventListener('message', handleMessage);
+      return () => {
+        navigator.serviceWorker.removeEventListener('message', handleMessage);
+      };
+    }
+  }, [conversations]);
 
   const loadConversation = async (conversationId: string) => {
     try {
