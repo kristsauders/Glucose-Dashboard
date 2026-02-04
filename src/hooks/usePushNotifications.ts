@@ -1,6 +1,7 @@
 import { useState, useEffect, useCallback } from 'react';
 
 const API_BASE_URL = import.meta.env.VITE_API_URL || 'http://localhost:3002';
+const TOKEN_KEY = 't1d_auth_token';
 
 // Helper function to convert VAPID key from base64 to Uint8Array
 function urlBase64ToUint8Array(base64String: string): BufferSource {
@@ -18,7 +19,7 @@ export function usePushNotifications() {
   const [isSubscribed, setIsSubscribed] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
   const [permission, setPermission] = useState<NotificationPermission>('default');
-  const token = localStorage.getItem('token');
+  const token = localStorage.getItem(TOKEN_KEY);
 
   // Check current subscription status on mount
   useEffect(() => {

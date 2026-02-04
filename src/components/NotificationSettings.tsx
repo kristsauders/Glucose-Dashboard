@@ -5,6 +5,8 @@ import { Card, CardContent, CardDescription } from '@/components/ui/card';
 import { Alert, AlertDescription } from '@/components/ui/alert';
 import { Bell, BellOff, Check, AlertCircle } from 'lucide-react';
 
+const TOKEN_KEY = 't1d_auth_token';
+
 export function NotificationSettings() {
   const [preferences, setPreferences] = useState({
     proactive_enabled: true,
@@ -21,7 +23,7 @@ export function NotificationSettings() {
   const fetchPreferences = async () => {
     setIsLoading(true);
     try {
-      const token = localStorage.getItem('token');
+      const token = localStorage.getItem(TOKEN_KEY);
       if (!token) return;
 
       const response = await fetch(`${import.meta.env.VITE_API_URL || 'http://localhost:3002'}/api/notifications/preferences`, {
@@ -46,7 +48,7 @@ export function NotificationSettings() {
     setMessage(null);
 
     try {
-      const token = localStorage.getItem('token');
+      const token = localStorage.getItem(TOKEN_KEY);
       if (!token) {
         setMessage({ type: 'error', text: 'Not authenticated' });
         return;
