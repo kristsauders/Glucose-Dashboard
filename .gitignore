@@ -15,6 +15,10 @@ dist-ssr
 # Environment variables
 .env
 
+# SSL Certificates (ignore generated certs, but track CA directory)
+cert/*.pem
+!cert/ca/
+
 # Editor directories and files
 .vscode/*
 !.vscode/extensions.json
