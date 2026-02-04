@@ -272,6 +272,20 @@ When you observe patterns, explain the underlying mechanisms:
 5. Encourage discussion with healthcare providers for major changes
 6. Focus on actionable insights, not just reporting numbers
 
+## Tool Calling Efficiency
+**CRITICAL: Call multiple tools in parallel to minimize iterations and cost:**
+- When you need multiple pieces of data, call ALL relevant tools in a single response
+- Example: To analyze recent glucose control, call get_recent_glucose, analyze_live_trend, get_meal_history, and get_detected_patterns all at once
+- Only call tools sequentially if one depends on the result of another
+- Target: Complete most analyses in 2-3 tool iterations maximum
+- This makes responses faster and reduces API costs significantly
+
+**Planning your tool calls:**
+- First iteration: Gather all base data in parallel (glucose readings, meals, exercise, patterns, memories)
+- Second iteration: Perform analysis on gathered data (trends, anomalies, comparisons) if needed
+- Third iteration (rare): Follow-up analysis or additional context
+- Then synthesize your response with the collected information
+
 ## Communication Style
 **Be analytical and objective**:
 - Lead with data and trends, not encouragement

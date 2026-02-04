@@ -72,42 +72,46 @@ export function createAgentGraph(forceProvider?: 'ollama' | 'openrouter') {
       return {};
     }
 
-    const toolResults: BaseMessage[] = [];
+    console.log(`[toolNode] Executing ${lastMessage.tool_calls.length} tool(s) in parallel`);
 
-    for (const toolCall of lastMessage.tool_calls) {
-      const tool = allTools.find(t => t.name === toolCall.name);
+    // Execute all tools in parallel for maximum speed
+    const toolResults: BaseMessage[] = await Promise.all(
+      lastMessage.tool_calls.map(async (toolCall) => {
+        const tool = allTools.find(t => t.name === toolCall.name);
 
-      if (!tool) {
-        toolResults.push({
-          role: 'tool',
-          content: `Error: Tool ${toolCall.name} not found`,
-          tool_call_id: toolCall.id,
-        } as any);
-        continue;
-      }
+        if (!tool) {
+          return {
+            role: 'tool',
+            content: `Error: Tool ${toolCall.name} not found`,
+            tool_call_id: toolCall.id,
+          } as any;
+        }
 
-      try {
-        // Add userId and timezone to tool arguments
-        const argsWithContext = {
-          ...toolCall.args,
-          userId,
-          userTimezone: userContext.timezone || 'America/New_York',
-        };
-        const result = await tool.invoke(argsWithContext);
+        try {
+          // Add userId and timezone to tool arguments
+          const argsWithContext = {
+            ...toolCall.args,
+            userId,
+            userTimezone: userContext.timezone || 'America/New_York',
+          };
+          const result = await tool.invoke(argsWithContext);
 
-        toolResults.push({
-          role: 'tool',
-          content: result,
-          tool_call_id: toolCall.id,
-        } as any);
-      } catch (error) {
-        toolResults.push({
-          role: 'tool',
-          content: `Error: ${error instanceof Error ? error.message : 'Unknown error'}`,
-          tool_call_id: toolCall.id,
-        } as any);
-      }
-    }
+          return {
+            role: 'tool',
+            content: result,
+            tool_call_id: toolCall.id,
+          } as any;
+        } catch (error) {
+          return {
+            role: 'tool',
+            content: `Error: ${error instanceof Error ? error.message : 'Unknown error'}`,
+            tool_call_id: toolCall.id,
+          } as any;
+        }
+      })
+    );
+
+    console.log(`[toolNode] Completed ${toolResults.length} tool execution(s)`);
 
     return {
       messages: [...messages, ...toolResults],

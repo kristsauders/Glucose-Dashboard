@@ -5,6 +5,102 @@ import { allTools } from './tools.js';
 import { SYSTEM_PROMPT, USER_CONTEXT_PROMPT } from './prompts.js';
 
 /**
+ * Log summary statistics for context size by iteration
+ */
+function logContextSummary(metrics: Array<{ iteration: number; contextChars: number; contextTokens: number }>): void {
+  if (metrics.length === 0) {
+    return;
+  }
+
+  console.log('\n' + '='.repeat(80));
+  console.log('📊 CONTEXT SIZE SUMMARY STATISTICS');
+  console.log('='.repeat(80));
+
+  // Group by iteration number
+  const byIteration = new Map<number, { chars: number[]; tokens: number[] }>();
+
+  for (const metric of metrics) {
+    if (!byIteration.has(metric.iteration)) {
+      byIteration.set(metric.iteration, { chars: [], tokens: [] });
+    }
+    const group = byIteration.get(metric.iteration)!;
+    group.chars.push(metric.contextChars);
+    group.tokens.push(metric.contextTokens);
+  }
+
+  // Calculate stats for each iteration
+  const iterationStats: Array<{ iteration: number; avgChars: number; maxChars: number; avgTokens: number; maxTokens: number; count: number }> = [];
+
+  for (const [iteration, data] of Array.from(byIteration.entries()).sort((a, b) => a[0] - b[0])) {
+    const avgChars = Math.round(data.chars.reduce((sum, val) => sum + val, 0) / data.chars.length);
+    const maxChars = Math.max(...data.chars);
+    const avgTokens = Math.round(data.tokens.reduce((sum, val) => sum + val, 0) / data.tokens.length);
+    const maxTokens = Math.max(...data.tokens);
+
+    iterationStats.push({
+      iteration,
+      avgChars,
+      maxChars,
+      avgTokens,
+      maxTokens,
+      count: data.chars.length,
+    });
+  }
+
+  // Log header
+  console.log('\nIteration │ Avg Tokens │ Max Tokens │ Avg Chars  │ Max Chars  │ Samples');
+  console.log('─'.repeat(80));
+
+  // Log each iteration
+  for (const stat of iterationStats) {
+    const iterStr = stat.iteration.toString().padStart(9, ' ');
+    const avgTokStr = stat.avgTokens.toLocaleString().padStart(10, ' ');
+    const maxTokStr = stat.maxTokens.toLocaleString().padStart(10, ' ');
+    const avgCharStr = stat.avgChars.toLocaleString().padStart(10, ' ');
+    const maxCharStr = stat.maxChars.toLocaleString().padStart(10, ' ');
+    const countStr = stat.count.toString().padStart(7, ' ');
+
+    console.log(`${iterStr} │ ${avgTokStr} │ ${maxTokStr} │ ${avgCharStr} │ ${maxCharStr} │ ${countStr}`);
+  }
+
+  // Overall stats
+  const allTokens = metrics.map(m => m.contextTokens);
+  const overallAvgTokens = Math.round(allTokens.reduce((sum, val) => sum + val, 0) / allTokens.length);
+  const overallMaxTokens = Math.max(...allTokens);
+  const totalIterations = Math.max(...metrics.map(m => m.iteration));
+
+  console.log('─'.repeat(80));
+  console.log(`\n📈 Overall Statistics:`);
+  console.log(`   Total iterations used: ${totalIterations}`);
+  console.log(`   Average context size: ${overallAvgTokens.toLocaleString()} tokens`);
+  console.log(`   Maximum context size: ${overallMaxTokens.toLocaleString()} tokens`);
+  console.log(`   Total samples: ${metrics.length}`);
+
+  // Provide recommendations
+  console.log(`\n💡 Recommendations:`);
+
+  if (overallMaxTokens < 8000) {
+    console.log(`   ✓ Context usage is LOW (<8K tokens) - iteration limit can safely be set to ${totalIterations} or higher`);
+  } else if (overallMaxTokens < 16000) {
+    console.log(`   ✓ Context usage is MODERATE (8-16K tokens) - current iteration limit of ${totalIterations} is appropriate`);
+  } else if (overallMaxTokens < 32000) {
+    console.log(`   ⚠️  Context usage is HIGH (16-32K tokens) - consider limiting iterations to ${Math.max(1, totalIterations - 1)}`);
+  } else {
+    console.log(`   ⚠️  Context usage is VERY HIGH (>32K tokens) - strongly consider limiting iterations to ${Math.max(1, totalIterations - 2)}`);
+  }
+
+  // Model-specific recommendations
+  console.log(`\n🤖 Model Context Window Guidance:`);
+  console.log(`   GPT-3.5/GPT-4o-mini (16K):   ${overallMaxTokens < 16000 ? '✓ Safe' : '⚠️  May exceed'}`);
+  console.log(`   Sonnet 4.5 (32K):            ${overallMaxTokens < 32000 ? '✓ Safe' : '⚠️  May exceed'}`);
+  console.log(`   GPT-4o (128K):               ${overallMaxTokens < 128000 ? '✓ Safe' : '⚠️  May exceed'}`);
+  console.log(`   GPT-5 Nano (400K):           ${overallMaxTokens < 400000 ? '✓ Safe' : '⚠️  May exceed'}`);
+  console.log(`   Gemini 3 Flash (1M):         ${overallMaxTokens < 1000000 ? '✓ Safe' : '⚠️  May exceed'}`);
+
+  console.log('='.repeat(80) + '\n');
+}
+
+/**
  * Truncate large tool results to prevent context overflow
  * Limits each tool result to max 5000 characters (~1250 tokens)
  * This preserves most tool results fully while preventing runaway context growth
@@ -46,6 +142,8 @@ interface AgentState {
   readyForSynthesis: boolean;
   // Track iteration count to prevent runaway context
   iterationCount: number;
+  // Track context size metrics for each iteration
+  contextMetrics: Array<{ iteration: number; contextChars: number; contextTokens: number }>;
 }
 
 /**
@@ -87,7 +185,19 @@ Available data sources:
 - Statistical analysis tools
 - Trend and anomaly detection
 
-When asked to analyze: Use tools to gather comprehensive data, then respond with "Analysis complete" when you have enough information. The synthesis model will create the user-facing message.`);
+**CRITICAL - Parallel Tool Calling for Efficiency:**
+- Call ALL independent tools in a SINGLE response to minimize iterations
+- Example: If you need glucose data, meal history, and exercise logs, call all 3 tools at once
+- Only call tools sequentially if one depends on the result of another
+- This reduces cost and speeds up analysis significantly
+
+**Target: Complete analysis in 2-3 iterations maximum**
+- Iteration 1: Call all data gathering tools in parallel (glucose, meals, exercise, patterns, etc.)
+- Iteration 2: Call analytical tools if needed (trends, anomalies, comparisons) using gathered data
+- Iteration 3 (if needed): Follow-up analysis
+- Then respond "Analysis complete"
+
+When asked to analyze: Use tools to gather comprehensive data in parallel, then respond with "Analysis complete" when you have enough information. The synthesis model will create the user-facing message.`);
 
     let messagesToSend: BaseMessage[];
     if (!hasAIMessages) {
@@ -109,10 +219,21 @@ When asked to analyze: Use tools to gather comprehensive data, then respond with
     const currentIteration = state.iterationCount || 0;
     if (currentIteration >= 8) {
       console.log('[analysisNode] Maximum iterations reached (8), forcing synthesis');
+
+      // Calculate context size even for the max iteration case
+      const totalSize = JSON.stringify(messagesToSend).length;
+      const totalTokens = Math.round(totalSize / 4);
+      const contextMetric = {
+        iteration: currentIteration + 1,
+        contextChars: totalSize,
+        contextTokens: totalTokens,
+      };
+
       return {
         messages: [new AIMessage('Analysis complete - maximum iterations reached.')],
         readyForSynthesis: true,
         iterationCount: currentIteration + 1,
+        contextMetrics: [contextMetric],
       };
     }
 
@@ -130,8 +251,9 @@ When asked to analyze: Use tools to gather comprehensive data, then respond with
     });
     const toolMessages = messageSizes.filter(m => m.type === 'ToolMessage');
     const totalSize = JSON.stringify(messagesToSend).length;
+    const totalTokens = Math.round(totalSize / 4);
 
-    console.log(`  Total context: ${totalSize} chars (~${Math.round(totalSize / 4)} tokens)`);
+    console.log(`  Total context: ${totalSize} chars (~${totalTokens} tokens)`);
     console.log(`  Tool messages: ${toolMessages.length}, avg size: ${toolMessages.length > 0 ? Math.round(toolMessages.reduce((sum, m) => sum + m.chars, 0) / toolMessages.length) : 0} chars`);
 
     if (totalSize > 100000) {
@@ -143,6 +265,13 @@ When asked to analyze: Use tools to gather comprehensive data, then respond with
       });
     }
 
+    // Track context size for this iteration
+    const contextMetric = {
+      iteration: currentIteration + 1,
+      contextChars: totalSize,
+      contextTokens: totalTokens,
+    };
+
     const response = await smallModelWithTools.invoke(messagesToSend);
 
     // IMPORTANT: Only return NEW messages (not the full array)
@@ -152,6 +281,7 @@ When asked to analyze: Use tools to gather comprehensive data, then respond with
       messages: [response],
       readyForSynthesis: !response.tool_calls || response.tool_calls.length === 0,
       iterationCount: currentIteration + 1,
+      contextMetrics: [contextMetric],
     };
   }
 
@@ -321,6 +451,9 @@ This user has LADA (Latent Autoimmune Diabetes in Adults):
       console.log(`[synthesisNode] Content preview: ${response.content.substring(0, 200)}...`);
     }
 
+    // Log context size summary statistics
+    logContextSummary(state.contextMetrics || []);
+
     // Only return NEW message, not the full array
     return {
       messages: [response],
@@ -336,42 +469,46 @@ This user has LADA (Latent Autoimmune Diabetes in Adults):
       return {};
     }
 
-    const toolResults: BaseMessage[] = [];
+    console.log(`[toolNode] Executing ${lastMessage.tool_calls.length} tool(s) in parallel`);
 
-    for (const toolCall of lastMessage.tool_calls) {
-      const tool = allTools.find(t => t.name === toolCall.name);
+    // Execute all tools in parallel for maximum speed
+    const toolResults: BaseMessage[] = await Promise.all(
+      lastMessage.tool_calls.map(async (toolCall) => {
+        const tool = allTools.find(t => t.name === toolCall.name);
 
-      if (!tool) {
-        toolResults.push({
-          role: 'tool',
-          content: `Error: Tool ${toolCall.name} not found`,
-          tool_call_id: toolCall.id,
-        } as any);
-        continue;
-      }
+        if (!tool) {
+          return {
+            role: 'tool',
+            content: `Error: Tool ${toolCall.name} not found`,
+            tool_call_id: toolCall.id,
+          } as any;
+        }
 
-      try {
-        // Add userId and timezone to tool arguments
-        const argsWithContext = {
-          ...toolCall.args,
-          userId,
-          userTimezone: userContext.timezone || 'America/New_York',
-        };
-        const result = await tool.invoke(argsWithContext);
+        try {
+          // Add userId and timezone to tool arguments
+          const argsWithContext = {
+            ...toolCall.args,
+            userId,
+            userTimezone: userContext.timezone || 'America/New_York',
+          };
+          const result = await tool.invoke(argsWithContext);
 
-        toolResults.push({
-          role: 'tool',
-          content: result,
-          tool_call_id: toolCall.id,
-        } as any);
-      } catch (error) {
-        toolResults.push({
-          role: 'tool',
-          content: `Error: ${error instanceof Error ? error.message : 'Unknown error'}`,
-          tool_call_id: toolCall.id,
-        } as any);
-      }
-    }
+          return {
+            role: 'tool',
+            content: result,
+            tool_call_id: toolCall.id,
+          } as any;
+        } catch (error) {
+          return {
+            role: 'tool',
+            content: `Error: ${error instanceof Error ? error.message : 'Unknown error'}`,
+            tool_call_id: toolCall.id,
+          } as any;
+        }
+      })
+    );
+
+    console.log(`[toolNode] Completed ${toolResults.length} tool execution(s)`);
 
     // Only return NEW tool results, not the full message array
     // The state reducer will concat them
@@ -428,6 +565,10 @@ This user has LADA (Latent Autoimmune Diabetes in Adults):
       iterationCount: {
         reducer: (left: number, right: number | undefined) => right ?? left,
         default: () => 0,
+      },
+      contextMetrics: {
+        reducer: (left: any[], right: any[] | undefined) => right ? left.concat(right) : left,
+        default: () => [],
       },
     },
   });
