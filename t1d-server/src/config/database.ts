@@ -19,9 +19,9 @@ export async function query<T = any>(
   try {
     const result = await pool.query<T>(text, params);
     const duration = Date.now() - start;
-    if (env.NODE_ENV === 'development') {
-      console.log('Query executed:', { text, duration, rows: result.rowCount });
-    }
+    // if (env.NODE_ENV === 'development') {
+    //   console.log('Query executed:', { text, duration, rows: result.rowCount });
+    // }
     return result;
   } catch (error) {
     console.error('Database query error:', error);

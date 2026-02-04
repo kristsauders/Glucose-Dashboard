@@ -12,6 +12,7 @@ import {
   detectAnomalies,
   comparePeriods,
 } from '../services/advanced-analysis.js';
+import { convertToUserTimezone } from '../utils/timezone.js';
 
 /**
  * Tool: Get recent glucose readings
@@ -22,8 +23,9 @@ export const getRecentGlucoseTool = new DynamicStructuredTool({
   schema: z.object({
     userId: z.string().optional().describe('The user ID (automatically provided)'),
     limit: z.number().default(20).describe('Number of readings to return (default 20)'),
+    userTimezone: z.string().optional().describe('User timezone (automatically provided)'),
   }),
-  func: async ({ userId, limit }) => {
+  func: async ({ userId, limit, userTimezone }) => {
     const result = await query(
       `SELECT timestamp, glucose, device, trend
        FROM glucose_readings
@@ -33,10 +35,12 @@ export const getRecentGlucoseTool = new DynamicStructuredTool({
       [userId, limit]
     );
 
+    const timezone = userTimezone || 'America/New_York';
+
     return JSON.stringify({
       count: result.rows.length,
       readings: result.rows.map(r => ({
-        timestamp: r.timestamp,
+        timestamp: convertToUserTimezone(r.timestamp, timezone),
         glucose: parseFloat(r.glucose),
         device: r.device,
         trend: r.trend,
@@ -480,8 +484,9 @@ export const analyzeLiveTrendTool = new DynamicStructuredTool({
   schema: z.object({
     userId: z.string().optional().describe('The user ID (automatically provided)'),
     hours: z.number().default(2).describe('Hours to analyze (default 2)'),
+    userTimezone: z.string().optional().describe('User timezone (automatically provided)'),
   }),
-  func: async ({ userId, hours }) => {
+  func: async ({ userId, hours, userTimezone }) => {
     const result = await query(
       `SELECT timestamp, glucose, trend
        FROM glucose_readings
@@ -498,8 +503,10 @@ export const analyzeLiveTrendTool = new DynamicStructuredTool({
       });
     }
 
+    const timezone = userTimezone || 'America/New_York';
+
     const readings = result.rows.map(r => ({
-      timestamp: r.timestamp,
+      timestamp: convertToUserTimezone(r.timestamp, timezone),
       glucose: parseFloat(r.glucose),
       trend: r.trend,
     }));
@@ -1809,22 +1816,19 @@ export const getMealHistoryTool = new DynamicStructuredTool({
     days: z.number().default(7).describe('Number of days to look back'),
     mealType: z.string().optional().describe('Filter by meal type'),
     limit: z.number().default(20).describe('Max meals to return'),
+    userTimezone: z.string().optional().describe('User timezone (automatically provided)'),
   }),
-  func: async ({ userId, days, mealType, limit }) => {
-    // Get user's timezone
-    const userResult = await query(
-      'SELECT timezone FROM users WHERE id = $1',
-      [userId]
-    );
-    const userTimezone = userResult.rows[0]?.timezone || 'America/New_York';
+  func: async ({ userId, days, mealType, limit, userTimezone }) => {
+    // Use provided timezone or fallback
+    const timezone = userTimezone || 'America/New_York';
 
     // Use date arithmetic for full calendar days
     let queryText = `
       SELECT id, timestamp, description, estimated_carbs, meal_type, tags, notes
       FROM meals
       WHERE user_id = $1
-        AND timestamp >= DATE_TRUNC('day', NOW() AT TIME ZONE '${userTimezone}') - INTERVAL '${days} days'
-        AND timestamp < DATE_TRUNC('day', NOW() AT TIME ZONE '${userTimezone}') + INTERVAL '1 day'
+        AND timestamp >= DATE_TRUNC('day', NOW() AT TIME ZONE '${timezone}') - INTERVAL '${days} days'
+        AND timestamp < DATE_TRUNC('day', NOW() AT TIME ZONE '${timezone}') + INTERVAL '1 day'
     `;
     const params = [userId];
 
@@ -1840,19 +1844,10 @@ export const getMealHistoryTool = new DynamicStructuredTool({
 
     return JSON.stringify({
       count: result.rows.length,
-      timezone: userTimezone,
+      timezone: timezone,
       meals: result.rows.map(r => ({
         id: r.id,
-        timestamp: r.timestamp,
-        localTime: new Date(r.timestamp).toLocaleString('en-US', {
-          timeZone: userTimezone,
-          month: 'numeric',
-          day: 'numeric',
-          year: 'numeric',
-          hour: 'numeric',
-          minute: '2-digit',
-          hour12: true,
-        }),
+        timestamp: convertToUserTimezone(r.timestamp, timezone),
         description: r.description,
         carbs: parseFloat(r.estimated_carbs || 0),
         mealType: r.meal_type,
@@ -2005,22 +2000,19 @@ export const getExerciseHistoryTool = new DynamicStructuredTool({
     userId: z.string().optional().describe('The user ID (automatically provided)'),
     days: z.number().default(7).describe('Number of days to look back'),
     limit: z.number().default(20).describe('Max sessions to return'),
+    userTimezone: z.string().optional().describe('User timezone (automatically provided)'),
   }),
-  func: async ({ userId, days, limit }) => {
-    // Get user's timezone
-    const userResult = await query(
-      'SELECT timezone FROM users WHERE id = $1',
-      [userId]
-    );
-    const userTimezone = userResult.rows[0]?.timezone || 'America/New_York';
+  func: async ({ userId, days, limit, userTimezone }) => {
+    // Use provided timezone or fallback
+    const timezone = userTimezone || 'America/New_York';
 
     // Use date arithmetic for full calendar days
     const result = await query(
       `SELECT id, timestamp, description, activity_type, duration_minutes, intensity, notes
        FROM exercise_logs
        WHERE user_id = $1
-         AND timestamp >= DATE_TRUNC('day', NOW() AT TIME ZONE '${userTimezone}') - INTERVAL '${days} days'
-         AND timestamp < DATE_TRUNC('day', NOW() AT TIME ZONE '${userTimezone}') + INTERVAL '1 day'
+         AND timestamp >= DATE_TRUNC('day', NOW() AT TIME ZONE '${timezone}') - INTERVAL '${days} days'
+         AND timestamp < DATE_TRUNC('day', NOW() AT TIME ZONE '${timezone}') + INTERVAL '1 day'
        ORDER BY timestamp DESC
        LIMIT $2`,
       [userId, limit]
@@ -2028,19 +2020,10 @@ export const getExerciseHistoryTool = new DynamicStructuredTool({
 
     return JSON.stringify({
       count: result.rows.length,
-      timezone: userTimezone,
+      timezone: timezone,
       sessions: result.rows.map(r => ({
         id: r.id,
-        timestamp: r.timestamp,
-        localTime: new Date(r.timestamp).toLocaleString('en-US', {
-          timeZone: userTimezone,
-          month: 'numeric',
-          day: 'numeric',
-          year: 'numeric',
-          hour: 'numeric',
-          minute: '2-digit',
-          hour12: true,
-        }),
+        timestamp: convertToUserTimezone(r.timestamp, timezone),
         description: r.description,
         activityType: r.activity_type,
         duration: r.duration_minutes,
@@ -2119,14 +2102,11 @@ export const getInsulinHistoryTool = new DynamicStructuredTool({
     days: z.number().default(7).describe('Number of days to look back'),
     purpose: z.string().optional().describe('Filter by purpose'),
     limit: z.number().default(20).describe('Max doses to return'),
+    userTimezone: z.string().optional().describe('User timezone (automatically provided)'),
   }),
-  func: async ({ userId, days, purpose, limit }) => {
-    // Get user's timezone
-    const userResult = await query(
-      'SELECT timezone FROM users WHERE id = $1',
-      [userId]
-    );
-    const userTimezone = userResult.rows[0]?.timezone || 'America/New_York';
+  func: async ({ userId, days, purpose, limit, userTimezone }) => {
+    // Use provided timezone or fallback
+    const timezone = userTimezone || 'America/New_York';
 
     // Use date arithmetic to get full calendar days, not just 24-hour periods
     // This ensures "yesterday" means "all of yesterday" not "last 24 hours"
@@ -2134,8 +2114,8 @@ export const getInsulinHistoryTool = new DynamicStructuredTool({
       SELECT id, timestamp, insulin_type, brand_name, units, purpose, notes
       FROM insulin_doses
       WHERE user_id = $1
-        AND timestamp >= DATE_TRUNC('day', NOW() AT TIME ZONE '${userTimezone}') - INTERVAL '${days} days'
-        AND timestamp < DATE_TRUNC('day', NOW() AT TIME ZONE '${userTimezone}') + INTERVAL '1 day'
+        AND timestamp >= DATE_TRUNC('day', NOW() AT TIME ZONE '${timezone}') - INTERVAL '${days} days'
+        AND timestamp < DATE_TRUNC('day', NOW() AT TIME ZONE '${timezone}') + INTERVAL '1 day'
     `;
     const params = [userId];
 
@@ -2149,42 +2129,12 @@ export const getInsulinHistoryTool = new DynamicStructuredTool({
 
     const result = await query(queryText, params);
 
-    // Debug logging
-    if (result.rows.length > 0) {
-      const firstRow = result.rows[0];
-      console.log('=== TIMEZONE DEBUG ===');
-      console.log('Raw timestamp from DB:', firstRow.timestamp);
-      console.log('Type:', typeof firstRow.timestamp);
-      console.log('As Date:', new Date(firstRow.timestamp));
-      console.log('As ISO:', new Date(firstRow.timestamp).toISOString());
-      console.log('User timezone:', userTimezone);
-      console.log('Formatted:', new Date(firstRow.timestamp).toLocaleString('en-US', {
-        timeZone: userTimezone,
-        month: 'numeric',
-        day: 'numeric',
-        year: 'numeric',
-        hour: 'numeric',
-        minute: '2-digit',
-        hour12: true,
-      }));
-      console.log('===================');
-    }
-
     return JSON.stringify({
       count: result.rows.length,
-      timezone: userTimezone,
+      timezone: timezone,
       doses: result.rows.map(r => ({
         id: r.id,
-        timestamp: r.timestamp,
-        localTime: new Date(r.timestamp).toLocaleString('en-US', {
-          timeZone: userTimezone,
-          month: 'numeric',
-          day: 'numeric',
-          year: 'numeric',
-          hour: 'numeric',
-          minute: '2-digit',
-          hour12: true,
-        }),
+        timestamp: convertToUserTimezone(r.timestamp, timezone),
         type: r.insulin_type,
         brand: r.brand_name,
         units: parseFloat(r.units),

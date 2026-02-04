@@ -329,7 +329,7 @@ This user has LADA (Latent Autoimmune Diabetes in Adults):
 
   // Define the tool execution node
   async function toolNode(state: AgentState): Promise<Partial<AgentState>> {
-    const { messages, userId } = state;
+    const { messages, userId, userContext } = state;
     const lastMessage = messages[messages.length - 1];
 
     if (!lastMessage || !('tool_calls' in lastMessage) || !lastMessage.tool_calls?.length) {
@@ -351,9 +351,13 @@ This user has LADA (Latent Autoimmune Diabetes in Adults):
       }
 
       try {
-        // Add userId to tool arguments
-        const argsWithUserId = { ...toolCall.args, userId };
-        const result = await tool.invoke(argsWithUserId);
+        // Add userId and timezone to tool arguments
+        const argsWithContext = {
+          ...toolCall.args,
+          userId,
+          userTimezone: userContext.timezone || 'America/New_York',
+        };
+        const result = await tool.invoke(argsWithContext);
 
         toolResults.push({
           role: 'tool',
