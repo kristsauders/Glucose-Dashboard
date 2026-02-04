@@ -6,9 +6,11 @@ import { AIChat } from '../components/AIChat';
  */
 export function ChatOnly() {
   return (
-    <div className="min-h-screen bg-background p-2 md:p-4">
-      <div className="max-w-4xl mx-auto h-full">
-        <AIChat />
+    <div className="fixed inset-0 bg-background flex flex-col overflow-hidden">
+      <div className="flex-1 p-2 md:p-4 overflow-hidden">
+        <div className="max-w-4xl mx-auto h-full">
+          <AIChat />
+        </div>
       </div>
     </div>
   );

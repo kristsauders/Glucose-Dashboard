@@ -56,10 +56,17 @@ export function AIChat() {
     fetchConversations();
   }, []);
 
-  // Scroll to bottom when messages change
+  // Scroll to bottom when messages change and auto-focus input
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
-  }, [messages]);
+
+    // Auto-focus input after messages load (especially useful on mobile)
+    if (messages.length > 0 || activeConversationId) {
+      setTimeout(() => {
+        inputRef.current?.focus();
+      }, 300);
+    }
+  }, [messages, activeConversationId]);
 
   const loadConversation = async (conversationId: string) => {
     try {
