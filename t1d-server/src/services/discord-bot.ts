@@ -1,7 +1,7 @@
 import { Client, GatewayIntentBits, Message, Events, Partials } from 'discord.js';
 import { env } from '../config/env.js';
 import { query } from '../config/database.js';
-import { createAgentGraph } from '../agent/graph.js';
+import { createConfiguredAgentGraph } from '../agent/graph.js';
 import { HumanMessage } from '@langchain/core/messages';
 import { logContextSize } from '../utils/token-counter.js';
 
@@ -15,7 +15,7 @@ export class DiscordBot {
   private isReady: boolean = false;
 
   constructor() {
-    this.agent = createAgentGraph();
+    this.agent = createConfiguredAgentGraph();
   }
 
   /**
@@ -199,13 +199,22 @@ export class DiscordBot {
     let fullResponse = '';
 
     for await (const chunk of stream) {
-      const nodeUpdate = chunk.agent || chunk.tools;
+      // Support both standard (agent/tools) and hybrid (analysis/synthesis/tools) modes
+      const nodeUpdate = chunk.agent || chunk.analysis || chunk.synthesis || chunk.tools;
 
       if (nodeUpdate?.messages?.length > 0) {
         const lastMessage = nodeUpdate.messages[nodeUpdate.messages.length - 1];
-        const isAIMessage = lastMessage.constructor.name === 'AIMessage';
+        const isAIMessage = lastMessage.constructor.name === 'AIMessage' ||
+                           lastMessage.constructor.name === 'AIMessageChunk';
 
-        if (isAIMessage && lastMessage.content && typeof lastMessage.content === 'string') {
+        // In hybrid mode, only use the synthesis node's response
+        const isFromSynthesis = !!chunk.synthesis;
+        const isFromStandardAgent = !!chunk.agent;
+        const isFinalMessage = !lastMessage.tool_calls || lastMessage.tool_calls.length === 0;
+
+        const shouldUse = (isFromSynthesis || isFromStandardAgent) && isFinalMessage;
+
+        if (isAIMessage && shouldUse && lastMessage.content && typeof lastMessage.content === 'string') {
           fullResponse = lastMessage.content;
         }
       }

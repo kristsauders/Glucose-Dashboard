@@ -353,10 +353,22 @@ When you find something interesting, explain the physiology:
       // Collect the generated message
       let generatedMessage = '';
       for await (const chunk of analysisStream) {
-        const nodeUpdate = chunk.agent || chunk.tools;
+        // Support both standard (agent/tools) and hybrid (analysis/synthesis/tools) modes
+        const nodeUpdate = chunk.agent || chunk.analysis || chunk.synthesis || chunk.tools;
+
         if (nodeUpdate?.messages) {
           const lastMessage = nodeUpdate.messages[nodeUpdate.messages.length - 1];
-          if (lastMessage.content && typeof lastMessage.content === 'string') {
+          const isAIMessage = lastMessage.constructor?.name === 'AIMessage' ||
+                             lastMessage.constructor?.name === 'AIMessageChunk';
+
+          // In hybrid mode, only use the synthesis node's response
+          const isFromSynthesis = !!chunk.synthesis;
+          const isFromStandardAgent = !!chunk.agent;
+          const isFinalMessage = !lastMessage.tool_calls || lastMessage.tool_calls.length === 0;
+
+          const shouldUse = (isFromSynthesis || isFromStandardAgent) && isFinalMessage;
+
+          if (isAIMessage && shouldUse && lastMessage.content && typeof lastMessage.content === 'string') {
             generatedMessage = lastMessage.content;
           }
         }
@@ -412,10 +424,22 @@ Respond with ONLY "SEND" or "DONT_SEND" (no explanation needed).`;
       // Get the decision
       let decision = '';
       for await (const chunk of decisionStream) {
-        const nodeUpdate = chunk.agent || chunk.tools;
+        // Support both standard (agent/tools) and hybrid (analysis/synthesis/tools) modes
+        const nodeUpdate = chunk.agent || chunk.analysis || chunk.synthesis || chunk.tools;
+
         if (nodeUpdate?.messages) {
           const lastMessage = nodeUpdate.messages[nodeUpdate.messages.length - 1];
-          if (lastMessage.content && typeof lastMessage.content === 'string') {
+          const isAIMessage = lastMessage.constructor?.name === 'AIMessage' ||
+                             lastMessage.constructor?.name === 'AIMessageChunk';
+
+          // In hybrid mode, only use the synthesis node's response
+          const isFromSynthesis = !!chunk.synthesis;
+          const isFromStandardAgent = !!chunk.agent;
+          const isFinalMessage = !lastMessage.tool_calls || lastMessage.tool_calls.length === 0;
+
+          const shouldUse = (isFromSynthesis || isFromStandardAgent) && isFinalMessage;
+
+          if (isAIMessage && shouldUse && lastMessage.content && typeof lastMessage.content === 'string') {
             decision = lastMessage.content.trim().toUpperCase();
           }
         }
