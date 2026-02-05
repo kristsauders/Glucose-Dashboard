@@ -148,7 +148,7 @@ export function SummaryStats({ readings, dailyMetrics }: SummaryStatsProps) {
   };
 
   return (
-    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-5">
+    <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-3 md:gap-4 lg:gap-5">
       {stats.map((stat, index) => {
         const Icon = stat.icon;
         return (
@@ -162,20 +162,20 @@ export function SummaryStats({ readings, dailyMetrics }: SummaryStatsProps) {
               className="cursor-pointer transition-all hover:shadow-lg hover:scale-[1.02] active:scale-[0.98]"
               onClick={() => scrollToChart(stat.chartId)}
             >
-              <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-                <CardTitle className="text-sm font-medium">
+              <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-1.5 md:pb-2">
+                <CardTitle className="text-xs md:text-sm font-medium leading-tight">
                   {stat.title}
                 </CardTitle>
-                <div className={`p-2 rounded-lg ${stat.bgColor}`}>
-                  <Icon className={`h-4 w-4 ${stat.color}`} />
+                <div className={`p-1.5 md:p-2 rounded-lg ${stat.bgColor} shrink-0`}>
+                  <Icon className={`h-3.5 w-3.5 md:h-4 md:w-4 ${stat.color}`} />
                 </div>
               </CardHeader>
-              <CardContent>
-                <div className={`text-2xl font-bold ${stat.color}`}>
+              <CardContent className="pt-1 md:pt-2">
+                <div className={`text-xl md:text-2xl font-bold ${stat.color} leading-tight`}>
                   {stat.value}
                 </div>
                 {stat.subtitle && (
-                  <p className="text-xs text-muted-foreground mt-1">
+                  <p className="text-[10px] md:text-xs text-muted-foreground mt-0.5 md:mt-1">
                     {stat.subtitle}
                   </p>
                 )}
