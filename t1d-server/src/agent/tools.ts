@@ -3,6 +3,7 @@ import { z } from 'zod';
 import { query } from '../config/database.js';
 import { discordService } from '../services/discord.js';
 import { pushNotificationService } from '../services/push-notification-service.js';
+import { reportingService } from '../services/reporting-service.js';
 import {
   detectMealResponse,
   detectBasalAdequacy,
@@ -2228,17 +2229,38 @@ const getDailyReportTool = new DynamicStructuredTool({
       // Default to yesterday if no date specified
       const reportDate = date || new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString().split('T')[0];
 
-      const result = await query(
+      let result = await query(
         `SELECT * FROM daily_reports
          WHERE user_id = $1 AND report_date = $2`,
         [userId, reportDate]
       );
 
+      // If report doesn't exist, generate it on-demand
       if (result.rows.length === 0) {
-        return JSON.stringify({
-          found: false,
-          message: `No daily report found for ${reportDate}. Reports may not have been generated yet.`,
-        });
+        console.log(`📊 Daily report for ${reportDate} not found, generating on-demand...`);
+        try {
+          await reportingService.generateDailyReportNow(userId, reportDate);
+
+          // Fetch the newly generated report
+          result = await query(
+            `SELECT * FROM daily_reports
+             WHERE user_id = $1 AND report_date = $2`,
+            [userId, reportDate]
+          );
+
+          if (result.rows.length === 0) {
+            return JSON.stringify({
+              found: false,
+              message: `Unable to generate daily report for ${reportDate}. There may be insufficient data for that date.`,
+            });
+          }
+        } catch (error) {
+          console.error('Error generating daily report on-demand:', error);
+          return JSON.stringify({
+            found: false,
+            message: `Failed to generate daily report for ${reportDate}: ${error instanceof Error ? error.message : 'Unknown error'}`,
+          });
+        }
       }
 
       const report = result.rows[0];
@@ -2314,17 +2336,38 @@ const getWeeklyReportTool = new DynamicStructuredTool({
         return lastMonday.toISOString().split('T')[0];
       })();
 
-      const result = await query(
+      let result = await query(
         `SELECT * FROM weekly_reports
          WHERE user_id = $1 AND week_start_date = $2`,
         [userId, start]
       );
 
+      // If report doesn't exist, generate it on-demand
       if (result.rows.length === 0) {
-        return JSON.stringify({
-          found: false,
-          message: `No weekly report found for week starting ${start}. Reports may not have been generated yet.`,
-        });
+        console.log(`📊 Weekly report for week starting ${start} not found, generating on-demand...`);
+        try {
+          await reportingService.generateWeeklyReportNow(userId, start);
+
+          // Fetch the newly generated report
+          result = await query(
+            `SELECT * FROM weekly_reports
+             WHERE user_id = $1 AND week_start_date = $2`,
+            [userId, start]
+          );
+
+          if (result.rows.length === 0) {
+            return JSON.stringify({
+              found: false,
+              message: `Unable to generate weekly report for week starting ${start}. There may be insufficient data for that week.`,
+            });
+          }
+        } catch (error) {
+          console.error('Error generating weekly report on-demand:', error);
+          return JSON.stringify({
+            found: false,
+            message: `Failed to generate weekly report for week starting ${start}: ${error instanceof Error ? error.message : 'Unknown error'}`,
+          });
+        }
       }
 
       const report = result.rows[0];
@@ -2395,17 +2438,38 @@ const getMonthlyReportTool = new DynamicStructuredTool({
         return lastMonthStart.toISOString().split('T')[0];
       })();
 
-      const result = await query(
+      let result = await query(
         `SELECT * FROM monthly_reports
          WHERE user_id = $1 AND month_start_date = $2`,
         [userId, start]
       );
 
+      // If report doesn't exist, generate it on-demand
       if (result.rows.length === 0) {
-        return JSON.stringify({
-          found: false,
-          message: `No monthly report found for month starting ${start}. Reports may not have been generated yet.`,
-        });
+        console.log(`📊 Monthly report for month starting ${start} not found, generating on-demand...`);
+        try {
+          await reportingService.generateMonthlyReportNow(userId, start);
+
+          // Fetch the newly generated report
+          result = await query(
+            `SELECT * FROM monthly_reports
+             WHERE user_id = $1 AND month_start_date = $2`,
+            [userId, start]
+          );
+
+          if (result.rows.length === 0) {
+            return JSON.stringify({
+              found: false,
+              message: `Unable to generate monthly report for month starting ${start}. There may be insufficient data for that month.`,
+            });
+          }
+        } catch (error) {
+          console.error('Error generating monthly report on-demand:', error);
+          return JSON.stringify({
+            found: false,
+            message: `Failed to generate monthly report for month starting ${start}: ${error instanceof Error ? error.message : 'Unknown error'}`,
+          });
+        }
       }
 
       const report = result.rows[0];

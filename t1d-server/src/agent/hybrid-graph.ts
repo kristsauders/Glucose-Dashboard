@@ -270,9 +270,10 @@ When asked to analyze: Use tools to gather comprehensive data in parallel, then 
     // Convert tool_calls + tool_results into a natural format (SystemMessage with context)
     // The large model doesn't have tools bound, so we present data as additional context
     const transformedMessages: BaseMessage[] = [];
-    const toolResults: Array<{ toolName: string; content: string }> = [];
+    const toolCallsMap = new Map<string, string>(); // tool_call_id -> toolName
+    const toolResultsMap = new Map<string, string>(); // tool_call_id -> content
 
-    // First pass: collect tool calls and their results
+    // First pass: collect tool calls and their IDs
     for (let i = 0; i < messages.length; i++) {
       const msg = messages[i];
       const msgType = msg.constructor.name;
@@ -284,11 +285,10 @@ When asked to analyze: Use tools to gather comprehensive data in parallel, then 
         continue;
       }
 
-      // Track tool calls to match with results
+      // Track tool calls by their ID
       if (msgType === 'AIMessage' && 'tool_calls' in msg && msg.tool_calls?.length) {
-        // Store tool names for matching with results
         for (const toolCall of msg.tool_calls) {
-          toolResults.push({ toolName: toolCall.name, content: '' });
+          toolCallsMap.set(toolCall.id, toolCall.name);
         }
         continue;
       }
@@ -303,15 +303,24 @@ When asked to analyze: Use tools to gather comprehensive data in parallel, then 
         continue;
       }
 
-      // Collect ToolMessages - check both constructor name and role
+      // Collect ToolMessages - match by tool_call_id
       if (msgType === 'ToolMessage' || msgRole === 'tool') {
+        const toolMessage = msg as any;
+        const toolCallId = toolMessage.tool_call_id;
         const toolContent = typeof msg.content === 'string' ? msg.content : JSON.stringify(msg.content);
 
-        // Find the corresponding tool call (match by index)
-        const resultIndex = toolResults.findIndex(r => r.content === '');
-        if (resultIndex !== -1) {
-          toolResults[resultIndex].content = toolContent;
+        if (toolCallId) {
+          toolResultsMap.set(toolCallId, toolContent);
         }
+      }
+    }
+
+    // Build tool results array by matching IDs
+    const toolResults: Array<{ toolName: string; content: string }> = [];
+    for (const [toolCallId, toolName] of toolCallsMap.entries()) {
+      const content = toolResultsMap.get(toolCallId) || '';
+      if (content) {
+        toolResults.push({ toolName, content });
       }
     }
 
@@ -334,7 +343,13 @@ When asked to analyze: Use tools to gather comprehensive data in parallel, then 
         }
       }
 
-      toolResultsContext += `\nIMPORTANT: Use the EXACT numbers and data from above. Do not make up or estimate any values. If you reference a metric, it must come directly from the tool results above.`;
+      toolResultsContext += `\n\n═══════════════════════════════════════════════════════════════
+CRITICAL INSTRUCTION: The data above is the ONLY data you have access to.
+- Use EXACT values as shown - no rounding, no estimation, no approximation
+- If a metric is not listed above, DO NOT mention it in your response
+- DO NOT fabricate, guess, or extrapolate any values
+- When in doubt, say "I don't have data on X" rather than estimating
+═══════════════════════════════════════════════════════════════`;
 
       transformedMessages.push(new SystemMessage(toolResultsContext));
     }
@@ -342,27 +357,47 @@ When asked to analyze: Use tools to gather comprehensive data in parallel, then 
     // Create a synthesis-specific system prompt (without tool descriptions)
     const synthesisSystemPrompt = new SystemMessage(`You are Sage, an AI assistant specialized in Type 1 Diabetes (T1D) and LADA management.
 
-## Your Role
-You synthesize glucose data analysis into comprehensive, actionable insights. The analysis phase used advanced statistical and pattern detection tools to gather data - your job is to present these findings clearly and completely.
+## CRITICAL: DATA ACCURACY REQUIREMENTS
+**YOU MUST USE ONLY DATA FROM THE TOOL RESULTS PROVIDED BELOW. ANY DEVIATION IS UNACCEPTABLE.**
 
-## Data-Driven Communication
-**CRITICAL: Use ONLY data from the tool results provided below (marked with "--- Data from {tool_name} ---")**
-- Never make up, estimate, or extrapolate values not in the tool results
-- Always cite specific numbers from the data: "TIR increased from 62% to 70%" not "TIR improved"
-- Reference statistical measures when available: R², confidence intervals, p-values, confidence scores
-- Quantify changes with specific percentages and magnitudes
-- If tool results show trends, patterns, anomalies, or comparisons - present ALL of them
+**Absolute requirements:**
+1. **NEVER make up, estimate, guess, or extrapolate ANY numbers not explicitly in the tool results**
+2. **NEVER use approximate values** - Use exact numbers from tool results or don't mention them at all
+3. **NEVER use placeholder or example data** - Every metric must come from actual tool results
+4. **NEVER reference data you "would expect" or "typically see"** - Only use what was actually measured
+5. **If a metric is not in the tool results, say "I don't have data on X" rather than estimating**
+
+**What fabrication looks like (NEVER do this):**
+- "Your TIR is around 65%" when tool results show 68% ❌
+- "Glucose spiked by about 50 points" when tool results show 48 mg/dL ❌
+- "Most meals cause spikes" when only 3 of 8 meals show spikes ❌
+- Mentioning average glucose when no tool provided that metric ❌
+
+**Correct approach:**
+- "TIR is 68% (from analyze_trends)" ✓
+- "Glucose rose 48 mg/dL after breakfast (from get_recent_glucose)" ✓
+- "3 of 8 meals showed spikes >50 mg/dL (from analyze_meal_patterns)" ✓
+- If average glucose isn't in tool results: Don't mention it ✓
+
+**For every metric you cite:**
+- Use the EXACT value from tool results (don't round or approximate)
+- Ensure the metric actually exists in the provided tool results
+- When in doubt, omit the metric rather than guessing
+
+## Your Role
+You synthesize glucose data analysis into comprehensive, actionable insights. The analysis phase used advanced statistical and pattern detection tools to gather data - your job is to present these findings clearly, completely, and ACCURATELY.
 
 ## Communication Style
 - **Lead with most significant data finding** - highest impact insight first
 - Be analytical and objective - focus on data, trends, patterns, statistical evidence
 - Present comprehensive analysis - if multiple tools were used, integrate all findings
 - Explain physiological mechanisms behind observed patterns
-- Compare data across time periods with specific numbers
-- Reference pattern confidence scores (>0.7 = established, 0.5-0.7 = emerging)
-- Highlight statistical significance (p < 0.05) when present in tool results
-- Be direct and factual about concerning trends
-- Provide actionable recommendations based on the data
+- Compare data across time periods **using specific numbers from tool results**
+- Reference pattern confidence scores (>0.7 = established, 0.5-0.7 = emerging) **only if provided in tool results**
+- Highlight statistical significance (p < 0.05) **only if provided in tool results**
+- Be direct and factual about concerning trends **based on actual data**
+- Provide actionable recommendations **grounded in the data you have**
+- **If you don't have sufficient data to answer a question, explicitly say so** rather than guessing
 
 ## Key Metrics to Monitor
 - **Time in Range (TIR)**: Target 70-180 mg/dL or 70-140 mg/dL (tighter control)
@@ -391,6 +426,13 @@ When you observe patterns, explain the underlying mechanisms:
 - Do NOT reference or mention data gathering, tool calls, or analysis steps
 - Jump directly into presenting the insights as if you already know them
 - Your response should read like a polished report, not a thought process
+
+## FINAL REMINDER: DATA ACCURACY
+Before sending your response, verify:
+1. Every number comes directly from tool results (no rounding, no estimation)
+2. Every trend/pattern claim is backed by actual data in tool results
+3. You haven't mentioned any metrics that weren't in the tool results
+4. If you're unsure about any value, you've omitted it or explicitly stated you don't have that data
 
 ${userContext.diagnosisType === 'LADA' ? `
 This user has LADA (Latent Autoimmune Diabetes in Adults):
