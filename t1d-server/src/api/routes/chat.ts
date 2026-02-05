@@ -26,6 +26,8 @@ router.post('/stream', async (req, res, next) => {
     res.setHeader('Content-Type', 'text/event-stream');
     res.setHeader('Cache-Control', 'no-cache');
     res.setHeader('Connection', 'keep-alive');
+    res.setHeader('X-Accel-Buffering', 'no'); // Disable nginx buffering
+    res.flushHeaders(); // Flush headers immediately
 
     // Get user context
     const userResult = await query<User>(
@@ -102,18 +104,24 @@ router.post('/stream', async (req, res, next) => {
       isFirstMessage,
     });
 
-    console.log(`Running streaming agent for user ${authReq.user!.id}...`);
     const startTime = Date.now();
 
     // Send initial status
     res.write(`data: ${JSON.stringify({ type: 'status', content: 'Thinking...' })}\n\n`);
 
+    // Force flush to send data immediately
+    if (typeof (res as any).flush === 'function') {
+      (res as any).flush();
+    }
+
     let fullResponse = '';
-    let toolCallCount = 0;
-    let isFirstChunk = true;
+    let toolNames: string[] = []; // Track all tool names used
+    let isFirstTokenChunk = true;
+    let seenToolCallIds = new Set<string>(); // Track unique tool call IDs across iterations
+    let tokenCount = 0;
 
     try {
-      // Use stream() for content streaming
+      // Use both 'values' and 'messages' modes for tool tracking AND token streaming
       const stream = await agent.stream({
         messages,
         userId: authReq.user!.id,
@@ -123,116 +131,82 @@ router.post('/stream', async (req, res, next) => {
           diagnosisDate: user.diagnosis_date || undefined,
           timezone: user.timezone || undefined,
         },
+      }, {
+        streamMode: ['values', 'messages'],
       });
 
-      let lastContent = '';
       let chunkCount = 0;
-      let aiMessageCount = 0; // Track how many AI messages we've seen
-      let currentStreamingNode = null; // Track which node we're streaming from
 
       for await (const chunk of stream) {
         chunkCount++;
 
-        // Debug: Log chunk structure (only first few chunks)
-        if (chunkCount <= 3) {
-          console.log('Chunk', chunkCount, 'keys:', Object.keys(chunk));
-          console.log('Chunk', chunkCount, 'structure:', JSON.stringify(chunk, null, 2).substring(0, 500));
-        }
+        // LangGraph 1.x returns tuples: [streamMode, data]
+        if (Array.isArray(chunk) && chunk.length === 2) {
+          const [mode, data] = chunk;
 
-        // LangGraph streams chunks keyed by node name
-        // Standard graph: agent or tools
-        // Hybrid graph: analysis, tools, or synthesis
-        const nodeUpdate = chunk.agent || chunk.analysis || chunk.synthesis || chunk.tools;
+          // Handle 'values' mode - for tool tracking
+          if (mode === 'values' && data && typeof data === 'object' && 'messages' in data) {
+            const messages = data.messages;
 
-        if (!nodeUpdate) {
-          if (chunkCount <= 5) {
-            console.log('Warning: No nodeUpdate found in chunk', chunkCount);
-          }
-          continue;
-        }
+            if (Array.isArray(messages) && messages.length > 0) {
+              const lastMessage = messages[messages.length - 1];
 
-        if (nodeUpdate && nodeUpdate.messages && nodeUpdate.messages.length > 0) {
-          if (chunkCount <= 3) {
-            console.log('Chunk', chunkCount, 'has', nodeUpdate.messages.length, 'messages');
-          }
+              // Check for tool calls
+              if (lastMessage?.tool_calls && lastMessage.tool_calls.length > 0) {
+                const newToolCalls = lastMessage.tool_calls.filter((tc: any) => !seenToolCallIds.has(tc.id));
 
-          const lastMessage = nodeUpdate.messages[nodeUpdate.messages.length - 1];
+                if (newToolCalls.length > 0) {
+                  newToolCalls.forEach((tc: any) => {
+                    seenToolCallIds.add(tc.id);
+                    toolNames.push(tc.name);
+                  });
 
-          // Process both AIMessage and AIMessageChunk instances
-          const isAIMessage = lastMessage.constructor.name === 'AIMessage' ||
-                             lastMessage.constructor.name === 'AIMessageChunk';
+                  const toolNamesStr = newToolCalls.map((tc: any) => tc.name).join(', ');
+                  res.write(`data: ${JSON.stringify({ type: 'status', content: `Using tool: ${toolNamesStr}` })}\n\n`);
 
-          if (chunkCount <= 5) {
-            console.log('Chunk', chunkCount, 'message type:', lastMessage.constructor.name, 'has content:', !!lastMessage.content, 'content length:', lastMessage.content?.length || 0);
-            if (lastMessage.content) {
-              console.log('Chunk', chunkCount, 'content preview:', JSON.stringify(lastMessage.content).substring(0, 100));
-            }
-          }
-
-          if (isAIMessage) {
-            // Track AI message count
-            aiMessageCount++;
-
-            // Debug tool calls
-            if (chunkCount <= 5) {
-              console.log('Chunk', chunkCount, 'tool_calls:', lastMessage.tool_calls);
-              console.log('Chunk', chunkCount, 'tool_calls length:', lastMessage.tool_calls?.length || 0);
-            }
-
-            // Check for tool calls
-            if (lastMessage.tool_calls && lastMessage.tool_calls.length > 0) {
-              const newToolCalls = lastMessage.tool_calls.length - toolCallCount;
-              if (newToolCalls > 0) {
-                toolCallCount = lastMessage.tool_calls.length;
-                const toolNames = lastMessage.tool_calls.slice(-newToolCalls).map((tc: any) => tc.name).join(', ');
-                res.write(`data: ${JSON.stringify({ type: 'status', content: `Using tool: ${toolNames}` })}\n\n`);
-              }
-            }
-
-            // Only stream content from the SYNTHESIS node (hybrid) or final message (standard)
-            // In hybrid mode, skip the "Analysis complete" from analysis node
-            const isFromSynthesis = !!chunk.synthesis;
-            const isFromStandardAgent = !!chunk.agent;
-            const isFinalMessage = !lastMessage.tool_calls || lastMessage.tool_calls.length === 0;
-
-            // Stream if: (synthesis node) OR (standard agent with no tool calls)
-            const shouldStream = (isFromSynthesis || isFromStandardAgent) && isFinalMessage;
-
-            if (shouldStream && lastMessage.content && typeof lastMessage.content === 'string') {
-              // Detect node transition - reset lastContent when switching to a new node
-              const nodeKey = isFromSynthesis ? 'synthesis' : 'agent';
-              if (currentStreamingNode !== nodeKey) {
-                console.log(`Switching to ${nodeKey} node, resetting lastContent`);
-                currentStreamingNode = nodeKey;
-                lastContent = '';
-              }
-
-              const currentContent = lastMessage.content;
-
-              if (currentContent.length > lastContent.length) {
-                const delta = currentContent.slice(lastContent.length);
-                lastContent = currentContent;
-                fullResponse = currentContent;
-
-                if (isFirstChunk) {
-                  res.write(`data: ${JSON.stringify({ type: 'status', content: 'Responding...' })}\n\n`);
-                  isFirstChunk = false;
+                  if (typeof (res as any).flush === 'function') {
+                    (res as any).flush();
+                  }
                 }
+              }
+            }
+          }
 
-                res.write(`data: ${JSON.stringify({ type: 'content', content: delta })}\n\n`);
+          // Handle 'messages' mode - for token streaming
+          if (mode === 'messages') {
+            // data is a tuple: [messageChunk, metadata]
+            if (Array.isArray(data) && data.length === 2) {
+              const [messageChunk, metadata] = data;
+
+              // Only stream tokens from synthesis node
+              if (metadata && metadata.langgraph_node === 'synthesis') {
+                if (messageChunk?.content) {
+                  tokenCount++;
+                  const content = typeof messageChunk.content === 'string' ? messageChunk.content : '';
+
+                  if (content && content.length > 0) {
+                    fullResponse += content;
+
+                    if (isFirstTokenChunk) {
+                      res.write(`data: ${JSON.stringify({ type: 'status', content: 'Responding...' })}\n\n`);
+                      isFirstTokenChunk = false;
+                    }
+
+                    // Send the token immediately
+                    res.write(`data: ${JSON.stringify({ type: 'content', content: content })}\n\n`);
+
+                    if (typeof (res as any).flush === 'function') {
+                      (res as any).flush();
+                    }
+                  }
+                }
               }
             }
           }
         }
       }
 
-      console.log('\n=== Stream Complete ===');
-      console.log('Total chunks:', chunkCount);
-      console.log('Final fullResponse length:', fullResponse.length);
-      console.log('Full response preview:', fullResponse.substring(0, 200));
-
       const duration = Date.now() - startTime;
-      console.log(`✓ Streaming agent completed in ${duration}ms`);
 
       // Save messages to database with conversation_id
       // Insert user message first
@@ -258,7 +232,8 @@ router.post('/stream', async (req, res, next) => {
           JSON.stringify({
             timestamp: new Date().toISOString(),
             duration,
-            toolCalls: toolCallCount,
+            toolCalls: toolNames.length,
+            toolNames,
           }),
         ]
       );
@@ -277,10 +252,10 @@ router.post('/stream', async (req, res, next) => {
         );
       }
 
-      // Send completion event with conversationId
+      // Send completion event with conversationId and tool names
       res.write(`data: ${JSON.stringify({
         type: 'done',
-        metadata: { duration, toolCalls: toolCallCount, conversationId }
+        metadata: { duration, toolCalls: toolNames.length, toolNames, conversationId }
       })}\n\n`);
 
     } catch (error) {
@@ -362,7 +337,6 @@ router.post('/', async (req, res, next) => {
     ];
 
     // Run agent
-    console.log(`Running agent for user ${authReq.user!.id}...`);
     const startTime = Date.now();
 
     const result = await agent.invoke({
@@ -377,7 +351,6 @@ router.post('/', async (req, res, next) => {
     });
 
     const duration = Date.now() - startTime;
-    console.log(`✓ Agent completed in ${duration}ms`);
 
     // Get the assistant's response
     const assistantMessage = result.messages[result.messages.length - 1];

@@ -15,6 +15,7 @@ export interface Message {
     timestamp: string;
     duration?: number;
     toolCalls?: number;
+    toolNames?: string[];
   };
   created_at: string;
 }

@@ -237,33 +237,9 @@ When asked to analyze: Use tools to gather comprehensive data in parallel, then 
       };
     }
 
-    console.log(`[analysisNode] Iteration ${currentIteration + 1}/8 - Invoking small model for tool calling/analysis`);
-
-    // Detailed logging to debug context overflow
-    console.log(`  State messages count: ${messages.length}`);
-    console.log(`  Messages to send count: ${messagesToSend.length}`);
-
-    // Log size of each message type
-    const messageSizes = messagesToSend.map((msg, idx) => {
-      const type = msg.constructor.name;
-      const size = JSON.stringify(msg).length;
-      return { idx, type, chars: size, tokens: Math.round(size / 4) };
-    });
-    const toolMessages = messageSizes.filter(m => m.type === 'ToolMessage');
+    // Track context size for metrics
     const totalSize = JSON.stringify(messagesToSend).length;
     const totalTokens = Math.round(totalSize / 4);
-
-    console.log(`  Total context: ${totalSize} chars (~${totalTokens} tokens)`);
-    console.log(`  Tool messages: ${toolMessages.length}, avg size: ${toolMessages.length > 0 ? Math.round(toolMessages.reduce((sum, m) => sum + m.chars, 0) / toolMessages.length) : 0} chars`);
-
-    if (totalSize > 100000) {
-      console.log('  ⚠️  Context very large! Message breakdown:');
-      messageSizes.forEach(m => {
-        if (m.chars > 10000) {
-          console.log(`    [${m.idx}] ${m.type}: ${m.chars} chars (${m.tokens} tokens)`);
-        }
-      });
-    }
 
     // Track context size for this iteration
     const contextMetric = {
@@ -289,8 +265,6 @@ When asked to analyze: Use tools to gather comprehensive data in parallel, then 
   async function synthesisNode(state: AgentState): Promise<Partial<AgentState>> {
     const { messages, userContext } = state;
 
-    console.log('[synthesisNode] Invoking large model for final message synthesis');
-
     // Transform the conversation for the synthesis model
     // Convert tool_calls + tool_results into a natural format (SystemMessage with context)
     // The large model doesn't have tools bound, so we present data as additional context
@@ -298,14 +272,10 @@ When asked to analyze: Use tools to gather comprehensive data in parallel, then 
     const toolResults: Array<{ toolName: string; content: string }> = [];
 
     // First pass: collect tool calls and their results
-    console.log(`[synthesisNode] Processing ${messages.length} messages from state`);
-
     for (let i = 0; i < messages.length; i++) {
       const msg = messages[i];
       const msgType = msg.constructor.name;
       const msgRole = 'role' in msg ? (msg as any).role : undefined;
-
-      console.log(`  [synthesisNode] Message ${i}: type=${msgType}, role=${msgRole}, hasContent=${!!msg.content}`);
 
       // Keep HumanMessages (user questions)
       if (msgType === 'HumanMessage') {
@@ -315,10 +285,8 @@ When asked to analyze: Use tools to gather comprehensive data in parallel, then 
 
       // Track tool calls to match with results
       if (msgType === 'AIMessage' && 'tool_calls' in msg && msg.tool_calls?.length) {
-        console.log(`  [synthesisNode] Found AIMessage with ${msg.tool_calls.length} tool calls`);
         // Store tool names for matching with results
         for (const toolCall of msg.tool_calls) {
-          console.log(`    - Tool call: ${toolCall.name}`);
           toolResults.push({ toolName: toolCall.name, content: '' });
         }
         continue;
@@ -337,20 +305,11 @@ When asked to analyze: Use tools to gather comprehensive data in parallel, then 
       // Collect ToolMessages - check both constructor name and role
       if (msgType === 'ToolMessage' || msgRole === 'tool') {
         const toolContent = typeof msg.content === 'string' ? msg.content : JSON.stringify(msg.content);
-        console.log(`  [synthesisNode] Found tool result: length=${toolContent.length} chars`);
-
-        // Check if content was truncated
-        if (toolContent.includes('[... truncated')) {
-          console.log(`  [synthesisNode] WARNING: Tool result was truncated`);
-        }
 
         // Find the corresponding tool call (match by index)
         const resultIndex = toolResults.findIndex(r => r.content === '');
         if (resultIndex !== -1) {
-          console.log(`  [synthesisNode] Matched to tool call ${resultIndex}: ${toolResults[resultIndex].toolName}`);
           toolResults[resultIndex].content = toolContent;
-        } else {
-          console.log(`  [synthesisNode] WARNING: Could not match tool result to tool call (all slots filled or no slots)`);
         }
       }
     }
@@ -358,13 +317,10 @@ When asked to analyze: Use tools to gather comprehensive data in parallel, then 
     // Format tool results into a clear, structured context
     let toolResultsContext = '';
     if (toolResults.length > 0) {
-      console.log(`[synthesisNode] Formatting ${toolResults.length} tool results for synthesis`);
-
       toolResultsContext = '\n\nThe analysis phase gathered the following data:\n';
 
       for (let i = 0; i < toolResults.length; i++) {
         const { toolName, content } = toolResults[i];
-        console.log(`  [synthesisNode] Tool ${i + 1}: ${toolName}, content length: ${content.length} chars`);
 
         // Parse JSON if possible for better formatting
         try {
@@ -380,13 +336,7 @@ When asked to analyze: Use tools to gather comprehensive data in parallel, then 
       toolResultsContext += `\nIMPORTANT: Use the EXACT numbers and data from above. Do not make up or estimate any values. If you reference a metric, it must come directly from the tool results above.`;
 
       transformedMessages.push(new SystemMessage(toolResultsContext));
-
-      console.log(`[synthesisNode] Tool results context length: ${toolResultsContext.length} chars`);
-    } else {
-      console.log(`[synthesisNode] WARNING: No tool results found!`);
     }
-
-    console.log(`[synthesisNode] Transformed messages: ${messages.length} → ${transformedMessages.length}`);
 
     // Create a synthesis-specific system prompt (without tool descriptions)
     const synthesisSystemPrompt = new SystemMessage(`You are Sage, an AI assistant specialized in Type 1 Diabetes (T1D) and LADA management.
@@ -444,17 +394,12 @@ This user has LADA (Latent Autoimmune Diabetes in Adults):
       ...transformedMessages,
     ];
 
+    // Use invoke - streaming handles token-by-token via streamMode: 'messages'
     const response = await providers.largeModel.invoke(messagesToSend);
-
-    console.log(`[synthesisNode] Response received, length: ${typeof response.content === 'string' ? response.content.length : 0} chars`);
-    if (typeof response.content === 'string' && response.content.length > 0) {
-      console.log(`[synthesisNode] Content preview: ${response.content.substring(0, 200)}...`);
-    }
 
     // Log context size summary statistics
     logContextSummary(state.contextMetrics || []);
 
-    // Only return NEW message, not the full array
     return {
       messages: [response],
     };
@@ -468,8 +413,6 @@ This user has LADA (Latent Autoimmune Diabetes in Adults):
     if (!lastMessage || !('tool_calls' in lastMessage) || !lastMessage.tool_calls?.length) {
       return {};
     }
-
-    console.log(`[toolNode] Executing ${lastMessage.tool_calls.length} tool(s) in parallel`);
 
     // Execute all tools in parallel for maximum speed
     const toolResults: BaseMessage[] = await Promise.all(
@@ -508,8 +451,6 @@ This user has LADA (Latent Autoimmune Diabetes in Adults):
       })
     );
 
-    console.log(`[toolNode] Completed ${toolResults.length} tool execution(s)`);
-
     // Only return NEW tool results, not the full message array
     // The state reducer will concat them
     return {
@@ -522,24 +463,17 @@ This user has LADA (Latent Autoimmune Diabetes in Adults):
     const { messages, readyForSynthesis } = state;
     const lastMessage = messages[messages.length - 1];
 
-    console.log('[shouldContinue] Evaluating routing:');
-    console.log('  - readyForSynthesis:', readyForSynthesis);
-    console.log('  - Has tool_calls:', (lastMessage as any)?.tool_calls?.length || 0);
-
     // If the analysis node indicated it's ready for synthesis (no more tool calls)
     if (readyForSynthesis) {
-      console.log('  → Routing to synthesis (using large model)');
       return 'synthesis';
     }
 
     // Check if there are tool calls to execute
     if (lastMessage && 'tool_calls' in lastMessage && lastMessage.tool_calls?.length) {
-      console.log('  → Routing to tools');
       return 'tools';
     }
 
     // Shouldn't reach here, but just in case
-    console.log('  → Routing to END');
     return END;
   }
 

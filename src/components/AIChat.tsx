@@ -28,6 +28,7 @@ export function AIChat() {
   const [showSidebar, setShowSidebar] = useState(true);
   const [editingTitleId, setEditingTitleId] = useState<string | null>(null);
   const [editingTitleValue, setEditingTitleValue] = useState('');
+  const [expandedToolsMessageId, setExpandedToolsMessageId] = useState<string | null>(null);
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLInputElement>(null);
 
@@ -80,7 +81,6 @@ export function AIChat() {
         loadConversation(conversationId);
         // Clear URL parameter after loading
         setSearchParams({});
-        console.log('[AIChat] Loaded conversation from deep-link:', conversationId);
       }
     }
   }, [searchParams, conversations]);
@@ -92,7 +92,6 @@ export function AIChat() {
         const conversationId = event.data.conversationId;
         if (conversationId && conversations.find(c => c.id === conversationId)) {
           loadConversation(conversationId);
-          console.log('[AIChat] Loaded conversation from service worker message:', conversationId);
         }
       }
     };
@@ -291,6 +290,7 @@ export function AIChat() {
           timestamp: new Date().toISOString(),
           duration: metadata.duration,
           toolCalls: metadata.toolCalls,
+          toolNames: metadata.toolNames || [],
         },
         created_at: new Date().toISOString(),
       };
@@ -545,9 +545,26 @@ export function AIChat() {
                       </span>
                       {message.metadata.toolCalls !== undefined &&
                         message.metadata.toolCalls > 0 && (
-                          <span className="text-primary">
-                            • {message.metadata.toolCalls} tool{message.metadata.toolCalls !== 1 ? 's' : ''} used
-                          </span>
+                          <div className="relative">
+                            <button
+                              onClick={() => setExpandedToolsMessageId(
+                                expandedToolsMessageId === message.id ? null : message.id
+                              )}
+                              className="text-primary hover:underline cursor-pointer"
+                            >
+                              • {message.metadata.toolCalls} tool{message.metadata.toolCalls !== 1 ? 's' : ''} used
+                            </button>
+                            {expandedToolsMessageId === message.id && message.metadata.toolNames && message.metadata.toolNames.length > 0 && (
+                              <div className="absolute bottom-full left-0 mb-1 bg-popover border rounded-md shadow-md p-2 z-10 min-w-[200px]">
+                                <div className="text-xs font-semibold mb-1">Tools used:</div>
+                                <ul className="space-y-0.5">
+                                  {message.metadata.toolNames.map((tool: string, idx: number) => (
+                                    <li key={idx} className="text-xs">• {tool}</li>
+                                  ))}
+                                </ul>
+                              </div>
+                            )}
+                          </div>
                         )}
                     </div>
                   </div>

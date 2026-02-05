@@ -43,7 +43,17 @@ const app = express();
 const connections = new Set<any>();
 
 // Middleware
-app.use(compression()); // Enable gzip compression for all responses
+// Enable gzip compression for all responses EXCEPT SSE endpoints (which need real-time streaming)
+app.use(compression({
+  filter: (req, res) => {
+    // Don't compress Server-Sent Events
+    if (req.path === '/api/chat/stream') {
+      return false;
+    }
+    // Use default compression filter for everything else
+    return compression.filter(req, res);
+  }
+}));
 app.use(cors({
   origin: env.CORS_ORIGIN,
   credentials: true,
