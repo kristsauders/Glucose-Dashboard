@@ -749,7 +749,7 @@ export const sendProactiveMessageTool = new DynamicStructuredTool({
       if (preferences.proactive_enabled) {
         // 5. Send push notification with deep-link
         await pushNotificationService.sendToUser(userId, {
-          title: 'Sage',
+          title: title,
           body: content.length > 100 ? content.substring(0, 97) + '...' : content,
           icon: '/sage-icon.png',
           badge: '/sage-badge.png',

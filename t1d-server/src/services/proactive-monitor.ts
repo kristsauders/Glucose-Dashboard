@@ -284,31 +284,38 @@ export class ProactiveMonitor {
         timeContext = "It's bedtime (10pm). Write a goodnight message reviewing today's glucose and overnight preparation.";
       }
 
-      const analysisPrompt = `Perform glucose analysis and share insights proactively. ${timeContext}
+      const analysisPrompt = `Perform comprehensive glucose analysis and share data-driven insights proactively. ${timeContext}
 
-**Analysis Framework - Use 4-6 tools maximum to stay within context limits:**
+**Analysis Framework - Use 5-7 tools for comprehensive insights (prioritize advanced analysis):**
 
-1. **Start with:** get_user_context, analyze_live_trend
+1. **Always start with (2 tools):**
+   - retrieve_user_memory (understand user context and preferences)
+   - analyze_live_trend (current glucose status)
 
-2. **Then choose 2-3 from:**
-   - analyze_trends (7-day trends for average_glucose or time_in_range)
-   - detect_anomalies (last 3-7 days)
-   - analyze_meal_patterns OR analyze_basal_patterns OR analyze_exercise_patterns (pick most relevant)
-   - compare_periods_statistical (this week vs last week)
+2. **Advanced analysis - choose 3-4 from these (PRIORITIZE statistical and pattern tools):**
+   - analyze_trends (7-day trend + forecast for average_glucose or time_in_range) - USE THIS for trend context
+   - detect_anomalies (last 3-7 days, sensitivity: medium) - USE THIS to identify unusual events
+   - compare_periods_statistical (this week vs last week) - USE THIS for progress tracking
+   - get_detected_patterns (all patterns with confidence >0.5) - USE THIS to reference established correlations
+   - analyze_meal_patterns (if discussing meals or post-meal glucose)
+   - analyze_basal_patterns (if discussing overnight or fasting glucose)
+   - analyze_exercise_patterns (if user exercises regularly)
 
-3. **Optional (only if needed):**
-   - get_detected_patterns (check patterns with confidence >0.5)
-   - check_alert_conditions
+3. **Tool selection priority:**
+   - ALWAYS use: retrieve_user_memory, analyze_live_trend, analyze_trends
+   - HIGHLY RECOMMENDED: detect_anomalies, compare_periods_statistical, get_detected_patterns
+   - USE ONE OF: analyze_meal_patterns, analyze_basal_patterns, analyze_exercise_patterns based on relevance
 
-**Important:** Don't call more than 6 tools total. Be selective - choose the most relevant tools for the current time of day and recent activity
+**Target:** Use 5-7 tools to provide comprehensive, data-backed insights. Favor statistical analysis and pattern detection tools over basic data retrieval.
 
-**What to Look For:**
-- Interesting patterns (even if not concerning): meal responses, exercise effects, dawn phenomenon
-- Trend changes: Is TIR improving/worsening? Average glucose shifting?
-- Statistical findings: Are weekends different from weekdays?
-- Physiological insights: First-phase insulin loss indicators, basal drift, insulin sensitivity changes
-- New correlations: "That meal with X carbs spiked to Y but similar meal with Z timing only reached W"
-- Anomalies worth investigating: Unexplained highs/lows, unusual responses
+**What to Look For (prioritize data-backed findings):**
+- **Trends (from analyze_trends)**: Is glucose trending up/down? What's the forecast? Is trend statistically significant (R² >0.5)?
+- **Anomalies (from detect_anomalies)**: Any high-severity unusual events? Are they explained by meals/exercise/insulin or unexplained?
+- **Period comparisons (from compare_periods_statistical)**: How does this week compare to last week? Statistically significant changes (p <0.05)?
+- **Established patterns (from get_detected_patterns)**: What correlations have high confidence (>0.7)? Are there emerging patterns (0.5-0.7)?
+- **Specific pattern insights**: Meal response patterns, basal adequacy, exercise impact with specific numbers (avg spike, time to peak, TIR during pattern)
+- **Physiological insights backed by data**: First-phase insulin loss (increasing time-to-peak), basal drift (overnight rise/fall), insulin sensitivity changes (exercise correlation)
+- **New discoveries**: Previously undetected correlations or pattern shifts
 
 **Educational Explanations:**
 When you find something interesting, explain the physiology:
@@ -319,30 +326,32 @@ When you find something interesting, explain the physiology:
 - Why protein/fat delay carb absorption
 - How stress hormones affect glucose
 
-**Message Structure:**
+**Message Structure (data-first approach):**
 1. **Opening** (1-2 sentences, notification-friendly, no emoji/headers):
-   Lead with the most interesting finding or current status
-   Examples: "Found an interesting pattern: breakfast meals spike 40mg/dL less on days you exercise in the morning."
-             "Your TIR increased 8% this week compared to last week - from 62% to 70%."
-             "Detected possible first-phase insulin loss: post-meal spikes are taking longer to peak (90min vs 60min)."
+   Lead with the MOST SIGNIFICANT DATA FINDING - cite specific numbers and statistical measures
+   Examples: "Your glucose is trending down by 2.3 mg/dL per day over the past week (R²=0.78, statistically significant)."
+             "TIR increased from 62% to 70% this week vs last week (11% relative improvement, p=0.03)."
+             "Detected high-confidence pattern (0.85): breakfast meals spike to 175±15 mg/dL, peaking at 90 minutes."
+             "Found 3 anomalies this week - all unexplained highs >200 mg/dL between 2-4pm."
 
-2. **Analysis** (detailed findings):
-   - Present data and trends with specific numbers
-   - Compare to previous periods
-   - Show correlations and patterns
-   - Reference confidence levels and statistical significance
+2. **Statistical Analysis** (present tool findings with specific data):
+   - **Trends**: Direction, slope, R², forecast with confidence interval
+   - **Comparisons**: Period-to-period changes with percentages and p-values
+   - **Patterns**: Confidence scores, average responses, timing data
+   - **Anomalies**: Severity, frequency, context (explained vs unexplained)
+   - Always cite specific numbers from tool results
 
-3. **Physiological Context** (explain what's happening):
-   - Describe the mechanism behind what you observed
-   - Connect to LADA progression if relevant
-   - Explain why the pattern occurs
+3. **Physiological Context** (explain the mechanism):
+   - Describe WHY the observed pattern occurs physiologically
+   - Connect to LADA progression markers if relevant (first-phase loss, basal needs, beta cell function)
+   - Reference established diabetes physiology
 
-4. **Actionable Insights** (optional):
-   - Specific observations to watch
-   - Potential adjustments to investigate
-   - Questions to understand better
+4. **Actionable Insights** (data-backed recommendations):
+   - Specific observations to track based on the analysis
+   - Potential adjustments supported by pattern data
+   - Follow-up analysis suggestions
 
-**Tone**: Analytical, educational, data-driven. Focus on insights and explanations, not encouragement.
+**Tone**: Analytical, statistical, educational, data-driven. Lead with numbers and evidence, explain physiology, provide actionable insights.
 
 **Frequency**: Share interesting findings regularly, not just problems. Even subtle patterns or trends are worth discussing.`;
 
