@@ -527,9 +527,9 @@ export function AIChat() {
                       }`}
                     >
                       {message.role === 'user' ? (
-                        <p className="text-xs md:text-sm whitespace-pre-wrap break-words">{message.content}</p>
+                        <p className="text-[13px] md:text-sm whitespace-pre-wrap break-words">{message.content}</p>
                       ) : (
-                        <div className="text-xs md:text-sm prose prose-sm dark:prose-invert max-w-none">
+                        <div className="text-[13px] md:text-sm prose prose-sm dark:prose-invert max-w-none">
                           <ReactMarkdown
                             remarkPlugins={[remarkGfm]}
                             rehypePlugins={[rehypeHighlight]}
@@ -594,7 +594,7 @@ export function AIChat() {
                 )}
                 {streamingMessage ? (
                   <div className="bg-muted rounded-lg p-3">
-                    <div className="text-xs md:text-sm prose prose-sm dark:prose-invert max-w-none">
+                    <div className="text-[13px] md:text-sm prose prose-sm dark:prose-invert max-w-none">
                       <ReactMarkdown
                         remarkPlugins={[remarkGfm]}
                         rehypePlugins={[rehypeHighlight]}

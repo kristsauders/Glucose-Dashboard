@@ -448,8 +448,9 @@ Respond with ONLY "SEND" or "DONT_SEND" (no explanation needed).`;
             const isFinalMessage = !lastMessage.tool_calls || lastMessage.tool_calls.length === 0;
             const shouldUse = isFinalMessage;
 
-          if (isAIMessage && shouldUse && lastMessage.content && typeof lastMessage.content === 'string') {
-            decision = lastMessage.content.trim().toUpperCase();
+            if (isAIMessage && shouldUse && lastMessage.content && typeof lastMessage.content === 'string') {
+              decision = lastMessage.content.trim().toUpperCase();
+            }
           }
         }
       }
