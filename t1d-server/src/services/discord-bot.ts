@@ -194,28 +194,26 @@ export class DiscordBot {
       messages: [new HumanMessage(content)],
       userId,
       userContext: userCtx,
+    }, {
+      streamMode: 'values', // LangGraph 1.x explicit mode
     });
 
     let fullResponse = '';
 
     for await (const chunk of stream) {
-      // Support both standard (agent/tools) and hybrid (analysis/synthesis/tools) modes
-      const nodeUpdate = chunk.agent || chunk.analysis || chunk.synthesis || chunk.tools;
+      // LangGraph 1.x returns state directly in 'values' mode
+      if (chunk && typeof chunk === 'object' && 'messages' in chunk) {
+        const messages = chunk.messages;
+        if (Array.isArray(messages) && messages.length > 0) {
+          const lastMessage = messages[messages.length - 1];
+          const isAIMessage = lastMessage.constructor.name === 'AIMessage' ||
+                             lastMessage.constructor.name === 'AIMessageChunk';
+          const isFinalMessage = !lastMessage.tool_calls || lastMessage.tool_calls.length === 0;
 
-      if (nodeUpdate?.messages?.length > 0) {
-        const lastMessage = nodeUpdate.messages[nodeUpdate.messages.length - 1];
-        const isAIMessage = lastMessage.constructor.name === 'AIMessage' ||
-                           lastMessage.constructor.name === 'AIMessageChunk';
-
-        // In hybrid mode, only use the synthesis node's response
-        const isFromSynthesis = !!chunk.synthesis;
-        const isFromStandardAgent = !!chunk.agent;
-        const isFinalMessage = !lastMessage.tool_calls || lastMessage.tool_calls.length === 0;
-
-        const shouldUse = (isFromSynthesis || isFromStandardAgent) && isFinalMessage;
-
-        if (isAIMessage && shouldUse && lastMessage.content && typeof lastMessage.content === 'string') {
-          fullResponse = lastMessage.content;
+          // Only use final AI messages (from synthesis node)
+          if (isAIMessage && isFinalMessage && lastMessage.content && typeof lastMessage.content === 'string') {
+            fullResponse = lastMessage.content;
+          }
         }
       }
     }

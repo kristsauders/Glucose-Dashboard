@@ -362,28 +362,26 @@ When you find something interesting, explain the physiology:
         messages: [new HumanMessage(analysisPrompt)],
         userId: user.id,
         userContext: userCtx,
+      }, {
+        streamMode: 'values', // LangGraph 1.x explicit mode
       });
 
       // Collect the generated message
       let generatedMessage = '';
       for await (const chunk of analysisStream) {
-        // Support both standard (agent/tools) and hybrid (analysis/synthesis/tools) modes
-        const nodeUpdate = chunk.agent || chunk.analysis || chunk.synthesis || chunk.tools;
+        // LangGraph 1.x returns state directly in 'values' mode
+        if (chunk && typeof chunk === 'object' && 'messages' in chunk) {
+          const messages = chunk.messages;
+          if (Array.isArray(messages) && messages.length > 0) {
+            const lastMessage = messages[messages.length - 1];
+            const isAIMessage = lastMessage.constructor?.name === 'AIMessage' ||
+                               lastMessage.constructor?.name === 'AIMessageChunk';
+            const isFinalMessage = !lastMessage.tool_calls || lastMessage.tool_calls.length === 0;
 
-        if (nodeUpdate?.messages) {
-          const lastMessage = nodeUpdate.messages[nodeUpdate.messages.length - 1];
-          const isAIMessage = lastMessage.constructor?.name === 'AIMessage' ||
-                             lastMessage.constructor?.name === 'AIMessageChunk';
-
-          // In hybrid mode, only use the synthesis node's response
-          const isFromSynthesis = !!chunk.synthesis;
-          const isFromStandardAgent = !!chunk.agent;
-          const isFinalMessage = !lastMessage.tool_calls || lastMessage.tool_calls.length === 0;
-
-          const shouldUse = (isFromSynthesis || isFromStandardAgent) && isFinalMessage;
-
-          if (isAIMessage && shouldUse && lastMessage.content && typeof lastMessage.content === 'string') {
-            generatedMessage = lastMessage.content;
+            // Only use final AI messages (from synthesis node)
+            if (isAIMessage && isFinalMessage && lastMessage.content && typeof lastMessage.content === 'string') {
+              generatedMessage = lastMessage.content;
+            }
           }
         }
       }
@@ -433,25 +431,22 @@ Respond with ONLY "SEND" or "DONT_SEND" (no explanation needed).`;
         messages: [new HumanMessage(decisionPrompt)],
         userId: user.id,
         userContext: userCtx,
+      }, {
+        streamMode: 'values', // LangGraph 1.x explicit mode
       });
 
       // Get the decision
       let decision = '';
       for await (const chunk of decisionStream) {
-        // Support both standard (agent/tools) and hybrid (analysis/synthesis/tools) modes
-        const nodeUpdate = chunk.agent || chunk.analysis || chunk.synthesis || chunk.tools;
-
-        if (nodeUpdate?.messages) {
-          const lastMessage = nodeUpdate.messages[nodeUpdate.messages.length - 1];
-          const isAIMessage = lastMessage.constructor?.name === 'AIMessage' ||
-                             lastMessage.constructor?.name === 'AIMessageChunk';
-
-          // In hybrid mode, only use the synthesis node's response
-          const isFromSynthesis = !!chunk.synthesis;
-          const isFromStandardAgent = !!chunk.agent;
-          const isFinalMessage = !lastMessage.tool_calls || lastMessage.tool_calls.length === 0;
-
-          const shouldUse = (isFromSynthesis || isFromStandardAgent) && isFinalMessage;
+        // LangGraph 1.x returns state directly in 'values' mode
+        if (chunk && typeof chunk === 'object' && 'messages' in chunk) {
+          const messages = chunk.messages;
+          if (Array.isArray(messages) && messages.length > 0) {
+            const lastMessage = messages[messages.length - 1];
+            const isAIMessage = lastMessage.constructor?.name === 'AIMessage' ||
+                               lastMessage.constructor?.name === 'AIMessageChunk';
+            const isFinalMessage = !lastMessage.tool_calls || lastMessage.tool_calls.length === 0;
+            const shouldUse = isFinalMessage;
 
           if (isAIMessage && shouldUse && lastMessage.content && typeof lastMessage.content === 'string') {
             decision = lastMessage.content.trim().toUpperCase();
