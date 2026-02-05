@@ -10,7 +10,7 @@ import { logContextSize } from '../utils/token-counter.js';
 export class ProactiveMonitor {
   private agent: any;
   private isRunning: boolean = false;
-  private checkInterval: number = 30 * 60 * 1000; // 30 minutes for comprehensive analysis
+  private checkInterval: number = 90 * 60 * 1000; // 30 minutes for comprehensive analysis
   private intervalId: NodeJS.Timeout | null = null;
 
   constructor() {
