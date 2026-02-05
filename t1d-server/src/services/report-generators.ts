@@ -86,7 +86,7 @@ interface MonthlyReport {
  * Generates daily summaries at 8am
  */
 export class DailyReportGenerator {
-  async generateReport(userId: string, date: string): Promise<DailyReport> {
+  async generateReport(userId: string, date: string, userTimezone: string = 'America/New_York'): Promise<DailyReport> {
     console.log(`📊 Generating daily report for ${userId} on ${date}`);
 
     const reportDate = new Date(date);
@@ -166,7 +166,7 @@ export class DailyReportGenerator {
       [userId, date, nextDay.toISOString().split('T')[0]]
     );
 
-    // Overnight analysis (3am-7am)
+    // Overnight analysis (3am-7am) - using user's timezone
     const overnightResult = await query(
       `SELECT
         AVG(glucose) as avg_glucose,
@@ -176,9 +176,9 @@ export class DailyReportGenerator {
        WHERE user_id = $1
          AND timestamp >= $2
          AND timestamp < $3
-         AND EXTRACT(HOUR FROM timestamp) >= 3
-         AND EXTRACT(HOUR FROM timestamp) < 7`,
-      [userId, date, nextDay.toISOString().split('T')[0]]
+         AND EXTRACT(HOUR FROM timezone($4, timestamp)) >= 3
+         AND EXTRACT(HOUR FROM timezone($4, timestamp)) < 7`,
+      [userId, date, nextDay.toISOString().split('T')[0], userTimezone]
     );
 
     const overnight = overnightResult.rows[0];

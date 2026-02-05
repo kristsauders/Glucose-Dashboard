@@ -10,7 +10,7 @@ import { logContextSize } from '../utils/token-counter.js';
 export class ProactiveMonitor {
   private agent: any;
   private isRunning: boolean = false;
-  private checkInterval: number = 90 * 60 * 1000; // 30 minutes for comprehensive analysis
+  private checkInterval: number = 90 * 60 * 1000; // 90 minutes for comprehensive analysis
   private intervalId: NodeJS.Timeout | null = null;
 
   constructor() {
@@ -161,8 +161,17 @@ export class ProactiveMonitor {
    * Allow goodnight message around 10pm and good morning around 7am
    */
   private async shouldSkipDuringSleep(userId: string): Promise<boolean> {
+    // Get user's timezone
+    const userResult = await query(
+      `SELECT timezone FROM users WHERE id = $1`,
+      [userId]
+    );
+    const userTimezone = userResult.rows[0]?.timezone || 'America/New_York';
+
+    // Get current hour in USER'S timezone
     const now = new Date();
-    const hour = now.getHours(); // TODO: Adjust for user timezone
+    const userLocalTime = new Date(now.toLocaleString('en-US', { timeZone: userTimezone }));
+    const hour = userLocalTime.getHours();
 
     // Sleep hours: 10pm (22) to 7am (7)
     const isSleepTime = hour >= 22 || hour < 7;
@@ -246,11 +255,16 @@ export class ProactiveMonitor {
     try {
       console.log(`  Analyzing ${user.email}...`);
 
+      // Get user's timezone
+      const userTimezone = user.timezone || 'America/New_York';
+
       // PHASE 1: Analyze data and generate a message
       const now = new Date();
-      const hour = now.getHours();
+      // Convert to user's local time
+      const userLocalTime = new Date(now.toLocaleString('en-US', { timeZone: userTimezone }));
+      const hour = userLocalTime.getHours();
 
-      // Time-based context for more relevant insights
+      // Time-based context for more relevant insights (using USER'S local time)
       let timeContext = "";
       if (hour === 6) {
         timeContext = "It's early morning (6am). Write a good morning message reviewing overnight glucose and preparing for the day.";
@@ -549,10 +563,15 @@ Respond with ONLY "SEND" or "DONT_SEND" (no explanation needed).`;
    * Check if it's time for daily summary (8am in user's timezone)
    */
   private shouldSendDailySummary(user: any, lastSummaryAt: Date | null): boolean {
-    const now = new Date();
-    const userHour = now.getHours(); // TODO: Adjust for user timezone
+    // Get user's timezone
+    const userTimezone = user.timezone || 'America/New_York';
 
-    // Send at 8am
+    const now = new Date();
+    // Convert to user's local time
+    const userLocalTime = new Date(now.toLocaleString('en-US', { timeZone: userTimezone }));
+    const userHour = userLocalTime.getHours();
+
+    // Send at 8am in USER'S local timezone
     if (userHour !== 8) {
       return false;
     }

@@ -37,8 +37,12 @@ router.post('/csv', async (req, res, next) => {
 
     console.log(`Parsing CSV for user ${authReq.user!.id}...`);
 
-    // Parse CSV
-    const parsed = parseLibreCSV(csvContent);
+    // Get user's timezone
+    const userResult = await query('SELECT timezone FROM users WHERE id = $1', [authReq.user!.id]);
+    const userTimezone = userResult.rows[0]?.timezone || 'America/New_York';
+
+    // Parse CSV with user's timezone
+    const parsed = parseLibreCSV(csvContent, userTimezone);
     console.log(`Parsed CSV: ${parsed.glucoseReadings.length} glucose readings, ${parsed.meals.length} meals, ${parsed.insulin.length} insulin doses`);
 
     let insertedGlucose = 0;

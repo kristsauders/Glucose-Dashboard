@@ -140,8 +140,8 @@ class ReportingService {
     try {
       console.log('\n📊 Running daily reports...');
 
-      // Get all users
-      const usersResult = await query('SELECT id, email FROM users');
+      // Get all users with timezone
+      const usersResult = await query('SELECT id, email, timezone FROM users');
       const users = usersResult.rows;
 
       console.log(`  Processing ${users.length} users...`);
@@ -156,7 +156,8 @@ class ReportingService {
 
       for (const user of users) {
         try {
-          const report = await this.dailyGenerator.generateReport(user.id, reportDate);
+          const userTimezone = user.timezone || 'America/New_York';
+          const report = await this.dailyGenerator.generateReport(user.id, reportDate, userTimezone);
           await this.dailyGenerator.storeReport(report);
 
           // Update monitoring state
@@ -363,7 +364,11 @@ class ReportingService {
 
     console.log(`📊 Manually generating daily report for ${userId} on ${reportDate}`);
 
-    const report = await this.dailyGenerator.generateReport(userId, reportDate);
+    // Get user's timezone
+    const userResult = await query('SELECT timezone FROM users WHERE id = $1', [userId]);
+    const userTimezone = userResult.rows[0]?.timezone || 'America/New_York';
+
+    const report = await this.dailyGenerator.generateReport(userId, reportDate, userTimezone);
     await this.dailyGenerator.storeReport(report);
 
     console.log('  ✓ Daily report generated');

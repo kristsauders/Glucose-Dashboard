@@ -61,19 +61,50 @@ function parseTimestamp(timestamp: string, userTimezone: string = 'America/New_Y
     hour = 0;
   }
 
-  // Create date string in user's timezone format
-  // Format: YYYY-MM-DDTHH:MM:SS
-  const dateStr = `${year}-${month.padStart(2, '0')}-${day.padStart(2, '0')}T${hour.toString().padStart(2, '0')}:${minutes.padStart(2, '0')}:00`;
+  // Strategy: Calculate timezone offset for the specific date/time (handles DST)
+  // 1. Create a reference UTC date with the parsed components
+  const referenceUtcMillis = Date.UTC(parseInt(year), parseInt(month) - 1, parseInt(day), hour, parseInt(minutes), 0);
+  const referenceUtcDate = new Date(referenceUtcMillis);
 
-  // Parse as local date (server timezone), then get UTC
-  // Note: This assumes CSV is in the same timezone as the server
-  // For production, you'd want to use a library like date-fns-tz to handle user timezones properly
-  const localDate = new Date(dateStr);
+  // 2. Format this UTC time as it would appear in the user's timezone
+  const formatted = new Intl.DateTimeFormat('en-US', {
+    timeZone: userTimezone,
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit',
+    hour: '2-digit',
+    minute: '2-digit',
+    second: '2-digit',
+    hour12: false
+  }).format(referenceUtcDate);
 
-  return localDate.toISOString();
+  // 3. Extract components from formatted string (e.g., "01/15/2024, 03:30:00")
+  const parts = formatted.match(/(\d+)\/(\d+)\/(\d+),\s*(\d+):(\d+):(\d+)/);
+  if (!parts) {
+    throw new Error(`Failed to parse formatted date: ${formatted}`);
+  }
+
+  const [, fMonth, fDay, fYear, fHour, fMinute, fSecond] = parts;
+  const formattedUtcMillis = Date.UTC(
+    parseInt(fYear),
+    parseInt(fMonth) - 1,
+    parseInt(fDay),
+    parseInt(fHour),
+    parseInt(fMinute),
+    parseInt(fSecond)
+  );
+
+  // 4. Calculate timezone offset (handles DST correctly)
+  const tzOffsetMillis = referenceUtcMillis - formattedUtcMillis;
+
+  // 5. Apply offset to convert user's local time to UTC
+  const localTimeMillis = Date.UTC(parseInt(year), parseInt(month) - 1, parseInt(day), hour, parseInt(minutes), 0);
+  const utcMillis = localTimeMillis + tzOffsetMillis;
+
+  return new Date(utcMillis).toISOString();
 }
 
-export function parseLibreCSV(csvContent: string): ParsedCSVData {
+export function parseLibreCSV(csvContent: string, userTimezone: string = 'America/New_York'): ParsedCSVData {
   const result: ParsedCSVData = {
     glucoseReadings: [],
     meals: [],
@@ -106,7 +137,7 @@ export function parseLibreCSV(csvContent: string): ParsedCSVData {
     if (!timestamp) continue;
 
     try {
-      const isoTimestamp = parseTimestamp(timestamp);
+      const isoTimestamp = parseTimestamp(timestamp, userTimezone);
 
       // Parse glucose readings
       const glucoseValue = row['Historic Glucose mg/dL'] || row['Scan Glucose mg/dL'];

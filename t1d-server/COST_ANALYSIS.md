@@ -2,12 +2,25 @@
 
 ## Executive Summary
 
-**Current Setup**: $170.35/month (gpt-oss-120b + Sonnet 4.5, 30-min proactive)
+**Your Current Setup**:
+- **Models**: gpt-oss-120b (small) + Claude Sonnet 4.5 (large)
+- **Frequency**: Every 90 minutes (16x/day)
+- **Monthly Cost**: **$71.04/month**
+  - Small model: $1.38
+  - Large model: $69.66
+- **Context Limits**: ~32K (small) ⚠️ + 200K (large)
 
-**🎯 Best New Options:**
-- **Ultra Budget**: GPT-5 Nano + DeepSeek V3.2 = **$14.03/month** (92% savings!)
-- **Best Value**: GPT-5 Nano + Sonnet 4.5 = **$170.19/month** (same cost, 8x larger context)
-- **Free Option**: Trinity Mini + DeepSeek V3.2 = **$21.60/month** (87% savings!)
+**🎯 Best Upgrade Options:**
+
+1. **GPT-5 Nano + Sonnet 4.5** = **$71.46/month** (+$0.42)
+   - Same cost, 8x larger context (400K vs 32K)
+   - **Recommended: No-brainer upgrade**
+
+2. **GPT-5 Nano + DeepSeek V3.2** = **$7.11/month** (-$63.93, 90% savings!)
+   - Worth testing - huge savings with large context
+
+3. **Trinity Mini FREE + DeepSeek V3.2** = **$5.31/month** (-$65.73, 92% savings!)
+   - Experimental free option
 
 ---
 
@@ -47,7 +60,7 @@ The AI landscape has transformed dramatically in early 2026 with several models 
 - $15/M output tokens
 - 200K context
 
-**Proactive Monitoring**: Every 30 minutes (48x per day)
+**Proactive Monitoring**: Every 90 minutes (16x per day) ← **NEW**
 
 ---
 
@@ -69,12 +82,12 @@ The AI landscape has transformed dramatically in early 2026 with several models 
 
 ### Monthly Usage Breakdown
 
-#### Proactive Monitoring (48x/day × 30 days = 1,440 analyses)
+#### Proactive Monitoring (16x/day × 30 days = 480 analyses) ← **90 MINUTE FREQUENCY**
 
 | Component | Input Tokens | Output Tokens |
 |-----------|--------------|---------------|
-| Small model | 75M | 576k |
-| Large model | 43M | 1.15M |
+| Small model | 25M | 192k |
+| Large model | 14.4M | 384k |
 
 #### Chat Usage (estimate: 10/day × 30 days = 300 chats)
 
@@ -83,53 +96,53 @@ The AI landscape has transformed dramatically in early 2026 with several models 
 | Small model | 9M | 60k |
 | Large model | 6M | 180k |
 
-#### **Total Monthly Usage**
+#### **Total Monthly Usage (90-minute proactive)**
 
 | Component | Input Tokens | Output Tokens |
 |-----------|--------------|---------------|
-| **Small model** | **84M** | **636k** |
-| **Large model** | **49M** | **1.33M** |
+| **Small model** | **34M** | **252k** |
+| **Large model** | **20.4M** | **564k** |
 
 ---
 
 ## Cost Comparison: 2026 Large Context Options
 
-### 🆕 Option 0: GPT-5 Nano + Sonnet 4.5 (SAME COST, 8X CONTEXT!) ⭐⭐⭐
-**Proactive: Every 30 minutes**
+### 🆕 Option 0: GPT-5 Nano + Sonnet 4.5 (LOWER COST, 8X CONTEXT!) ⭐⭐⭐
+**Proactive: Every 90 minutes**
 
 | Model | Input Cost | Output Cost | Total |
 |-------|------------|-------------|-------|
-| Small (GPT-5 Nano) | 84M × $0.050 = $4.20 | 636k × $0.400 = $0.25 | $4.45 |
-| Large (Sonnet 4.5) | 49M × $3 = $147 | 1.33M × $15 = $19.95 | $166.95 |
-| **TOTAL** | | | **$171.40/month** |
+| Small (GPT-5 Nano) | 34M × $0.050 = $1.70 | 252k × $0.400 = $0.10 | $1.80 |
+| Large (Sonnet 4.5) | 20.4M × $3 = $61.20 | 564k × $15 = $8.46 | $69.66 |
+| **TOTAL** | | | **$71.46/month** |
 
 **Context Windows**: 400K (small) + 200K (large)
 
 **Pros**:
-- **Nearly identical cost** to current setup (+$1.05/month)
+- **Nearly identical cost** to current setup (+$1.22/month)
 - **8x larger context** for small model (400K vs 32K)
 - GPT-5 Nano is optimized for tool calling (faster, more accurate)
 - Can include weeks of glucose history in single analysis
 
-**Cons**: Slightly more expensive for tool iterations ($4.45 vs $3.40)
+**Cons**: Slightly more expensive for tool iterations ($1.80 vs $1.38)
 
 **Why This Is Amazing**: You get frontier-level tool calling with 400K context for basically the same price. This is a no-brainer upgrade.
 
 ---
 
 ### 🆕 Option 0B: GPT-5 Nano + DeepSeek V3.2 (ULTRA BUDGET) ⭐⭐⭐
-**Proactive: Every 30 minutes**
+**Proactive: Every 90 minutes**
 
 | Model | Input Cost | Output Cost | Total |
 |-------|------------|-------------|-------|
-| Small (GPT-5 Nano) | 84M × $0.050 = $4.20 | 636k × $0.400 = $0.25 | $4.45 |
-| Large (DeepSeek V3.2) | 49M × $0.25 = $12.25 | 1.33M × $0.38 = $0.51 | $12.76 |
-| **TOTAL** | | | **$17.21/month** |
+| Small (GPT-5 Nano) | 34M × $0.050 = $1.70 | 252k × $0.400 = $0.10 | $1.80 |
+| Large (DeepSeek V3.2) | 20.4M × $0.25 = $5.10 | 564k × $0.38 = $0.21 | $5.31 |
+| **TOTAL** | | | **$7.11/month** |
 
 **Context Windows**: 400K (small) + 164K (large)
 
 **Pros**:
-- **90% cost reduction** vs current ($170.35 → $17.21)
+- **90% cost reduction** vs current ($70.24 → $7.11)
 - Both models have huge context windows
 - DeepSeek V3.2 called "value king of 2026" - matches frontier models
 - GPT-5 Nano excellent for tool calling
@@ -143,18 +156,18 @@ The AI landscape has transformed dramatically in early 2026 with several models 
 ---
 
 ### 🆕 Option 0C: DeepSeek V3.2 + DeepSeek V3.2 (PURE VALUE)
-**Proactive: Every 30 minutes**
+**Proactive: Every 90 minutes**
 
 | Model | Input Cost | Output Cost | Total |
 |-------|------------|-------------|-------|
-| Small (DeepSeek V3.2) | 84M × $0.25 = $21.00 | 636k × $0.38 = $0.24 | $21.24 |
-| Large (DeepSeek V3.2) | 49M × $0.25 = $12.25 | 1.33M × $0.38 = $0.51 | $12.76 |
-| **TOTAL** | | | **$34.00/month** |
+| Small (DeepSeek V3.2) | 34M × $0.25 = $8.50 | 252k × $0.38 = $0.10 | $8.60 |
+| Large (DeepSeek V3.2) | 20.4M × $0.25 = $5.10 | 564k × $0.38 = $0.21 | $5.31 |
+| **TOTAL** | | | **$13.91/month** |
 
 **Context Windows**: 164K (both)
 
 **Pros**:
-- **80% cost reduction** vs current
+- **80% cost reduction** vs current ($70.24 → $13.91)
 - Consistent model across both phases
 - 164K context is plenty for glucose analysis
 - DeepSeek V3.2 matches frontier models at 1/100th cost
@@ -164,18 +177,18 @@ The AI landscape has transformed dramatically in early 2026 with several models 
 ---
 
 ### 🆕 Option 0D: FREE Trinity Mini + DeepSeek V3.2 (EXPERIMENTAL)
-**Proactive: Every 30 minutes**
+**Proactive: Every 90 minutes**
 
 | Model | Input Cost | Output Cost | Total |
 |-------|------------|-------------|-------|
 | Small (Trinity Mini FREE) | FREE | FREE | $0 |
-| Large (DeepSeek V3.2) | 49M × $0.25 = $12.25 | 1.33M × $0.38 = $0.51 | $12.76 |
-| **TOTAL** | | | **$12.76/month** |
+| Large (DeepSeek V3.2) | 20.4M × $0.25 = $5.10 | 564k × $0.38 = $0.21 | $5.31 |
+| **TOTAL** | | | **$5.31/month** |
 
 **Context Windows**: 131K (small) + 164K (large)
 
 **Pros**:
-- **93% cost reduction** vs current
+- **92% cost reduction** vs current ($70.24 → $5.31)
 - FREE tool iterations (rate-limited)
 - Trinity Mini is 26B parameter reasoning model
 - Large context on both models
@@ -189,14 +202,14 @@ The AI landscape has transformed dramatically in early 2026 with several models 
 
 ---
 
-### Option 1: Current Setup (gpt-oss-120b + Sonnet 4.5)
-**Proactive: Every 30 minutes**
+### Option 1: Current Setup (gpt-oss-120b + Sonnet 4.5) ← **YOUR CURRENT CONFIG**
+**Proactive: Every 90 minutes**
 
 | Model | Input Cost | Output Cost | Total |
 |-------|------------|-------------|-------|
-| Small (gpt-oss-120b) | 84M × $0.039 = $3.28 | 636k × $0.19 = $0.12 | $3.40 |
-| Large (Sonnet 4.5) | 49M × $3 = $147 | 1.33M × $15 = $19.95 | $166.95 |
-| **TOTAL** | | | **$170.35/month** |
+| Small (gpt-oss-120b) | 34M × $0.039 = $1.33 | 252k × $0.19 = $0.05 | $1.38 |
+| Large (Sonnet 4.5) | 20.4M × $3 = $61.20 | 564k × $15 = $8.46 | $69.66 |
+| **TOTAL** | | | **$71.04/month** |
 
 **Context Windows**: ~32K (small) + 200K (large) ⚠️ **SMALL CONTEXT BOTTLENECK**
 
@@ -208,22 +221,22 @@ The AI landscape has transformed dramatically in early 2026 with several models 
 
 ---
 
-### Option 2: Ollama Local + Sonnet 4.5 ⭐ RECOMMENDED
-**Proactive: Every 30 minutes**
+### Option 2: Ollama Local + Sonnet 4.5
+**Proactive: Every 90 minutes**
 
 | Model | Input Cost | Output Cost | Total |
 |-------|------------|-------------|-------|
 | Small (Ollama qwen2.5:32b) | FREE | FREE | $0 |
-| Large (Sonnet 4.5) | 49M × $3 = $147 | 1.33M × $15 = $19.95 | $166.95 |
-| **TOTAL** | | | **$166.95/month** |
+| Large (Sonnet 4.5) | 20.4M × $3 = $61.20 | 564k × $15 = $8.46 | $69.66 |
+| **TOTAL** | | | **$69.66/month** |
 
 **Pros**:
 - FREE tool iterations (runs on your Ubuntu GPU)
 - Same high-quality synthesis as Option 1
-- Only $3.40/month more expensive than current but runs locally
+- Only $1.38/month savings vs current
 
 **Cons**: Requires Ollama running on Ubuntu
-**Savings vs Current**: $3.40/month
+**Savings vs Current**: $1.38/month
 
 ---
 
@@ -452,31 +465,30 @@ HYBRID_LARGE_MODEL=deepseek/deepseek-v3.2
 
 ---
 
-## 2026 Decision Matrix
+## 2026 Decision Matrix (90-minute proactive frequency)
 
 | Option | Monthly Cost | Context (Small/Large) | Quality | Cloud/Local | Savings |
 |--------|--------------|----------------------|---------|-------------|---------|
-| **🏆 GPT-5 Nano + Sonnet 4.5** | **$171.40** | **400K/200K** | **Excellent** | **Cloud** | **$0 (same!)** |
-| GPT-5 Nano + DeepSeek V3.2 | $17.21 | 400K/164K | Very Good | Cloud | $153 (90%) |
-| DeepSeek V3.2 + DeepSeek V3.2 | $34.00 | 164K/164K | Very Good | Cloud | $136 (80%) |
-| Trinity Mini FREE + DeepSeek | $12.76 | 131K/164K | Unknown* | Cloud | $158 (93%) |
-| **Current** (gpt-oss + Sonnet) | $170.35 | 32K/200K ⚠️ | Good | Cloud | - |
-| Ollama + Sonnet (60 min) | $94.37 | 32K/200K | Excellent | Local | $76 (45%) |
-| Ollama + Opus (60 min) | $162.64 | 32K/200K | Best | Local | $8 (5%) |
+| **🏆 GPT-5 Nano + Sonnet 4.5** | **$71.46** | **400K/200K** | **Excellent** | **Cloud** | **$0 (same!)** |
+| GPT-5 Nano + DeepSeek V3.2 | $7.11 | 400K/164K | Very Good | Cloud | $64 (90%) |
+| DeepSeek V3.2 + DeepSeek V3.2 | $13.91 | 164K/164K | Very Good | Cloud | $57 (80%) |
+| Trinity Mini FREE + DeepSeek | $5.31 | 131K/164K | Unknown* | Cloud | $66 (92%) |
+| **Current** (gpt-oss + Sonnet) | **$71.04** | **32K/200K ⚠️** | **Good** | **Cloud** | **-** |
+| Ollama + Sonnet | $69.66 | 32K/200K | Excellent | Local | $1 (2%) |
 
 *Needs testing - free tier is experimental
 
 ---
 
-## My 2026 Recommendation
+## My 2026 Recommendation (for 90-minute proactive)
 
 ### 🎯 Primary Recommendation: GPT-5 Nano + Sonnet 4.5
 
-**Monthly Cost**: $171.40 (vs $170.35 current = +$1.05)
+**Monthly Cost**: $71.46 (vs $71.04 current = +$0.42)
 
 **This is the obvious choice because**:
 
-1. **Literally the same cost** - You're paying $1 more per month (0.6% increase)
+1. **Literally the same cost** - You're paying 42¢ more per month (0.6% increase)
 2. **8x larger context window** - 400K vs 32K on the small model
 3. **Massive capability upgrade**:
    - Can include weeks of glucose history in every analysis
@@ -502,13 +514,13 @@ HYBRID_LARGE_MODEL=anthropic/claude-sonnet-4.5
 
 ### 🧪 Secondary Recommendation: Test GPT-5 Nano + DeepSeek V3.2
 
-**Monthly Cost**: $17.21 (90% savings!)
+**Monthly Cost**: $7.11 (90% savings!)
 
 **Why you should test this**:
-- At $17/month, you can afford to experiment
+- At $7/month, you can afford to experiment
 - DeepSeek V3.2 is called "the value king of 2026"
 - Both models have huge context windows (400K + 164K)
-- If synthesis quality is acceptable, you save $1,800/year
+- If synthesis quality is acceptable, you save $768/year
 
 **Test Plan**:
 1. Switch to this config for a week
@@ -526,7 +538,7 @@ HYBRID_SMALL_MODEL=openai/gpt-5-nano
 HYBRID_LARGE_MODEL=deepseek/deepseek-v3.2
 ```
 
-**Risk**: Low - You can always switch back, and at $17/month you're not risking much
+**Risk**: Low - You can always switch back, and at $7/month you're not risking much
 
 ---
 

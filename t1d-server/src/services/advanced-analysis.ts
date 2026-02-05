@@ -333,7 +333,8 @@ function identifyChangePoints(
 export async function detectAnomalies(
   userId: string,
   days: number = 7,
-  sensitivityLevel: 'low' | 'medium' | 'high' = 'medium'
+  sensitivityLevel: 'low' | 'medium' | 'high' = 'medium',
+  userTimezone: string = 'America/New_York'
 ): Promise<AnomalyDetectionResult> {
   // Step 1: Build baseline expectations from historical data (last 30 days before analysis window)
   const endDate = new Date();
@@ -343,19 +344,19 @@ export async function detectAnomalies(
   const baselineStart = new Date(startDate);
   baselineStart.setDate(baselineStart.getDate() - 30);
 
-  // Get baseline data for building expectations
+  // Get baseline data for building expectations (using user's local timezone)
   const baselineResult = await query(
     `SELECT
-       EXTRACT(HOUR FROM timestamp) as hour,
+       EXTRACT(HOUR FROM timezone($4, timestamp)) as hour,
        AVG(glucose) as avg_glucose,
        STDDEV(glucose) as std_dev
      FROM glucose_readings
      WHERE user_id = $1
        AND timestamp >= $2
        AND timestamp < $3
-     GROUP BY EXTRACT(HOUR FROM timestamp)
+     GROUP BY EXTRACT(HOUR FROM timezone($4, timestamp))
      ORDER BY hour`,
-    [userId, baselineStart.toISOString(), startDate.toISOString()]
+    [userId, baselineStart.toISOString(), startDate.toISOString(), userTimezone]
   );
 
   const hourlyBaselines = new Map<number, { mean: number; stdDev: number }>();
@@ -506,7 +507,8 @@ export async function comparePeriods(
     period2Start?: string;
     period2End?: string;
     eventDate?: string;
-  }
+  },
+  userTimezone: string = 'America/New_York'
 ): Promise<PeriodComparison> {
   let period1Start: Date, period1End: Date;
   let period2Start: Date, period2End: Date;
@@ -557,11 +559,11 @@ export async function comparePeriods(
 
   if (comparisonType === 'weekday_vs_weekend') {
     // Special handling: filter by day of week
-    metrics1 = await calculatePeriodMetrics(userId, period1Start, period1End, [1, 2, 3, 4, 5]); // Mon-Fri
-    metrics2 = await calculatePeriodMetrics(userId, period2Start, period2End, [0, 6]); // Sat-Sun
+    metrics1 = await calculatePeriodMetrics(userId, period1Start, period1End, [1, 2, 3, 4, 5], userTimezone); // Mon-Fri
+    metrics2 = await calculatePeriodMetrics(userId, period2Start, period2End, [0, 6], userTimezone); // Sat-Sun
   } else {
-    metrics1 = await calculatePeriodMetrics(userId, period1Start, period1End);
-    metrics2 = await calculatePeriodMetrics(userId, period2Start, period2End);
+    metrics1 = await calculatePeriodMetrics(userId, period1Start, period1End, undefined, userTimezone);
+    metrics2 = await calculatePeriodMetrics(userId, period2Start, period2End, undefined, userTimezone);
   }
 
   // Perform statistical comparison
@@ -593,7 +595,8 @@ async function calculatePeriodMetrics(
   userId: string,
   startDate: Date,
   endDate: Date,
-  dayOfWeekFilter?: number[]
+  dayOfWeekFilter?: number[],
+  userTimezone: string = 'America/New_York'
 ): Promise<PeriodMetrics> {
   let dayOfWeekClause = '';
   if (dayOfWeekFilter) {
@@ -624,17 +627,17 @@ async function calculatePeriodMetrics(
   const cv = avgGlucose > 0 ? (stdDev / avgGlucose) * 100 : 0;
   const estimatedA1c = (avgGlucose + 46.7) / 28.7;
 
-  // Get fasting glucose (3am-7am)
+  // Get fasting glucose (3am-7am in user's LOCAL timezone)
   const fastingResult = await query(
     `SELECT AVG(glucose) as avg_fasting
      FROM glucose_readings
      WHERE user_id = $1
        AND timestamp >= $2
        AND timestamp < $3
-       AND EXTRACT(HOUR FROM timestamp) >= 3
-       AND EXTRACT(HOUR FROM timestamp) < 7
+       AND EXTRACT(HOUR FROM timezone($4, timestamp)) >= 3
+       AND EXTRACT(HOUR FROM timezone($4, timestamp)) < 7
        ${dayOfWeekClause}`,
-    [userId, startDate.toISOString(), endDate.toISOString()]
+    [userId, startDate.toISOString(), endDate.toISOString(), userTimezone]
   );
 
   const avgFastingGlucose = parseFloat(fastingResult.rows[0]?.avg_fasting) || 0;
