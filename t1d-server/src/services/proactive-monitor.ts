@@ -14,7 +14,7 @@ export class ProactiveMonitor {
   private intervalId: NodeJS.Timeout | null = null;
 
   constructor() {
-    this.agent = createConfiguredAgentGraph();
+    this.agent = createConfiguredAgentGraph(undefined, 'proactive');
   }
 
   /**

@@ -22,6 +22,10 @@ const envSchema = z.object({
   HYBRID_SMALL_PROVIDER: z.enum(['ollama', 'openrouter']).default('ollama'),
   HYBRID_SMALL_MODEL: z.string().default('qwen2.5:32b'),
   HYBRID_LARGE_MODEL: z.string().default('anthropic/claude-sonnet-4.5'),
+  // Proactive message model configuration (defaults to hybrid settings if not specified)
+  PROACTIVE_SMALL_PROVIDER: z.enum(['ollama', 'openrouter']).optional(),
+  PROACTIVE_SMALL_MODEL: z.string().optional(),
+  PROACTIVE_LARGE_MODEL: z.string().optional(),
   // Web Push Notification configuration
   VAPID_PUBLIC_KEY: z.string().optional(),
   VAPID_PRIVATE_KEY: z.string().optional(),

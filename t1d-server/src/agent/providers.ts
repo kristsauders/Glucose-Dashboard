@@ -59,11 +59,17 @@ export function getAIProvider(forceProvider?: 'ollama' | 'openrouter'): AIProvid
  * Get hybrid AI providers for cost optimization
  * - Small model for tool calling and analysis iteration (cheap)
  * - Large model for final message synthesis (expensive but high quality)
+ *
+ * @param mode - 'chat' for real-time chat (default), 'proactive' for background proactive messages
  */
-export function getHybridAIProvider(): HybridAIProvider {
+export function getHybridAIProvider(mode: 'chat' | 'proactive' = 'chat'): HybridAIProvider {
   // Small model for tool calling (can be Ollama local or OpenRouter cheap model)
-  const smallModelProvider = env.HYBRID_SMALL_PROVIDER || 'ollama';
-  const smallModelName = env.HYBRID_SMALL_MODEL || 'qwen2.5:32b';
+  const smallModelProvider = mode === 'proactive' && env.PROACTIVE_SMALL_PROVIDER
+    ? env.PROACTIVE_SMALL_PROVIDER
+    : (env.HYBRID_SMALL_PROVIDER || 'ollama');
+  const smallModelName = mode === 'proactive' && env.PROACTIVE_SMALL_MODEL
+    ? env.PROACTIVE_SMALL_MODEL
+    : (env.HYBRID_SMALL_MODEL || 'qwen2.5:32b');
 
   let smallModel: any;
   if (smallModelProvider === 'ollama') {
@@ -92,8 +98,10 @@ export function getHybridAIProvider(): HybridAIProvider {
     smallModel.getNumTokens = async () => 0;
   }
 
-  // Large model for message synthesis (OpenRouter Sonnet 4.5)
-  const largeModelName = env.HYBRID_LARGE_MODEL || 'anthropic/claude-sonnet-4-5';
+  // Large model for message synthesis (OpenRouter by default)
+  const largeModelName = mode === 'proactive' && env.PROACTIVE_LARGE_MODEL
+    ? env.PROACTIVE_LARGE_MODEL
+    : (env.HYBRID_LARGE_MODEL || 'anthropic/claude-sonnet-4-5');
   const largeModel = new ChatOpenAI({
     modelName: largeModelName,
     apiKey: env.OPENROUTER_API_KEY,

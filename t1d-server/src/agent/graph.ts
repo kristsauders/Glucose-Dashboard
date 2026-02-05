@@ -176,11 +176,14 @@ export function createAgentGraph(forceProvider?: 'ollama' | 'openrouter') {
  * - If AI_PROVIDER is 'hybrid', use hybrid graph (small model for tools, large for synthesis)
  * - Otherwise, use standard single-model graph
  */
-export function createConfiguredAgentGraph(forceProvider?: 'ollama' | 'openrouter' | 'hybrid') {
+export function createConfiguredAgentGraph(
+  forceProvider?: 'ollama' | 'openrouter' | 'hybrid',
+  mode: 'chat' | 'proactive' = 'chat'
+) {
   const provider = forceProvider || env.AI_PROVIDER;
 
   if (provider === 'hybrid') {
-    return createHybridAgentGraph();
+    return createHybridAgentGraph(mode);
   } else {
     return createAgentGraph(provider as 'ollama' | 'openrouter');
   }

@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback, lazy, Suspense } from 'react';
-import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
+import { BrowserRouter, Routes, Route, Navigate, useLocation } from 'react-router-dom';
 import type { GlucoseReading } from './types/glucose';
 import { Auth } from './components/Auth';
 import { apiService } from './services/api';
@@ -8,23 +8,16 @@ import { apiService } from './services/api';
 const Dashboard = lazy(() => import('./components/Dashboard').then(m => ({ default: m.Dashboard })));
 const ChatOnly = lazy(() => import('./pages/ChatOnly').then(m => ({ default: m.ChatOnly })));
 
-function App() {
-  const [isAuthenticated, setIsAuthenticated] = useState(false);
+function AppContent() {
+  const location = useLocation();
   const [readings, setReadings] = useState<GlucoseReading[]>([]);
-  const [isLoading, setIsLoading] = useState(true);
 
+  // Only load glucose data when on dashboard route
   useEffect(() => {
-    // Check if user is authenticated
-    const authenticated = apiService.isAuthenticated();
-    setIsAuthenticated(authenticated);
-
-    if (authenticated) {
-      // Load glucose data from backend
+    if (location.pathname === '/') {
       loadGlucoseData();
-    } else {
-      setIsLoading(false);
     }
-  }, []);
+  }, [location.pathname]);
 
   const loadGlucoseData = async () => {
     try {
@@ -32,21 +25,46 @@ function App() {
       setReadings(data);
     } catch (err) {
       console.error('Failed to load glucose data:', err);
-    } finally {
-      setIsLoading(false);
     }
-  };
-
-  const handleAuthenticated = () => {
-    setIsAuthenticated(true);
-    setIsLoading(true);
-    loadGlucoseData();
   };
 
   const handleDataUpdated = useCallback(() => {
     // Reload data from backend
     loadGlucoseData();
   }, []);
+
+  return (
+    <Suspense fallback={
+      <div className="min-h-screen flex items-center justify-center bg-background">
+        <div className="text-center">
+          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-primary mx-auto mb-4"></div>
+          <p className="text-muted-foreground">Loading...</p>
+        </div>
+      </div>
+    }>
+      <Routes>
+        <Route path="/" element={<Dashboard readings={readings} onDataUpdated={handleDataUpdated} />} />
+        <Route path="/chat" element={<ChatOnly />} />
+        <Route path="*" element={<Navigate to="/" replace />} />
+      </Routes>
+    </Suspense>
+  );
+}
+
+function App() {
+  const [isAuthenticated, setIsAuthenticated] = useState(false);
+  const [isLoading, setIsLoading] = useState(true);
+
+  useEffect(() => {
+    // Check if user is authenticated
+    const authenticated = apiService.isAuthenticated();
+    setIsAuthenticated(authenticated);
+    setIsLoading(false);
+  }, []);
+
+  const handleAuthenticated = () => {
+    setIsAuthenticated(true);
+  };
 
   if (isLoading) {
     return (
@@ -65,20 +83,7 @@ function App() {
 
   return (
     <BrowserRouter>
-      <Suspense fallback={
-        <div className="min-h-screen flex items-center justify-center bg-background">
-          <div className="text-center">
-            <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-primary mx-auto mb-4"></div>
-            <p className="text-muted-foreground">Loading...</p>
-          </div>
-        </div>
-      }>
-        <Routes>
-          <Route path="/" element={<Dashboard readings={readings} onDataUpdated={handleDataUpdated} />} />
-          <Route path="/chat" element={<ChatOnly />} />
-          <Route path="*" element={<Navigate to="/" replace />} />
-        </Routes>
-      </Suspense>
+      <AppContent />
     </BrowserRouter>
   );
 }

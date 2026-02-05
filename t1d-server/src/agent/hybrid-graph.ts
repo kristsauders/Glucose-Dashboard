@@ -150,9 +150,10 @@ interface AgentState {
  * Create the hybrid AI agent graph
  * Uses small model for tool calling, large model for final message synthesis
  */
-export function createHybridAgentGraph() {
-  const providers = getHybridAIProvider();
-  console.log(`✓ Using hybrid AI providers:`);
+export function createHybridAgentGraph(mode: 'chat' | 'proactive' = 'chat') {
+  const providers = getHybridAIProvider(mode);
+  const modeLabel = mode === 'proactive' ? 'proactive' : 'chat';
+  console.log(`✓ Using hybrid AI providers (${modeLabel} mode):`);
   console.log(`  - Small model (tool calling): ${providers.smallModelName}`);
   console.log(`  - Large model (synthesis): ${providers.largeModelName}`);
 
