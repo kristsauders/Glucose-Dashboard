@@ -355,7 +355,8 @@ function generateMealPatternDescription(mealType: string, correlation: Correlati
  */
 export async function detectBasalAdequacy(
   userId: string,
-  date: string  // YYYY-MM-DD format
+  date: string,  // YYYY-MM-DD format
+  timezone: string = 'America/New_York'
 ): Promise<{
   adequacy: 'adequate' | 'basal_too_low' | 'basal_too_high' | 'unstable';
   driftRate: number;
@@ -366,11 +367,23 @@ export async function detectBasalAdequacy(
   confidence: number;
 } | null> {
   try {
-    // Get overnight readings (3am-7am)
-    const overnightStart = new Date(`${date}T03:00:00`);
-    const overnightEnd = new Date(`${date}T07:00:00`);
+    // Get overnight readings (3am-7am) using timezone-aware query
+    // Query for readings in the user's timezone, not UTC
+    const result = await query(
+      `SELECT timestamp, glucose
+       FROM glucose_readings
+       WHERE user_id = $1
+         AND DATE(timezone($2, timestamp)) = $3
+         AND EXTRACT(HOUR FROM timezone($2, timestamp)) >= 3
+         AND EXTRACT(HOUR FROM timezone($2, timestamp)) < 7
+       ORDER BY timestamp ASC`,
+      [userId, timezone, date]
+    );
 
-    const readings = await getGlucoseWindow(userId, overnightStart, overnightEnd);
+    const readings = result.rows.map((row: any) => ({
+      timestamp: row.timestamp,
+      glucose: parseFloat(row.glucose),
+    }));
 
     if (readings.length < 8) {
       console.warn(`Insufficient overnight readings for ${date}`);
@@ -378,9 +391,13 @@ export async function detectBasalAdequacy(
     }
 
     // Calculate linear regression for drift
-    const startTime = overnightStart.getTime();
-    const xValues = readings.map(r => (new Date(r.timestamp).getTime() - startTime) / (60 * 1000));
-    const yValues = readings.map(r => r.glucose);
+    // Normalize time to start from 0 (same fix as analyze_overnight)
+    const sortedReadings = readings.sort((a, b) =>
+      new Date(a.timestamp).getTime() - new Date(b.timestamp).getTime()
+    );
+    const startTime = new Date(sortedReadings[0].timestamp).getTime();
+    const xValues = sortedReadings.map(r => (new Date(r.timestamp).getTime() - startTime) / (60 * 1000));
+    const yValues = sortedReadings.map(r => r.glucose);
 
     const { slope, r2 } = linearRegression(xValues, yValues);
 
@@ -415,7 +432,7 @@ export async function detectBasalAdequacy(
       avgGlucose,
       stdDev,
       cv,
-      date: overnightStart,
+      date: new Date(date + 'T03:00:00Z'), // Use the date as a reference
     });
 
     return {

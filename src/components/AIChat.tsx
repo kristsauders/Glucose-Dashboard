@@ -30,7 +30,9 @@ export function AIChat() {
   const [editingTitleValue, setEditingTitleValue] = useState('');
   const [expandedToolsMessageId, setExpandedToolsMessageId] = useState<string | null>(null);
   const messagesEndRef = useRef<HTMLDivElement>(null);
+  const streamingMessageRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLInputElement>(null);
+  const wasStreamingRef = useRef(false);
 
   // Auto-hide sidebar on mobile
   useEffect(() => {
@@ -59,17 +61,32 @@ export function AIChat() {
     fetchConversations();
   }, []);
 
-  // Scroll to bottom when messages change and auto-focus input
+  // Handle scrolling: scroll to top when PROCESSING starts, don't scroll when it ends
   useEffect(() => {
-    messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
+    if (isLoading && !wasStreamingRef.current) {
+      // Processing just started (thinking/using tools) - scroll to top of message area with max room
+      streamingMessageRef.current?.scrollIntoView({
+        behavior: 'smooth',
+        block: 'start',    // Align top of element with top of viewport
+        inline: 'nearest'  // Don't scroll horizontally
+      });
+    } else if (!isLoading && !wasStreamingRef.current) {
+      // Not loading and wasn't loading - normal message added, scroll to bottom
+      messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
+    }
+    // When processing ends (wasStreaming=true, isLoading=false), don't scroll - user is reading
 
-    // Auto-focus input after messages load (especially useful on mobile)
+    wasStreamingRef.current = isLoading;
+  }, [isLoading, messages]);
+
+  // Auto-focus input after messages load
+  useEffect(() => {
     if (messages.length > 0 || activeConversationId) {
       setTimeout(() => {
         inputRef.current?.focus();
       }, 300);
     }
-  }, [messages, activeConversationId]);
+  }, [messages.length, activeConversationId]);
 
   // Handle deep-link from push notification (URL parameter)
   useEffect(() => {
@@ -335,10 +352,11 @@ export function AIChat() {
         {showSidebar && (
           <motion.div
             initial={{ width: 0, opacity: 0 }}
-            animate={{ width: 280, opacity: 1 }}
+            animate={{ width: 320, opacity: 1 }}
             exit={{ width: 0, opacity: 0 }}
             transition={{ duration: 0.2 }}
-            className="border-r bg-card overflow-hidden"
+            className="border-r bg-card overflow-hidden flex-shrink-0"
+            style={{ minWidth: '320px' }}
           >
             <div className="h-full flex flex-col">
               {/* Sidebar Header */}
@@ -483,7 +501,7 @@ export function AIChat() {
 
       <CardContent className="flex-1 flex flex-col p-0 min-h-0">
         {/* Messages */}
-        <div className="flex-1 overflow-y-auto px-2 py-4 md:p-4 space-y-4" style={{ overflowY: 'auto' }}>
+        <div className="flex-1 overflow-x-auto overflow-y-auto px-2 py-4 md:p-4 space-y-4">
           {messages.length === 0 ? (
             <div className="h-full flex flex-col items-center justify-center text-center p-8">
               <MessageSquare className="h-12 w-12 text-muted-foreground mb-4" />
@@ -516,11 +534,11 @@ export function AIChat() {
                 >
                   <div
                     className={`${
-                      message.role === 'user' ? 'flex-1 max-w-[80%] text-right' : 'w-full text-left'
+                      message.role === 'user' ? 'flex-1 max-w-[80%] text-right' : 'min-w-0 flex-1 text-left'
                     }`}
                   >
                     <div
-                      className={`inline-block rounded-lg p-3 ${
+                      className={`inline-block rounded-lg p-3 max-w-full ${
                         message.role === 'user'
                           ? 'bg-primary text-primary-foreground'
                           : 'bg-muted'
@@ -529,7 +547,7 @@ export function AIChat() {
                       {message.role === 'user' ? (
                         <p className="text-[13px] md:text-sm whitespace-pre-wrap break-words">{message.content}</p>
                       ) : (
-                        <div className="text-[13px] md:text-sm prose prose-sm dark:prose-invert max-w-none">
+                        <div className="text-[13px] md:text-sm prose prose-sm dark:prose-invert max-w-none overflow-x-auto">
                           <ReactMarkdown
                             remarkPlugins={[remarkGfm]}
                             rehypePlugins={[rehypeHighlight]}
@@ -581,6 +599,7 @@ export function AIChat() {
           )}
           {isLoading && (
             <motion.div
+              ref={streamingMessageRef}
               initial={{ opacity: 0, y: 10 }}
               animate={{ opacity: 1, y: 0 }}
               className="w-full"
@@ -593,8 +612,8 @@ export function AIChat() {
                   </div>
                 )}
                 {streamingMessage ? (
-                  <div className="bg-muted rounded-lg p-3">
-                    <div className="text-[13px] md:text-sm prose prose-sm dark:prose-invert max-w-none">
+                  <div className="bg-muted rounded-lg p-3 max-w-full">
+                    <div className="text-[13px] md:text-sm prose prose-sm dark:prose-invert max-w-none overflow-x-auto">
                       <ReactMarkdown
                         remarkPlugins={[remarkGfm]}
                         rehypePlugins={[rehypeHighlight]}

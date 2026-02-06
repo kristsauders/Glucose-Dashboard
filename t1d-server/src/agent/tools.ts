@@ -120,7 +120,7 @@ export const getGlucoseStatsTool = new DynamicStructuredTool({
  */
 export const analyzeOvernightTool = new DynamicStructuredTool({
   name: 'analyze_overnight',
-  description: 'Analyze overnight fasting glucose patterns (3am-7am). Returns average, trends, and stability metrics.',
+  description: 'Analyze overnight glucose patterns (midnight-7am). Returns trends (rising/falling/flat), stability metrics (CV, range), spikes/drops, and basal insulin insights.',
   schema: z.object({
     userId: z.string().optional().describe('The user ID (automatically provided)'),
     userTimezone: z.string().optional().describe('The user timezone (automatically provided)'),
@@ -128,39 +128,190 @@ export const analyzeOvernightTool = new DynamicStructuredTool({
   }),
   func: async ({ userId, userTimezone, days }) => {
     const tz = userTimezone || 'America/New_York';
+
+    // Get all overnight readings (midnight-7am) with timestamps
     const result = await query(
       `SELECT
         DATE(timezone($2, timestamp)) as date,
-        AVG(glucose) as avg_fasting,
-        MIN(glucose) as min_glucose,
-        MAX(glucose) as max_glucose,
-        STDDEV(glucose) as stability,
-        COUNT(*) as reading_count
+        timezone($2, timestamp) as local_time,
+        glucose,
+        EXTRACT(EPOCH FROM timezone($2, timestamp)) as epoch_time
        FROM glucose_readings
        WHERE user_id = $1
          AND timestamp >= NOW() - INTERVAL '${days} days'
-         AND EXTRACT(HOUR FROM timezone($2, timestamp)) >= 3
+         AND EXTRACT(HOUR FROM timezone($2, timestamp)) >= 0
          AND EXTRACT(HOUR FROM timezone($2, timestamp)) < 7
-       GROUP BY DATE(timezone($2, timestamp))
-       ORDER BY date DESC`,
+       ORDER BY timestamp`,
       [userId, tz]
     );
 
-    const nights = result.rows.map(r => ({
-      date: r.date,
-      avgFasting: parseFloat(r.avg_fasting).toFixed(1),
-      minGlucose: parseFloat(r.min_glucose).toFixed(1),
-      maxGlucose: parseFloat(r.max_glucose).toFixed(1),
-      stability: parseFloat(r.stability || 0).toFixed(1),
-      readingCount: parseInt(r.reading_count),
-    }));
+    if (result.rows.length === 0) {
+      return JSON.stringify({ error: 'No overnight data found' });
+    }
 
-    const overallAvg = nights.reduce((sum, n) => sum + parseFloat(n.avgFasting), 0) / nights.length;
+    // Group readings by night
+    const nightsMap = new Map<string, Array<{ time: number; glucose: number }>>();
+    for (const row of result.rows) {
+      // CRITICAL: Convert date to string for Map key (Date objects don't work as Map keys)
+      const date = row.date instanceof Date ? row.date.toISOString().split('T')[0] : String(row.date);
+      if (!nightsMap.has(date)) {
+        nightsMap.set(date, []);
+      }
+      nightsMap.get(date)!.push({
+        time: parseFloat(row.epoch_time),
+        glucose: parseFloat(row.glucose),
+      });
+    }
+
+    // Analyze each night
+    const nights = [];
+    for (const [date, readings] of nightsMap.entries()) {
+      if (readings.length < 4) continue; // Need at least 4 readings (1 hour of data)
+
+      // Filter outliers using MAD (Median Absolute Deviation) - more robust than standard deviation
+      // This removes occasional bad readings (sensor glitches) without skipping entire nights
+      const glucoseValues = readings.map(r => r.glucose).sort((a, b) => a - b);
+      const median = glucoseValues[Math.floor(glucoseValues.length / 2)];
+      const deviations = glucoseValues.map(val => Math.abs(val - median));
+      const mad = deviations.sort((a, b) => a - b)[Math.floor(deviations.length / 2)];
+
+      // Filter out extreme outliers (>3.5 MAD from median, typical threshold for outlier detection)
+      // But keep at least 4 readings to avoid removing real volatility
+      let cleanedReadings = readings;
+      if (mad > 0) { // Only filter if there's actual variation
+        const filtered = readings.filter(r => Math.abs(r.glucose - median) <= 3.5 * mad);
+        if (filtered.length >= 4) {
+          cleanedReadings = filtered;
+        }
+      }
+
+      // CRITICAL FIX: Normalize times to start from 0 to avoid numerical overflow
+      // Sort by time and make times relative to first reading
+      cleanedReadings = cleanedReadings.sort((a, b) => a.time - b.time);
+      const startTime = cleanedReadings[0].time;
+      const normalizedReadings = cleanedReadings.map(r => ({
+        time: r.time - startTime, // Now in seconds from start of night
+        glucose: r.glucose
+      }));
+
+      // Calculate linear regression slope to determine trend using normalized times
+      const n = normalizedReadings.length;
+      const sumX = normalizedReadings.reduce((sum, r) => sum + r.time, 0);
+      const sumY = normalizedReadings.reduce((sum, r) => sum + r.glucose, 0);
+      const sumXY = normalizedReadings.reduce((sum, r) => sum + r.time * r.glucose, 0);
+      const sumX2 = normalizedReadings.reduce((sum, r) => sum + r.time * r.time, 0);
+
+      // Calculate slope with safety check for division by zero
+      const denominator = (n * sumX2 - sumX * sumX);
+      let slope = 0;
+      let slopePerHour = 0;
+
+      if (Math.abs(denominator) > 0.0001) {
+        slope = (n * sumXY - sumX * sumY) / denominator;
+        slopePerHour = slope * 3600; // Convert from per-second to per-hour
+
+        // Sanity check: if slope is unreasonably large, data quality issue
+        if (!isFinite(slopePerHour) || Math.abs(slopePerHour) > 1000) {
+          slopePerHour = 0;
+        }
+      }
+
+      // Calculate stats
+      const avgGlucose = sumY / n;
+      const minGlucose = Math.min(...normalizedReadings.map(r => r.glucose));
+      const maxGlucose = Math.max(...normalizedReadings.map(r => r.glucose));
+      const range = maxGlucose - minGlucose;
+
+      // Coefficient of variation for stability
+      const stdDev = Math.sqrt(
+        normalizedReadings.reduce((sum, r) => sum + Math.pow(r.glucose - avgGlucose, 2), 0) / n
+      );
+
+      // Calculate CV with safety check for division by zero
+      let cv = 0;
+      if (avgGlucose > 10) { // Only calculate CV if average glucose is reasonable
+        cv = (stdDev / avgGlucose) * 100;
+        // Sanity check: CV should not exceed 100% realistically for overnight glucose
+        if (!isFinite(cv) || cv > 100) {
+          cv = 100;
+        }
+      }
+
+      // First hour vs last hour comparison (using first/last quarter of readings)
+      const firstQuarterReadings = normalizedReadings.slice(0, Math.ceil(n / 4));
+      const lastQuarterReadings = normalizedReadings.slice(-Math.ceil(n / 4));
+      const firstQuarterAvg = firstQuarterReadings.reduce((sum, r) => sum + r.glucose, 0) / firstQuarterReadings.length;
+      const lastQuarterAvg = lastQuarterReadings.reduce((sum, r) => sum + r.glucose, 0) / lastQuarterReadings.length;
+      const change = lastQuarterAvg - firstQuarterAvg;
+
+      // Determine trend category
+      let trend: string;
+      if (Math.abs(slopePerHour) < 3) {
+        trend = 'flat';
+      } else if (slopePerHour > 0) {
+        trend = slopePerHour > 8 ? 'rising_fast' : 'rising';
+      } else {
+        trend = slopePerHour < -8 ? 'falling_fast' : 'falling';
+      }
+
+      // Detect spikes/drops (using 20mg/dL threshold - more meaningful than percentage)
+      let hasSpikes = false;
+      let hasDrops = false;
+      for (const reading of normalizedReadings) {
+        if (reading.glucose > avgGlucose + 20) hasSpikes = true;
+        if (reading.glucose < avgGlucose - 20) hasDrops = true;
+      }
+
+      nights.push({
+        date,
+        avgGlucose: avgGlucose.toFixed(1),
+        minGlucose: minGlucose.toFixed(1),
+        maxGlucose: maxGlucose.toFixed(1),
+        range: range.toFixed(1),
+        trend,
+        slopePerHour: slopePerHour.toFixed(2),
+        firstQuarterAvg: firstQuarterAvg.toFixed(1),
+        lastQuarterAvg: lastQuarterAvg.toFixed(1),
+        change: change.toFixed(1),
+        cv: cv.toFixed(1),
+        stability: cv < 10 ? 'excellent' : cv < 15 ? 'good' : cv < 20 ? 'moderate' : 'poor',
+        hasSpikes,
+        hasDrops,
+        readingCount: n,
+      });
+    }
+
+    // Overall summary
+    const overallAvg = nights.reduce((sum, n) => sum + parseFloat(n.avgGlucose), 0) / nights.length;
+    const overallCV = nights.reduce((sum, n) => sum + parseFloat(n.cv), 0) / nights.length;
+    const flatNights = nights.filter(n => n.trend === 'flat').length;
+    const risingNights = nights.filter(n => n.trend === 'rising' || n.trend === 'rising_fast').length;
+    const fallingNights = nights.filter(n => n.trend === 'falling' || n.trend === 'falling_fast').length;
+
+    // Basal assessment
+    let basalAssessment: string;
+    if (risingNights > nights.length * 0.6) {
+      basalAssessment = 'Basal likely too low - consistently rising overnight';
+    } else if (fallingNights > nights.length * 0.6) {
+      basalAssessment = 'Basal likely too high - consistently falling overnight';
+    } else if (flatNights > nights.length * 0.7 && overallCV < 15) {
+      basalAssessment = 'Basal appears well-tuned - stable and flat overnight';
+    } else {
+      basalAssessment = 'Basal needs evaluation - inconsistent overnight patterns';
+    }
 
     return JSON.stringify({
       period: `${days} days`,
       nightsAnalyzed: nights.length,
-      overallAvgFasting: overallAvg.toFixed(1),
+      summary: {
+        overallAvgGlucose: overallAvg.toFixed(1),
+        overallCV: overallCV.toFixed(1),
+        overallStability: overallCV < 10 ? 'excellent' : overallCV < 15 ? 'good' : overallCV < 20 ? 'moderate' : 'poor',
+        flatNights,
+        risingNights,
+        fallingNights,
+        basalAssessment,
+      },
       nights,
     });
   },
@@ -707,15 +858,49 @@ export const sendProactiveMessageTool = new DynamicStructuredTool({
         preview: content.substring(0, 100),
       });
 
-      // 1. Create conversation for proactive message
-      const conversationTitle = `Proactive: ${title}`;
-      const conversationResult = await query(
-        `INSERT INTO conversations (user_id, title)
-         VALUES ($1, $2)
-         RETURNING id`,
-        [userId, conversationTitle]
+      // 1. Find or create conversation for proactive messages
+      // Check if there's an existing "Proactive Check-ins" conversation with <10 messages
+      const MAX_MESSAGES_PER_CONVERSATION = 10;
+
+      const existingConversationResult = await query(
+        `SELECT c.id, COUNT(cm.id) as message_count
+         FROM conversations c
+         LEFT JOIN chat_messages cm ON c.id = cm.conversation_id
+         WHERE c.user_id = $1
+           AND c.title = 'Proactive Check-ins'
+         GROUP BY c.id
+         HAVING COUNT(cm.id) < $2
+         ORDER BY c.updated_at DESC
+         LIMIT 1`,
+        [userId, MAX_MESSAGES_PER_CONVERSATION]
       );
-      const conversationId = conversationResult.rows[0].id;
+
+      let conversationId;
+      let isNewConversation = false;
+
+      if (existingConversationResult.rows.length > 0) {
+        // Reuse existing conversation
+        conversationId = existingConversationResult.rows[0].id;
+        const messageCount = parseInt(existingConversationResult.rows[0].message_count);
+        console.log(`[Proactive Message] Reusing existing conversation (${messageCount} messages)`);
+
+        // Update the conversation timestamp
+        await query(
+          `UPDATE conversations SET updated_at = NOW() WHERE id = $1`,
+          [conversationId]
+        );
+      } else {
+        // Create new conversation
+        const conversationResult = await query(
+          `INSERT INTO conversations (user_id, title)
+           VALUES ($1, 'Proactive Check-ins')
+           RETURNING id`,
+          [userId]
+        );
+        conversationId = conversationResult.rows[0].id;
+        isNewConversation = true;
+        console.log('[Proactive Message] Created new proactive conversation');
+      }
 
       // 2. Store message in sage_messages with conversation_id
       const dbResult = await query(
@@ -727,7 +912,34 @@ export const sendProactiveMessageTool = new DynamicStructuredTool({
 
       const messageId = dbResult.rows[0].id;
 
-      // 3. Save to chat_messages as assistant message
+      // 3. Add separator message if reusing conversation (to show where new session starts)
+      if (!isNewConversation) {
+        const now = new Date();
+        const timeStr = now.toLocaleString('en-US', {
+          weekday: 'short',
+          month: 'short',
+          day: 'numeric',
+          hour: 'numeric',
+          minute: '2-digit',
+          hour12: true,
+        });
+
+        await query(
+          `INSERT INTO chat_messages (user_id, conversation_id, role, content, metadata)
+           VALUES ($1, $2, 'system', $3, $4)`,
+          [
+            userId,
+            conversationId,
+            `─── ${timeStr} ───`,
+            JSON.stringify({
+              timestamp: now.toISOString(),
+              type: 'session_separator',
+            }),
+          ]
+        );
+      }
+
+      // 4. Save to chat_messages as assistant message
       await query(
         `INSERT INTO chat_messages (user_id, conversation_id, role, content, metadata)
          VALUES ($1, $2, 'assistant', $3, $4)`,
@@ -744,11 +956,11 @@ export const sendProactiveMessageTool = new DynamicStructuredTool({
         ]
       );
 
-      // 4. Check notification preferences
+      // 5. Check notification preferences
       const preferences = await pushNotificationService.getPreferences(userId);
 
       if (preferences.proactive_enabled) {
-        // 5. Send push notification with deep-link
+        // 6. Send push notification with deep-link
         await pushNotificationService.sendToUser(userId, {
           title: title,
           body: content.length > 100 ? content.substring(0, 97) + '...' : content,
@@ -765,7 +977,7 @@ export const sendProactiveMessageTool = new DynamicStructuredTool({
         console.log('[Proactive Message] Push notifications disabled for user');
       }
 
-      // 6. Optionally still send to Discord if configured
+      // 7. Optionally still send to Discord if configured
       if (discordService.isConfigured()) {
         await discordService.sendSageMessage(type, title, content);
         console.log('[Proactive Message] Discord message sent');
@@ -1041,6 +1253,400 @@ const analyzeMealPatternsTool = new DynamicStructuredTool({
 });
 
 /**
+ * Tool: Analyze Individual Meal
+ * Provides comprehensive coaching on a specific meal's glucose response with personalized recommendations
+ */
+const analyzeIndividualMealTool = new DynamicStructuredTool({
+  name: 'analyze_individual_meal',
+  description:
+    'Analyze a specific meal to provide personalized coaching on glucose response, insulin dose, timing, and composition. Returns performance vs typical response, dose/timing assessment, actionable recommendations, and improvement tracking. Use when user asks about a specific meal or wants feedback on how they did.',
+  schema: z.object({
+    userId: z.string().describe('User ID (auto-injected by system)'),
+    mealId: z.string().optional().describe('Specific meal ID to analyze'),
+    mealTime: z.string().optional().describe('ISO timestamp of the meal if no meal ID provided'),
+    lookbackDays: z.number().default(30).describe('Days to look back for comparison data (default: 30)'),
+  }),
+  func: async ({ userId, mealId, mealTime, lookbackDays = 30 }) => {
+    try {
+      // Get the specific meal
+      let targetMeal;
+      if (mealId) {
+        const mealResult = await query(
+          `
+          SELECT
+            m.*,
+            c.baseline_glucose,
+            c.peak_glucose,
+            c.time_to_peak_minutes,
+            c.total_change,
+            c.time_in_range_pct,
+            c.time_above_180_minutes,
+            c.post_meal_duration_minutes
+          FROM meal_logs m
+          LEFT JOIN glucose_correlations c ON m.correlation_id = c.id
+          WHERE m.id = $1 AND m.user_id = $2
+        `,
+          [mealId, userId]
+        );
+        targetMeal = mealResult.rows[0];
+      } else if (mealTime) {
+        const mealResult = await query(
+          `
+          SELECT
+            m.*,
+            c.baseline_glucose,
+            c.peak_glucose,
+            c.time_to_peak_minutes,
+            c.total_change,
+            c.time_in_range_pct,
+            c.time_above_180_minutes,
+            c.post_meal_duration_minutes
+          FROM meal_logs m
+          LEFT JOIN glucose_correlations c ON m.correlation_id = c.id
+          WHERE m.user_id = $1
+            AND m.timestamp >= $2::timestamptz - interval '5 minutes'
+            AND m.timestamp <= $2::timestamptz + interval '5 minutes'
+          ORDER BY ABS(EXTRACT(EPOCH FROM (m.timestamp - $2::timestamptz)))
+          LIMIT 1
+        `,
+          [userId, mealTime]
+        );
+        targetMeal = mealResult.rows[0];
+      } else {
+        return JSON.stringify({
+          error: 'Must provide either mealId or mealTime',
+        });
+      }
+
+      if (!targetMeal) {
+        return JSON.stringify({
+          error: 'Meal not found',
+        });
+      }
+
+      if (!targetMeal.correlation_id) {
+        return JSON.stringify({
+          error: 'This meal does not have glucose correlation data yet. Wait 3 hours after eating for analysis.',
+        });
+      }
+
+      // Get similar historical meals (same meal type, similar carbs ±20g)
+      const startDate = new Date();
+      startDate.setDate(startDate.getDate() - lookbackDays);
+
+      const carbMin = Math.max(0, (targetMeal.carbs || 0) - 20);
+      const carbMax = (targetMeal.carbs || 0) + 20;
+
+      const similarMealsResult = await query(
+        `
+        SELECT
+          m.*,
+          c.baseline_glucose,
+          c.peak_glucose,
+          c.time_to_peak_minutes,
+          c.total_change,
+          c.time_in_range_pct,
+          c.time_above_180_minutes,
+          c.post_meal_duration_minutes
+        FROM meal_logs m
+        LEFT JOIN glucose_correlations c ON m.correlation_id = c.id
+        WHERE m.user_id = $1
+          AND m.id != $2
+          AND m.meal_type = $3
+          AND m.correlation_id IS NOT NULL
+          AND m.timestamp >= $4
+          AND m.carbs BETWEEN $5 AND $6
+        ORDER BY m.timestamp DESC
+      `,
+        [userId, targetMeal.id, targetMeal.meal_type, startDate.toISOString(), carbMin, carbMax]
+      );
+
+      const similarMeals = similarMealsResult.rows;
+
+      // Calculate typical response for similar meals
+      let typicalResponse = null;
+      if (similarMeals.length >= 2) {
+        const avgPeak = similarMeals.reduce((sum, m) => sum + (parseFloat(m.peak_glucose) || 0), 0) / similarMeals.length;
+        const avgChange = similarMeals.reduce((sum, m) => sum + (parseFloat(m.total_change) || 0), 0) / similarMeals.length;
+        const avgTimeToPeak = similarMeals.reduce((sum, m) => sum + (m.time_to_peak_minutes || 0), 0) / similarMeals.length;
+        const avgTimeInRange = similarMeals.reduce((sum, m) => sum + (parseFloat(m.time_in_range_pct) || 0), 0) / similarMeals.length;
+        const avgTimeAbove180 = similarMeals.reduce((sum, m) => sum + (m.time_above_180_minutes || 0), 0) / similarMeals.length;
+
+        typicalResponse = {
+          avgPeak: avgPeak.toFixed(1),
+          avgChange: avgChange.toFixed(1),
+          avgTimeToPeak: Math.round(avgTimeToPeak),
+          avgTimeInRange: avgTimeInRange.toFixed(1),
+          avgTimeAbove180: Math.round(avgTimeAbove180),
+          sampleSize: similarMeals.length,
+        };
+      }
+
+      // Performance assessment
+      let performanceAssessment = '';
+      let performanceScore = 0; // 0-100
+
+      if (typicalResponse) {
+        const thisPeak = parseFloat(targetMeal.peak_glucose);
+        const thisChange = parseFloat(targetMeal.total_change);
+        const thisTimeInRange = parseFloat(targetMeal.time_in_range_pct);
+
+        // Score based on peak glucose
+        if (thisPeak < parseFloat(typicalResponse.avgPeak) - 20) {
+          performanceScore += 35;
+          performanceAssessment += 'Peak glucose was significantly lower than typical. ';
+        } else if (thisPeak < parseFloat(typicalResponse.avgPeak)) {
+          performanceScore += 25;
+          performanceAssessment += 'Peak glucose was slightly lower than typical. ';
+        } else if (thisPeak > parseFloat(typicalResponse.avgPeak) + 20) {
+          performanceScore += 5;
+          performanceAssessment += 'Peak glucose was higher than typical. ';
+        } else {
+          performanceScore += 15;
+          performanceAssessment += 'Peak glucose was similar to typical. ';
+        }
+
+        // Score based on time in range
+        if (thisTimeInRange > parseFloat(typicalResponse.avgTimeInRange) + 10) {
+          performanceScore += 35;
+          performanceAssessment += 'Time in range improved significantly. ';
+        } else if (thisTimeInRange > parseFloat(typicalResponse.avgTimeInRange)) {
+          performanceScore += 25;
+          performanceAssessment += 'Time in range improved slightly. ';
+        } else if (thisTimeInRange < parseFloat(typicalResponse.avgTimeInRange) - 10) {
+          performanceScore += 5;
+          performanceAssessment += 'Time in range was worse than typical. ';
+        } else {
+          performanceScore += 15;
+          performanceAssessment += 'Time in range was similar to typical. ';
+        }
+
+        // Score based on overall control
+        if (thisPeak < 140 && thisTimeInRange > 80) {
+          performanceScore += 30;
+          performanceAssessment += 'Excellent control overall!';
+        } else if (thisPeak < 180 && thisTimeInRange > 70) {
+          performanceScore += 20;
+          performanceAssessment += 'Good control overall.';
+        } else {
+          performanceScore += 10;
+          performanceAssessment += 'Room for improvement.';
+        }
+      } else {
+        // No comparison data
+        const thisPeak = parseFloat(targetMeal.peak_glucose);
+        const thisTimeInRange = parseFloat(targetMeal.time_in_range_pct);
+
+        if (thisPeak < 140 && thisTimeInRange > 80) {
+          performanceScore = 85;
+          performanceAssessment = 'Excellent control! Peak stayed below 140 and you were in range >80% of the time.';
+        } else if (thisPeak < 180 && thisTimeInRange > 70) {
+          performanceScore = 70;
+          performanceAssessment = 'Good control. Peak stayed below 180 and you were in range >70% of the time.';
+        } else if (thisPeak < 200) {
+          performanceScore = 50;
+          performanceAssessment = 'Moderate control. Peak was below 200 but there\'s room for improvement.';
+        } else {
+          performanceScore = 30;
+          performanceAssessment = 'Challenging meal. Peak exceeded 200 mg/dL.';
+        }
+      }
+
+      // Dose assessment
+      let doseAssessment = '';
+      const thisPeak = parseFloat(targetMeal.peak_glucose);
+      const thisChange = parseFloat(targetMeal.total_change);
+      const insulinDose = targetMeal.insulin_dose;
+
+      if (!insulinDose || insulinDose === 0) {
+        doseAssessment = 'No insulin logged for this meal. Consider logging insulin doses for better analysis.';
+      } else if (thisPeak > 180 && thisChange > 80) {
+        doseAssessment = `Dose may be too low. Peak of ${thisPeak.toFixed(0)} mg/dL suggests more insulin may be needed. Consider increasing by 0.5-1 unit.`;
+      } else if (thisPeak < 100 || thisChange < -20) {
+        doseAssessment = `Dose may be too high. ${thisPeak < 100 ? 'Low peak glucose' : 'Significant drop'} suggests less insulin may be needed. Consider decreasing by 0.5-1 unit.`;
+      } else if (thisPeak < 140) {
+        doseAssessment = `Dose appears well-tuned. Peak of ${thisPeak.toFixed(0)} mg/dL is excellent.`;
+      } else {
+        doseAssessment = `Dose is close but could be refined. Peak of ${thisPeak.toFixed(0)} mg/dL is acceptable but not ideal.`;
+      }
+
+      // Timing assessment
+      let timingAssessment = '';
+      const timeToPeak = targetMeal.time_to_peak_minutes;
+
+      if (!insulinDose || insulinDose === 0) {
+        timingAssessment = 'Cannot assess timing without insulin dose information.';
+      } else if (timeToPeak < 30) {
+        timingAssessment = 'Very fast rise - consider dosing 15-20 minutes earlier to give insulin more time to work.';
+      } else if (timeToPeak < 60) {
+        timingAssessment = 'Timing appears good. Glucose peaked within 30-60 minutes, which is typical.';
+      } else if (timeToPeak < 90) {
+        timingAssessment = 'Slower rise than typical - this could be due to fat/protein slowing absorption. Current timing seems appropriate.';
+      } else {
+        timingAssessment = 'Very slow rise - likely due to high fat/protein content. Consider dosing later or splitting the dose.';
+      }
+
+      // Composition insights
+      let compositionInsights = '';
+      const fat = targetMeal.fat_grams;
+      const protein = targetMeal.protein_grams;
+      const carbs = targetMeal.carbs;
+
+      if (fat && protein && carbs) {
+        const fatProteinRatio = (fat + protein) / carbs;
+
+        if (fatProteinRatio > 2) {
+          compositionInsights = `High fat/protein meal (${fat}g fat, ${protein}g protein vs ${carbs}g carbs). `;
+          if (timeToPeak > 90) {
+            compositionInsights += 'The slow glucose rise confirms this is a slow-digesting meal. Consider extended bolus or split dosing.';
+          } else {
+            compositionInsights += 'Despite high fat/protein, glucose rose quickly. May need to adjust dose rather than timing.';
+          }
+        } else if (fatProteinRatio > 1) {
+          compositionInsights = `Moderate fat/protein meal (${fat}g fat, ${protein}g protein vs ${carbs}g carbs). `;
+          compositionInsights += 'This balance is reasonable. Watch for extended glucose rise 2-3 hours post-meal.';
+        } else {
+          compositionInsights = `Carb-heavy meal (${carbs}g carbs vs ${fat}g fat, ${protein}g protein). `;
+          if (timeToPeak < 60) {
+            compositionInsights += 'Fast rise is expected with high carbs. Timing and dose appear appropriate for this composition.';
+          }
+        }
+      } else {
+        compositionInsights = 'Log fat and protein content for more detailed composition analysis.';
+      }
+
+      // Improvement tracking
+      let improvementTracking = null;
+      if (similarMeals.length >= 3) {
+        // Get the 3 most recent similar meals before this one
+        const recentSimilar = similarMeals.slice(0, 3);
+        const avgRecentPeak = recentSimilar.reduce((sum, m) => sum + (parseFloat(m.peak_glucose) || 0), 0) / recentSimilar.length;
+        const avgRecentTimeInRange = recentSimilar.reduce((sum, m) => sum + (parseFloat(m.time_in_range_pct) || 0), 0) / recentSimilar.length;
+
+        const peakImprovement = avgRecentPeak - thisPeak;
+        const timeInRangeImprovement = thisTimeInRange - avgRecentTimeInRange;
+
+        let trend = '';
+        if (peakImprovement > 15 && timeInRangeImprovement > 5) {
+          trend = 'improving_significantly';
+        } else if (peakImprovement > 5 || timeInRangeImprovement > 3) {
+          trend = 'improving';
+        } else if (peakImprovement < -15 || timeInRangeImprovement < -10) {
+          trend = 'worsening';
+        } else {
+          trend = 'stable';
+        }
+
+        improvementTracking = {
+          trend,
+          peakChange: peakImprovement.toFixed(1),
+          timeInRangeChange: timeInRangeImprovement.toFixed(1),
+          comparedToLast3Meals: true,
+        };
+      }
+
+      // Actionable recommendations
+      const recommendations = [];
+
+      // Dose recommendations
+      if (thisPeak > 180 && thisChange > 80) {
+        recommendations.push({
+          category: 'dose',
+          priority: 'high',
+          recommendation: `Increase insulin dose by 0.5-1 unit (current: ${insulinDose} units)`,
+          reasoning: `Peak of ${thisPeak.toFixed(0)} mg/dL indicates insufficient insulin coverage`,
+        });
+      } else if (thisPeak < 100) {
+        recommendations.push({
+          category: 'dose',
+          priority: 'high',
+          recommendation: `Decrease insulin dose by 0.5-1 unit (current: ${insulinDose} units)`,
+          reasoning: `Peak of ${thisPeak.toFixed(0)} mg/dL indicates too much insulin`,
+        });
+      }
+
+      // Timing recommendations
+      if (insulinDose && timeToPeak < 30) {
+        recommendations.push({
+          category: 'timing',
+          priority: 'medium',
+          recommendation: 'Dose insulin 15-20 minutes before eating',
+          reasoning: 'Fast glucose rise suggests insulin needs more time to start working',
+        });
+      } else if (insulinDose && timeToPeak > 120 && fat && protein && (fat + protein) / carbs > 2) {
+        recommendations.push({
+          category: 'timing',
+          priority: 'medium',
+          recommendation: 'Consider extended/dual-wave bolus or split dosing (50% now, 50% in 1 hour)',
+          reasoning: 'High fat/protein content is causing very slow glucose rise',
+        });
+      }
+
+      // Composition recommendations
+      if (fat && protein && carbs && (fat + protein) / carbs > 2.5) {
+        recommendations.push({
+          category: 'composition',
+          priority: 'low',
+          recommendation: 'Consider reducing fat content or adding more carbs to balance the meal',
+          reasoning: 'Very high fat/protein ratio makes glucose management more complex',
+        });
+      }
+
+      // General improvement recommendations
+      if (performanceScore < 50 && targetMeal.time_above_180_minutes > 60) {
+        recommendations.push({
+          category: 'general',
+          priority: 'high',
+          recommendation: 'Review this meal composition and consider alternatives',
+          reasoning: `Spent ${targetMeal.time_above_180_minutes} minutes above 180 mg/dL - this meal type may be challenging`,
+        });
+      }
+
+      return JSON.stringify({
+        meal: {
+          timestamp: targetMeal.timestamp,
+          mealType: targetMeal.meal_type,
+          description: targetMeal.description,
+          carbs: targetMeal.carbs,
+          fat: targetMeal.fat_grams,
+          protein: targetMeal.protein_grams,
+          insulinDose: targetMeal.insulin_dose,
+        },
+        glucoseResponse: {
+          baseline: parseFloat(targetMeal.baseline_glucose).toFixed(1),
+          peak: parseFloat(targetMeal.peak_glucose).toFixed(1),
+          change: parseFloat(targetMeal.total_change).toFixed(1),
+          timeToPeak: targetMeal.time_to_peak_minutes,
+          timeInRange: parseFloat(targetMeal.time_in_range_pct).toFixed(1),
+          timeAbove180: targetMeal.time_above_180_minutes,
+        },
+        performance: {
+          score: performanceScore,
+          assessment: performanceAssessment,
+          comparisonAvailable: typicalResponse !== null,
+        },
+        typicalResponse,
+        doseAssessment,
+        timingAssessment,
+        compositionInsights,
+        improvementTracking,
+        recommendations,
+        metadata: {
+          similarMealsAnalyzed: similarMeals.length,
+          lookbackDays,
+        },
+      });
+    } catch (error) {
+      console.error('Error analyzing individual meal:', error);
+      return JSON.stringify({
+        error: 'Failed to analyze individual meal',
+        details: error instanceof Error ? error.message : 'Unknown error',
+      });
+    }
+  },
+});
+
+/**
  * Tool: Analyze Basal Patterns
  * Analyzes overnight fasting patterns to assess basal insulin adequacy
  */
@@ -1050,19 +1656,32 @@ const analyzeBasalPatternsTool = new DynamicStructuredTool({
     'Analyze overnight fasting patterns (3am-7am) to assess basal insulin adequacy. Returns drift analysis, stability metrics, and recommendations. Use this when discussing basal insulin doses or overnight glucose control.',
   schema: z.object({
     userId: z.string().describe('User ID (auto-injected by system)'),
+    userTimezone: z.string().optional().describe('User timezone (auto-injected by system)'),
     days: z.number().default(14).describe('Number of days to analyze (default: 14)'),
   }),
-  func: async ({ userId, days = 14 }) => {
+  func: async ({ userId, userTimezone = 'America/New_York', days = 14 }) => {
     try {
       const results = [];
 
-      // Analyze each night in the period
-      for (let i = 0; i < days; i++) {
-        const date = new Date();
-        date.setDate(date.getDate() - i);
-        const dateStr = date.toISOString().split('T')[0];
+      // Get dates in user's timezone by querying the database
+      // This ensures dates match the timezone used in detectBasalAdequacy
+      const datesResult = await query(
+        `SELECT DISTINCT DATE(timezone($2, timestamp)) as date
+         FROM glucose_readings
+         WHERE user_id = $1
+           AND timestamp >= NOW() - INTERVAL '${days} days'
+         ORDER BY date DESC
+         LIMIT ${days}`,
+        [userId, userTimezone]
+      );
 
-        const analysis = await detectBasalAdequacy(userId, dateStr);
+      // Analyze each night in the period
+      for (const row of datesResult.rows) {
+        const dateStr = row.date instanceof Date
+          ? row.date.toISOString().split('T')[0]
+          : String(row.date);
+
+        const analysis = await detectBasalAdequacy(userId, dateStr, userTimezone);
         if (analysis) {
           results.push({
             date: dateStr,
@@ -1393,12 +2012,13 @@ const runPatternDetectionTool = new DynamicStructuredTool({
     'Manually trigger pattern detection analysis for recent unanalyzed meals, exercise, or overnight periods. Useful after user logs new data and wants immediate pattern insights. Returns summary of what was analyzed.',
   schema: z.object({
     userId: z.string().describe('User ID (auto-injected by system)'),
+    userTimezone: z.string().optional().describe('User timezone (auto-injected by system)'),
     analysisType: z
       .enum(['meal', 'exercise', 'basal', 'all'])
       .default('all')
       .describe('Type of analysis to run (default: all)'),
   }),
-  func: async ({ userId, analysisType = 'all' }) => {
+  func: async ({ userId, userTimezone = 'America/New_York', analysisType = 'all' }) => {
     try {
       const results: any = {
         analyzed: [],
@@ -1464,13 +2084,18 @@ const runPatternDetectionTool = new DynamicStructuredTool({
         });
       }
 
-      // Analyze overnight basal for yesterday
+      // Analyze overnight basal for yesterday (in user's timezone)
       if (analysisType === 'basal' || analysisType === 'all') {
-        const yesterday = new Date();
-        yesterday.setDate(yesterday.getDate() - 1);
-        const dateStr = yesterday.toISOString().split('T')[0];
+        // Get yesterday's date in user's timezone from database
+        const yesterdayResult = await query(
+          `SELECT DATE(timezone($2, NOW() - INTERVAL '1 day')) as date`,
+          [userId, userTimezone]
+        );
+        const dateStr = yesterdayResult.rows[0].date instanceof Date
+          ? yesterdayResult.rows[0].date.toISOString().split('T')[0]
+          : String(yesterdayResult.rows[0].date);
 
-        const basalAnalysis = await detectBasalAdequacy(userId, dateStr);
+        const basalAnalysis = await detectBasalAdequacy(userId, dateStr, userTimezone);
 
         results.analyzed.push({
           type: 'basal',
@@ -2559,6 +3184,7 @@ export const allTools = [
 
   // Pattern analysis tools
   analyzeMealPatternsTool,
+  analyzeIndividualMealTool,
   analyzeBasalPatternsTool,
   analyzeExercisePatternsTool,
   getDetectedPatternsTool,

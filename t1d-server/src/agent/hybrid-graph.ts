@@ -273,7 +273,24 @@ When asked to analyze: Use tools to gather comprehensive data in parallel, then 
     const toolCallsMap = new Map<string, string>(); // tool_call_id -> toolName
     const toolResultsMap = new Map<string, string>(); // tool_call_id -> content
 
-    // First pass: collect tool calls and their IDs
+    // Debug: Log input messages BEFORE transformation
+    console.log('[synthesisNode] Input messages BEFORE transformation:');
+    messages.forEach((msg, idx) => {
+      const msgType = msg.constructor.name;
+      const content = typeof msg.content === 'string' ? msg.content : JSON.stringify(msg.content);
+      console.log(`  [${idx}] ${msgType}: ${content.substring(0, 80)}...`);
+    });
+
+    // Find indices of all HumanMessages to identify completed turns
+    const humanMessageIndices: number[] = [];
+    for (let i = 0; i < messages.length; i++) {
+      if (messages[i].constructor.name === 'HumanMessage') {
+        humanMessageIndices.push(i);
+      }
+    }
+    const lastHumanIndex = humanMessageIndices[humanMessageIndices.length - 1] ?? -1;
+
+    // First pass: collect tool calls and build conversation history
     for (let i = 0; i < messages.length; i++) {
       const msg = messages[i];
       const msgType = msg.constructor.name;
@@ -293,13 +310,19 @@ When asked to analyze: Use tools to gather comprehensive data in parallel, then 
         continue;
       }
 
-      // Skip other AI messages (Analysis complete, etc)
-      if (msgType === 'AIMessage') {
+      // Keep synthesis responses from COMPLETED turns (before the last HumanMessage)
+      // Skip synthesis responses from CURRENT turn (after the last HumanMessage)
+      if (msgType === 'AIMessage' && i < lastHumanIndex) {
         const content = typeof msg.content === 'string' ? msg.content : '';
-        // Keep substantial AI messages from previous conversation turns
         if (content.length >= 20 && content !== 'Analysis complete') {
-          transformedMessages.push(msg);
+          // Create clean AIMessage for previous turn responses
+          transformedMessages.push(new AIMessage({ content }));
         }
+        continue;
+      }
+
+      // Skip AI messages from current turn
+      if (msgType === 'AIMessage') {
         continue;
       }
 
@@ -331,6 +354,11 @@ When asked to analyze: Use tools to gather comprehensive data in parallel, then 
 
       for (let i = 0; i < toolResults.length; i++) {
         const { toolName, content } = toolResults[i];
+
+        // Log warning if tool result is very large
+        if (content.length > 50000) {
+          console.warn(`[synthesisNode] Warning: Tool result from ${toolName} is ${content.length} chars (${Math.round(content.length / 3)} tokens). Consider limiting the tool's time range.`);
+        }
 
         // Parse JSON if possible for better formatting
         try {
@@ -449,7 +477,77 @@ This user has LADA (Latent Autoimmune Diabetes in Adults):
     ];
 
     // Use invoke - streaming handles token-by-token via streamMode: 'messages'
-    const response = await providers.largeModel.invoke(messagesToSend);
+    console.log(`[synthesisNode] Invoking large model with ${messagesToSend.length} messages, ${toolResults.length} tool results`);
+
+    // Log what we're sending for debugging
+    console.log('[synthesisNode] Messages being sent to large model:');
+    messagesToSend.forEach((msg, idx) => {
+      const msgContent = typeof msg.content === 'string' ? msg.content : JSON.stringify(msg.content);
+      console.log(`  [${idx}] ${msg.constructor.name}: ${msgContent.substring(0, 100)}... (${msgContent.length} chars)`);
+    });
+
+    let response;
+    try {
+      response = await providers.largeModel.invoke(messagesToSend);
+    } catch (error: any) {
+      console.error('[synthesisNode] ERROR invoking large model:', error.message);
+      console.error('[synthesisNode] Error details:', {
+        status: error.status,
+        statusText: error.statusText,
+        code: error.code,
+        type: error.type,
+        name: error.name,
+        stack: error.stack?.split('\n').slice(0, 3).join('\n'), // First 3 lines of stack
+      });
+
+      // Return error message to user
+      return {
+        messages: [new AIMessage({
+          content: "I apologize, but I encountered an error while processing your request. This may be a temporary issue with the AI service. Please try asking your question again.",
+        })],
+      };
+    }
+
+    // Log all response fields to see what we're getting from the API
+    console.log('[synthesisNode] Complete response object:');
+    console.log(`  - content: "${response.content}" (${response.content?.length ?? 0} chars)`);
+    console.log(`  - response type: ${response.constructor?.name}`);
+    console.log(`  - id: ${response.id}`);
+    console.log(`  - response_metadata:`, JSON.stringify(response.response_metadata, null, 2));
+    console.log(`  - additional_kwargs:`, JSON.stringify(response.additional_kwargs, null, 2));
+
+    // Check tool-related fields - maybe Claude is trying to call a tool?
+    const responseAny = response as any;
+    console.log(`  - tool_calls:`, responseAny.tool_calls);
+    console.log(`  - invalid_tool_calls:`, responseAny.invalid_tool_calls);
+    console.log(`  - tool_call_chunks:`, responseAny.tool_call_chunks);
+    console.log(`  - usage_metadata:`, responseAny.usage_metadata);
+
+    // Log ALL enumerable properties on response object
+    console.log(`  - all response keys:`, Object.keys(response));
+
+    // Check for HTTP-related fields
+    if (responseAny.response) console.log(`  - response.response:`, responseAny.response);
+    if (responseAny.status) console.log(`  - response.status:`, responseAny.status);
+    if (responseAny.statusText) console.log(`  - response.statusText:`, responseAny.statusText);
+    if (responseAny.headers) console.log(`  - response.headers:`, responseAny.headers);
+    if (responseAny.raw) console.log(`  - response.raw:`, responseAny.raw);
+
+    // Check if response has content
+    const responseContent = typeof response.content === 'string' ? response.content : JSON.stringify(response.content);
+    console.log(`[synthesisNode] Final content length: ${responseContent.length} characters`);
+
+    if (responseContent.length === 0) {
+      console.error('[synthesisNode] ❌ Empty response detected - this appears to be an API issue');
+      console.error(`[synthesisNode] Tool results provided:`, toolResults.map(tr => ({ name: tr.toolName, contentLength: tr.content.length })));
+
+      // Return error message to user
+      return {
+        messages: [new AIMessage({
+          content: "I encountered an issue getting a response from the AI service. Please try asking your question again.",
+        })],
+      };
+    }
 
     // Log context size summary statistics
     logContextSummary(state.contextMetrics || []);

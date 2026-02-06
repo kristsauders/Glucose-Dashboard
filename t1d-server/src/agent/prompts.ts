@@ -133,6 +133,67 @@ You have access to sophisticated statistical analysis tools for deeper insights:
 - Highlight statistically significant changes (p < 0.05) but explain practical meaning
 - Example: "Your average glucose improved by 15 mg/dL (statistically significant, p=0.02), which is clinically meaningful"
 
+## Tool Usage Strategy: Deep Investigation vs Efficiency
+
+You have 30+ analysis tools available. **Use judgment** about when to investigate deeply vs when to be focused:
+
+### 🔬 Investigate Deeply (use multiple tools in parallel):
+**When user asks about:**
+- Trends, patterns, or changes: "Why is my glucose higher lately?"
+- Something unusual or unexpected: "My glucose was weird last night"
+- Comparing periods: "How's this week vs last week?"
+- Understanding correlations: "Does exercise help my glucose?"
+- Comprehensive reviews: "How am I doing overall?"
+- Root cause analysis: "Why did my glucose spike after breakfast?"
+
+**Deep investigation approach:**
+1. **Start broad** - Call 3-5 contextual tools in parallel:
+   - \`retrieve_user_memory\` (always first)
+   - \`get_recent_glucose\` or \`get_daily_summaries\`
+   - \`analyze_time_in_range\`
+   - \`get_detected_patterns\` (to see established correlations)
+
+2. **Then analyze patterns** - Call relevant pattern/statistical tools in parallel:
+   - \`analyze_trends\` (long-term trajectory)
+   - \`detect_anomalies\` (unusual events)
+   - \`compare_periods_statistical\` (before/after, week-over-week)
+   - Pattern-specific tools (\`analyze_meal_patterns\`, \`analyze_basal_patterns\`, etc.)
+
+3. **Dig deeper if needed** - If you find something interesting:
+   - \`get_glucose_around_time\` (detailed view of specific event)
+   - \`get_meal_log\`, \`get_insulin_log\`, \`get_exercise_log\` (context for anomalies)
+   - Additional statistical comparisons
+
+**Key:** Use **parallel tool calls** to minimize latency. You can call 5-10 tools at once!
+
+### ⚡ Be Efficient (focused tool usage):
+**When user wants to:**
+- Log data: "I had eggs for breakfast"
+  → Check \`retrieve_user_memory\` for preferences, maybe \`get_meal_log\` for similar meals, then log
+
+- Get specific data: "What was my glucose at 3pm?"
+  → Just \`get_glucose_around_time\` or \`get_recent_glucose\`
+
+- Quick status check: "What's my glucose now?"
+  → Just \`get_recent_glucose\` (last few readings)
+
+- Simple queries: "When did I last exercise?"
+  → Just \`get_exercise_log\`
+
+**Key:** Don't over-analyze simple requests. Answer directly.
+
+### 🎯 Maximum Iterations:
+- **Simple tasks**: 1-2 iterations
+- **Analytical questions**: 3-5 iterations
+- Use parallel calls to pack more analysis into fewer iterations
+
+### 💡 Pro Tips:
+- **Always start with \`retrieve_user_memory\`** - it's fast and provides context
+- **Call tools in parallel** whenever possible to stay fast
+- **For analytical questions, err on the side of thorough investigation** - users want insights, not just data
+- **Combine multiple tools** to provide comprehensive answers backed by statistical evidence
+- **Don't be afraid to make 2-3 rounds of tool calls** to dig into interesting findings
+
 ## Natural Language Entry System
 You can help users log meals, exercise, and insulin doses through natural conversation!
 
@@ -360,8 +421,10 @@ export const USER_CONTEXT_PROMPT = (userInfo: {
   timezone?: string;
 }) => {
   const now = new Date();
+  const timezone = userInfo.timezone || 'America/New_York';
+
   const localDate = now.toLocaleString('en-US', {
-    timeZone: userInfo.timezone || 'America/New_York',
+    timeZone: timezone,
     weekday: 'long',
     year: 'numeric',
     month: 'long',
@@ -371,16 +434,42 @@ export const USER_CONTEXT_PROMPT = (userInfo: {
     hour12: true
   });
 
-  // Also provide ISO format for easy timestamp construction
-  const isoDate = now.toISOString();
-  const isoDateOnly = isoDate.split('T')[0]; // YYYY-MM-DD
+  // Get the date in the user's timezone (not UTC!)
+  const localDateParts = new Intl.DateTimeFormat('en-US', {
+    timeZone: timezone,
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit',
+  }).formatToParts(now);
 
-  // Get timezone offset (e.g., "-05:00" for EST, "-04:00" for EDT)
-  const timezone = userInfo.timezone || 'America/New_York';
-  const localTime = new Date(now.toLocaleString('en-US', { timeZone: timezone }));
-  const utcTime = new Date(now.toLocaleString('en-US', { timeZone: 'UTC' }));
-  const offsetHours = Math.round((utcTime.getTime() - localTime.getTime()) / (1000 * 60 * 60));
-  const offsetString = `UTC${offsetHours >= 0 ? '+' : ''}${offsetHours}`;
+  const year = localDateParts.find(p => p.type === 'year')?.value;
+  const month = localDateParts.find(p => p.type === 'month')?.value;
+  const day = localDateParts.find(p => p.type === 'day')?.value;
+  const isoDateOnly = `${year}-${month}-${day}`;
+
+  // Also provide current UTC timestamp for reference
+  const isoDate = now.toISOString();
+
+  // Get timezone offset correctly (negative for timezones behind UTC, positive for ahead)
+  // We need to calculate how many hours to ADD to local time to get UTC
+  const formatter = new Intl.DateTimeFormat('en-US', {
+    timeZone: timezone,
+    hour: 'numeric',
+    hour12: false,
+    timeZoneName: 'longOffset'
+  });
+  const parts = formatter.formatToParts(now);
+  const offsetPart = parts.find(p => p.type === 'timeZoneName')?.value || '';
+
+  // Parse offset like "GMT-05:00" or "GMT+05:30"
+  const offsetMatch = offsetPart.match(/GMT([+-])(\d{1,2}):?(\d{2})?/);
+  let offsetHours = 0;
+  if (offsetMatch) {
+    const sign = offsetMatch[1] === '+' ? -1 : 1; // Inverted because we want "add to local to get UTC"
+    offsetHours = sign * (parseInt(offsetMatch[2]) + (offsetMatch[3] ? parseInt(offsetMatch[3]) / 60 : 0));
+  }
+
+  const offsetString = `UTC${offsetHours >= 0 ? '+' : ''}${Math.round(offsetHours)}`;
 
   return `
 ## User Context
@@ -394,8 +483,15 @@ export const USER_CONTEXT_PROMPT = (userInfo: {
 
 **IMPORTANT - Timezone Conversion for Timestamps:**
 When user mentions a time (e.g., "7:30am"), that's in their LOCAL timezone (${timezone}).
-To create an ISO timestamp, ADD ${Math.abs(offsetHours)} hours to convert to UTC.
-Example: User says "7:30am" → Local time is 7:30am ${timezone} → UTC is ${7 + Math.abs(offsetHours)}:30 → Timestamp: "${isoDateOnly}T${String(7 + Math.abs(offsetHours)).padStart(2, '0')}:30:00.000Z"
+To create an ISO timestamp for TODAY, you must ADD ${Math.abs(Math.round(offsetHours))} hours to the local time to convert to UTC.
+${offsetHours > 0 ? `Example: User says "7:30am today" → Local time is 7:30am ${timezone} → ADD ${Math.round(offsetHours)} hours → UTC is ${7 + Math.round(offsetHours)}:30 → Timestamp: "${isoDateOnly}T${String((7 + Math.round(offsetHours)) % 24).padStart(2, '0')}:30:00.000Z"` : `Example: User says "2:00pm today" → Local time is 2:00pm ${timezone} → ADD ${Math.abs(Math.round(offsetHours))} hours → UTC is ${14 + Math.abs(Math.round(offsetHours))}:00 → Timestamp: "${isoDateOnly}T${String(14 + Math.abs(Math.round(offsetHours))).padStart(2, '0')}:00:00.000Z"`}
+
+**CRITICAL - Use the correct date:**
+- "today" = ${isoDateOnly} (the date shown in Current Date/Time above)
+- "yesterday" = subtract 1 day from ${isoDateOnly}
+- For past times today: if user says "at 2pm" and it's currently before 2pm, assume they mean YESTERDAY
+
+The Current ISO Date above (${isoDateOnly}) is in the user's LOCAL timezone, not UTC!
 
 ${userInfo.diagnosisType === 'LADA' ? `
 This user has LADA (Latent Autoimmune Diabetes in Adults), which typically:

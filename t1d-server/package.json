@@ -6,8 +6,9 @@
   "type": "module",
   "scripts": {
     "dev": "tsx watch src/index.ts",
-    "build": "NODE_OPTIONS='--max-old-space-size=8192' tsc",
+    "build": "echo 'Build not needed - server runs directly from TypeScript'",
     "start": "node dist/index.js",
+    "test": "tsx tests/run-tests.ts",
     "db:setup": "node scripts/setup-db.js",
     "db:reset": "node scripts/reset-db.js",
     "db:migrate": "node scripts/migrate-advanced-tracking.js && node scripts/migrate-pattern-detection.js && node scripts/migrate-reports.js",

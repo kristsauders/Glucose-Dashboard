@@ -8,6 +8,7 @@ import { fileURLToPath } from 'url';
 import { env } from '../config/env.js';
 import { testConnection } from '../config/database.js';
 import { errorHandler } from './middleware/errorHandler.js';
+import { authMiddleware } from './middleware/auth.js';
 import { libreViewPoller } from '../services/libreviewPoller.js';
 import authRoutes from './routes/auth.js';
 import glucoseRoutes from './routes/glucose.js';
@@ -80,6 +81,35 @@ app.use('/api/chat', chatRoutes);
 app.use('/api/conversations', conversationsRoutes);
 app.use('/api/logs', logsRoutes);
 app.use('/api/notifications', notificationRoutes);
+
+// Admin endpoint to manually trigger proactive check (for testing)
+// Development only - no auth required for easier testing
+app.post('/api/admin/trigger-proactive-check', async (req, res) => {
+  try {
+    // Only allow in development
+    if (env.NODE_ENV === 'production') {
+      return res.status(403).json({ error: 'Not available in production' });
+    }
+
+    console.log('📋 Manual proactive check triggered (FORCE MODE)');
+
+    // Import proactiveMonitor
+    const { proactiveMonitor } = await import('../services/proactive-monitor.js');
+
+    // Trigger check in background with force=true to bypass cooldown/sleep/data checks
+    (proactiveMonitor as any).checkAllUsers(true).catch((err: any) => {
+      console.error('Error in manual proactive check:', err);
+    });
+
+    res.json({
+      success: true,
+      message: 'Proactive check triggered. Check server logs for progress.'
+    });
+  } catch (error) {
+    console.error('Failed to trigger proactive check:', error);
+    res.status(500).json({ error: 'Failed to trigger proactive check' });
+  }
+});
 
 // Serve static files in production
 if (env.NODE_ENV === 'production') {

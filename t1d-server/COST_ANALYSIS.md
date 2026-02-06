@@ -8,19 +8,31 @@
 - **Monthly Cost**: **$71.04/month**
   - Small model: $1.38
   - Large model: $69.66
-- **Context Limits**: ~32K (small) ⚠️ + 200K (large)
+- **Context Limits**: 128K (small) ✅ + 200K (large)
+- **Performance**: Extremely fast and cheap
 
-**🎯 Best Upgrade Options:**
+**🎯 Recommendation: Your current setup is excellent!**
 
-1. **GPT-5 Nano + Sonnet 4.5** = **$71.46/month** (+$0.42)
-   - Same cost, 8x larger context (400K vs 32K)
-   - **Recommended: No-brainer upgrade**
+With 128K context on gpt-oss-120b, you already have plenty of context for comprehensive glucose analysis. Combined with:
 
-2. **GPT-5 Nano + DeepSeek V3.2** = **$7.11/month** (-$63.93, 90% savings!)
-   - Worth testing - huge savings with large context
+- **Extremely fast** performance (as you noted)
+- **Very cheap** small model ($1.38/month)
+- **Excellent synthesis** quality (Sonnet 4.5)
 
-3. **Trinity Mini FREE + DeepSeek V3.2** = **$5.31/month** (-$65.73, 92% savings!)
-   - Experimental free option
+**There's no compelling reason to change unless**:
+
+- You want to experiment with budget options (DeepSeek V3.2 saves 90%)
+- You need 400K+ context (unlikely for glucose analysis)
+
+**Optional Experiments:**
+
+1. **GPT-5 Nano + DeepSeek V3.2** = **$7.11/month** (-$63.93, 90% savings!)
+   - Test if DeepSeek synthesis is good enough
+   - Huge savings if quality is acceptable
+
+2. **Stay with current** = **$71.04/month**
+   - Proven, fast, working great
+   - **Recommended unless you want to save money**
 
 ---
 
@@ -42,9 +54,10 @@ The AI landscape has transformed dramatically in early 2026 with several models 
 | **Trinity Mini (FREE)** | 131K | FREE | FREE | Reasoning, free tier available |
 
 **Why This Matters for Sage:**
-- Current model (gpt-oss-120b) has only ~32K context
-- With 400K-1M context, we can include much more glucose history in each analysis
-- Cheaper models with huge context = better analysis at lower cost
+
+- Current model (gpt-oss-120b) has 128K context - already excellent!
+- With 400K-1M context, you could include even more history (but may not need it)
+- Alternative models like DeepSeek V3.2 offer similar context at much lower cost
 
 ---
 
@@ -53,7 +66,7 @@ The AI landscape has transformed dramatically in early 2026 with several models 
 **Small Model (Tool Iterations)**: `gpt-oss-120b` via OpenRouter
 - $0.039/M input tokens
 - $0.19/M output tokens
-- **~32K context** (limiting factor)
+- **128K context** (excellent for glucose analysis) ✅
 
 **Large Model (Message Synthesis)**: `anthropic/claude-sonnet-4.5` via OpenRouter
 - $3/M input tokens

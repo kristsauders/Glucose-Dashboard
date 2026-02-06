@@ -208,6 +208,13 @@ router.post('/stream', async (req, res, next) => {
 
       const duration = Date.now() - startTime;
 
+      // Check for empty response
+      if (!fullResponse || fullResponse.trim().length === 0) {
+        console.error(`[chat] WARNING: Empty response after ${chunkCount} chunks, ${tokenCount} tokens`);
+        console.error(`[chat] Tool calls: ${toolNames.join(', ')}`);
+        fullResponse = "I apologize, but I encountered an issue generating a response. Please try asking your question again.";
+      }
+
       // Save messages to database with conversation_id
       // Insert user message first
       await query(
