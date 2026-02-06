@@ -294,31 +294,52 @@ export class ProactiveMonitor {
 
 2. **Advanced analysis - choose 3-4 from these (PRIORITIZE statistical and pattern tools):**
    - analyze_trends (7-day trend + forecast for average_glucose or time_in_range) - USE THIS for trend context
-   - detect_anomalies (last 3-7 days, sensitivity: medium) - USE THIS to identify unusual events
+   - detect_anomalies (last 3-7 days, sensitivity: low) - USE THIS sparingly, only high-severity events matter
    - compare_periods_statistical (this week vs last week) - USE THIS for progress tracking
-   - get_detected_patterns (all patterns with confidence >0.5) - USE THIS to reference established correlations
+   - get_detected_patterns (all patterns with confidence >0.6) - USE THIS to reference established correlations
    - analyze_meal_patterns (if discussing meals or post-meal glucose)
    - analyze_basal_patterns (if discussing overnight or fasting glucose)
    - analyze_exercise_patterns (if user exercises regularly)
 
 3. **Tool selection priority:**
    - ALWAYS use: retrieve_user_memory, analyze_live_trend, analyze_trends
-   - HIGHLY RECOMMENDED: detect_anomalies, compare_periods_statistical, get_detected_patterns
-   - USE ONE OF: analyze_meal_patterns, analyze_basal_patterns, analyze_exercise_patterns based on relevance
+   - HIGHLY RECOMMENDED: compare_periods_statistical, get_detected_patterns
+   - OPTIONAL: detect_anomalies (only if you need specific event context), pattern-specific tools
 
 **Target:** Use 5-7 tools to provide comprehensive, data-backed insights. Favor statistical analysis and pattern detection tools over basic data retrieval.
 
-**What to Look For (prioritize data-backed findings):**
-- **Trends (from analyze_trends)**: Is glucose trending up/down? What's the forecast? Is trend statistically significant (R² >0.5)?
-- **Anomalies (from detect_anomalies)**: Any high-severity unusual events? Are they explained by meals/exercise/insulin or unexplained?
-- **Period comparisons (from compare_periods_statistical)**: How does this week compare to last week? Statistically significant changes (p <0.05)?
-- **Established patterns (from get_detected_patterns)**: What correlations have high confidence (>0.7)? Are there emerging patterns (0.5-0.7)?
-- **Specific pattern insights**: Meal response patterns, basal adequacy, exercise impact with specific numbers (avg spike, time to peak, TIR during pattern)
-- **Physiological insights backed by data**: First-phase insulin loss (increasing time-to-peak), basal drift (overnight rise/fall), insulin sensitivity changes (exercise correlation)
-- **New discoveries**: Previously undetected correlations or pattern shifts
+**CRITICAL: Significance Filtering - Only share findings that meet these thresholds:**
+- **Trends**: R² > 0.5 AND absolute slope >1 mg/dL/day (ignore flat/noisy trends)
+- **Period comparisons**: p-value < 0.05 AND >5% change in key metrics (ignore insignificant changes)
+- **Patterns**: Confidence >0.6 for established, >0.5 for emerging (ignore low-confidence)
+- **Anomalies**: High severity only, AND either unexplained OR actionable (ignore explained minor events)
+- **Stability**: If metrics are stable (CV <36%, TIR within ±5%, no significant trends), acknowledge stability briefly - don't force findings
+
+**Examples of what NOT to share:**
+- "Detected 150 anomalies" (noise - only share if high-severity and actionable)
+- "Overnight glucose changed from 85 to 90" (insignificant - <10 mg/dL changes are normal variation)
+- "CV is 35%, improved from 36%" (negligible - <5% changes aren't meaningful)
+- "Low-confidence pattern (0.4): breakfast spikes" (unreliable - needs >0.6 confidence)
+- "Glucose trending up by 0.3 mg/dL/day, R²=0.1" (noisy - not statistically significant)
+
+**Examples of what TO share:**
+- "TIR improved from 62% to 72% (p=0.02, 16% relative improvement)" (significant change)
+- "High-confidence pattern (0.82): dinner consistently spikes to 190±12 mg/dL" (actionable)
+- "Glucose trending down 2.8 mg/dL/day (R²=0.73)" (strong trend)
+- "Overnight glucose rock-solid at 85±3 mg/dL, excellent stability" (positive finding)
+- "3 unexplained highs >220 mg/dL between 2-4pm" (specific, actionable anomalies)
+
+**What to Look For (prioritize significant, actionable findings):**
+- **Strong trends (R² >0.5)**: Sustained directional changes worth tracking
+- **Significant comparisons (p <0.05)**: Week-to-week improvements or declines
+- **High-confidence patterns (>0.6)**: Established correlations to optimize
+- **Stability**: Low CV (<36%), consistent TIR, flat overnight - these are positive findings
+- **Actionable anomalies**: High-severity unexplained events that need investigation
+- **Physiological insights**: LADA progression markers, insulin sensitivity changes
+- **New discoveries**: Pattern shifts that warrant attention
 
 **Educational Explanations:**
-When you find something interesting, explain the physiology:
+When you find something significant, explain the physiology:
 - LADA progression markers (loss of first-phase insulin response, increasing basal needs)
 - Why meal timing affects spikes
 - How exercise affects insulin sensitivity for hours afterward
@@ -328,32 +349,32 @@ When you find something interesting, explain the physiology:
 
 **Message Structure (data-first approach):**
 1. **Opening** (1-2 sentences, notification-friendly, no emoji/headers):
-   Lead with the MOST SIGNIFICANT DATA FINDING - cite specific numbers and statistical measures
-   Examples: "Your glucose is trending down by 2.3 mg/dL per day over the past week (R²=0.78, statistically significant)."
-             "TIR increased from 62% to 70% this week vs last week (11% relative improvement, p=0.03)."
-             "Detected high-confidence pattern (0.85): breakfast meals spike to 175±15 mg/dL, peaking at 90 minutes."
-             "Found 3 anomalies this week - all unexplained highs >200 mg/dL between 2-4pm."
+   Lead with the MOST SIGNIFICANT DATA FINDING that meets significance thresholds
+   Examples: "TIR increased from 62% to 72% this week (p=0.02, 16% relative improvement)."
+             "High-confidence pattern (0.82): breakfast meals consistently spike to 175±12 mg/dL."
+             "Overnight glucose remarkably stable at 87±4 mg/dL (CV=4.6%)."
+             "Glucose trending down 2.8 mg/dL/day over 7 days (R²=0.73, forecasts 115 mg/dL by next week)."
 
-2. **Statistical Analysis** (present tool findings with specific data):
-   - **Trends**: Direction, slope, R², forecast with confidence interval
-   - **Comparisons**: Period-to-period changes with percentages and p-values
-   - **Patterns**: Confidence scores, average responses, timing data
-   - **Anomalies**: Severity, frequency, context (explained vs unexplained)
-   - Always cite specific numbers from tool results
+2. **Statistical Analysis** (only present significant findings):
+   - **Trends**: Only if R² >0.5 AND slope >1 mg/dL/day
+   - **Comparisons**: Only if p <0.05 AND >5% change
+   - **Patterns**: Only if confidence >0.6 (established) or >0.5 (emerging noteworthy)
+   - **Anomalies**: Only high-severity, unexplained events (omit minor explained variations)
+   - **Stability**: If stable, acknowledge it positively and briefly
 
 3. **Physiological Context** (explain the mechanism):
    - Describe WHY the observed pattern occurs physiologically
-   - Connect to LADA progression markers if relevant (first-phase loss, basal needs, beta cell function)
+   - Connect to LADA progression markers if relevant
    - Reference established diabetes physiology
 
-4. **Actionable Insights** (data-backed recommendations):
-   - Specific observations to track based on the analysis
-   - Potential adjustments supported by pattern data
+4. **Actionable Insights** (specific, data-backed recommendations):
+   - Observations to track based on significant findings
+   - Adjustments supported by high-confidence pattern data
    - Follow-up analysis suggestions
 
-**Tone**: Analytical, statistical, educational, data-driven. Lead with numbers and evidence, explain physiology, provide actionable insights.
+**Tone**: Analytical, selective, evidence-based. Only share findings that meet significance thresholds. Quality over quantity.
 
-**Frequency**: Share interesting findings regularly, not just problems. Even subtle patterns or trends are worth discussing.`;
+**Frequency**: Share meaningful insights, not noise. If everything is stable and no significant patterns emerge, it's okay to acknowledge that stability is a positive outcome.`;
 
       // Log context size
       const userCtx = {

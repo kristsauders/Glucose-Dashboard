@@ -392,8 +392,9 @@ export async function detectAnomalies(
     if (!baseline) continue; // No baseline data for this hour
 
     const { mean, stdDev } = baseline;
-    const expectedMin = mean - 2 * stdDev;
-    const expectedMax = mean + 2 * stdDev;
+    // Use 2.5 std devs (covers ~98.8% of normal distribution) to reduce false positives
+    const expectedMin = mean - 2.5 * stdDev;
+    const expectedMax = mean + 2.5 * stdDev;
 
     // Calculate anomaly score
     let anomalyScore = 0;
@@ -420,21 +421,21 @@ export async function detectAnomalies(
         const rateOfChange = (glucose - parseFloat(prevReading.glucose)) / timeDiffMinutes;
         const absRate = Math.abs(rateOfChange);
 
-        // Rate > 3 mg/dL/min is concerning
-        if (absRate > 3) {
+        // Rate > 4 mg/dL/min is concerning (increased threshold to reduce noise)
+        if (absRate > 4) {
           anomalyScore += 0.5;
           reasons.push(`Rapid ${rateOfChange > 0 ? 'rise' : 'drop'} (${Math.round(absRate)} mg/dL/min detected)`);
         }
       }
     }
 
-    // Only process if we have an anomaly
-    if (anomalyScore === 0) continue;
+    // Only process if we have a significant anomaly (minimum score of 1.0 to filter noise)
+    if (anomalyScore < 1.0) continue;
 
-    // Determine severity
+    // Determine severity (adjusted thresholds for less noise)
     let severity: 'low' | 'medium' | 'high';
-    if (anomalyScore > 3.0) severity = 'high';
-    else if (anomalyScore > 1.5) severity = 'medium';
+    if (anomalyScore > 4.0) severity = 'high';
+    else if (anomalyScore > 2.5) severity = 'medium';
     else severity = 'low';
 
     // Step 4: Contextualize - check for logged events
