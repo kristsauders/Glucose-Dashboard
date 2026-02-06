@@ -13,7 +13,7 @@ export class ProactiveMonitor {
   private agent: any;
   private toolOnlyAgent: any;
   private isRunning: boolean = false;
-  private checkInterval: number = 90 * 60 * 1000; // 90 minutes for comprehensive analysis
+  private checkInterval: number = 30 * 60 * 1000; // 30 minutes for responsive monitoring
   private intervalId: NodeJS.Timeout | null = null;
 
   constructor() {
