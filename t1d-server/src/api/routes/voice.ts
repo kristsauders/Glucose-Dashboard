@@ -177,6 +177,10 @@ router.post('/chat', upload.single('audio'), async (req, res, next) => {
           new HumanMessage(transcript),
         ];
 
+        console.log('[Voice API] Processing transcript:', transcript);
+        console.log('[Voice API] User context:', userCtx);
+        console.log('[Voice API] Conversation history length:', history.length);
+
         const stream = await agent.stream({
           messages,
           userId,
@@ -186,12 +190,20 @@ router.post('/chat', upload.single('audio'), async (req, res, next) => {
         });
 
         let fullResponse = '';
+        let iterationCount = 0;
 
         for await (const chunk of stream) {
+          iterationCount++;
           if (chunk && typeof chunk === 'object' && 'messages' in chunk) {
             const messages = chunk.messages;
             if (Array.isArray(messages) && messages.length > 0) {
               const lastMessage = messages[messages.length - 1];
+              console.log(`[Voice API] Iteration ${iterationCount}: ${lastMessage.constructor.name}`, {
+                hasToolCalls: !!lastMessage.tool_calls?.length,
+                toolCount: lastMessage.tool_calls?.length || 0,
+                contentLength: typeof lastMessage.content === 'string' ? lastMessage.content.length : 0,
+              });
+
               const isAIMessage = lastMessage.constructor.name === 'AIMessage' ||
                                  lastMessage.constructor.name === 'AIMessageChunk';
               const isFinalMessage = !lastMessage.tool_calls || lastMessage.tool_calls.length === 0;
@@ -203,6 +215,7 @@ router.post('/chat', upload.single('audio'), async (req, res, next) => {
           }
         }
 
+        console.log('[Voice API] Final response length:', fullResponse.length);
         return fullResponse || 'I processed your message but had no response.';
       },
       { voice: voice as any, speed: 1.0 }

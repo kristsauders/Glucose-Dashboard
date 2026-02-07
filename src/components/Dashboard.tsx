@@ -223,13 +223,13 @@ export function Dashboard({ readings, onDataUpdated }: DashboardProps) {
         className="border-b bg-card/50 backdrop-blur-sm md:sticky top-0 z-10"
       >
         <div className="container mx-auto px-2 md:px-4 py-2 md:py-4">
-          <div className="flex flex-row items-center justify-between gap-2">
+          <div className="flex flex-col md:flex-row items-start md:items-center gap-2">
             <div className="flex-1 min-w-0">
-              <h1 className="text-xl md:text-3xl font-bold bg-gradient-to-r from-primary to-primary/60 bg-clip-text text-transparent truncate">
+              <h1 className="text-xl md:text-3xl font-bold bg-gradient-to-r from-primary to-primary/60 bg-clip-text text-transparent">
                 Sage
               </h1>
             </div>
-            <div className="flex gap-2 flex-shrink-0">
+            <div className="flex gap-2 flex-wrap w-full md:w-auto md:flex-shrink-0">
               <Button variant="outline" size="sm" onClick={() => setShowChat(!showChat)}>
                 <MessageSquare className="h-4 w-4 md:mr-2" />
                 <span className="hidden md:inline">AI Chat</span>
