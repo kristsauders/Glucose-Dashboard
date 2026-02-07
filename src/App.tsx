@@ -3,6 +3,9 @@ import { BrowserRouter, Routes, Route, Navigate, useLocation } from 'react-route
 import type { GlucoseReading } from './types/glucose';
 import { Auth } from './components/Auth';
 import { apiService } from './services/api';
+import { Alert, AlertDescription } from './components/ui/alert';
+import { AlertTriangle, RefreshCw } from 'lucide-react';
+import { Button } from './components/ui/button';
 
 // Lazy load routes for better performance
 const Dashboard = lazy(() => import('./components/Dashboard').then(m => ({ default: m.Dashboard })));
@@ -11,6 +14,8 @@ const ChatOnly = lazy(() => import('./pages/ChatOnly').then(m => ({ default: m.C
 function AppContent() {
   const location = useLocation();
   const [readings, setReadings] = useState<GlucoseReading[]>([]);
+  const [dataError, setDataError] = useState<string | null>(null);
+  const [isRetrying, setIsRetrying] = useState(false);
 
   // Only load glucose data when on dashboard route
   useEffect(() => {
@@ -21,11 +26,19 @@ function AppContent() {
 
   const loadGlucoseData = async () => {
     try {
+      setDataError(null);
       const data = await apiService.getGlucoseReadings();
       setReadings(data);
-    } catch (err) {
+    } catch (err: any) {
       console.error('Failed to load glucose data:', err);
+      setDataError(err.message || 'Failed to load glucose data. Please check your connection.');
     }
+  };
+
+  const handleRetry = async () => {
+    setIsRetrying(true);
+    await loadGlucoseData();
+    setIsRetrying(false);
   };
 
   const handleDataUpdated = useCallback(() => {
@@ -42,6 +55,32 @@ function AppContent() {
         </div>
       </div>
     }>
+      {dataError && location.pathname === '/' && (
+        <div className="fixed top-4 left-1/2 transform -translate-x-1/2 z-50 w-full max-w-md px-4">
+          <Alert variant="destructive">
+            <AlertTriangle className="h-4 w-4" />
+            <AlertDescription className="flex items-center justify-between gap-2">
+              <span className="flex-1">{dataError}</span>
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={handleRetry}
+                disabled={isRetrying}
+                className="ml-2 bg-background"
+              >
+                {isRetrying ? (
+                  <RefreshCw className="h-4 w-4 animate-spin" />
+                ) : (
+                  <>
+                    <RefreshCw className="h-4 w-4 mr-1" />
+                    Retry
+                  </>
+                )}
+              </Button>
+            </AlertDescription>
+          </Alert>
+        </div>
+      )}
       <Routes>
         <Route path="/" element={<Dashboard readings={readings} onDataUpdated={handleDataUpdated} />} />
         <Route path="/chat" element={<ChatOnly />} />

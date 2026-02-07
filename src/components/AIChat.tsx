@@ -9,7 +9,7 @@ import { Button } from './ui/button';
 import { Input } from './ui/input';
 import { Card, CardContent, CardHeader, CardTitle } from './ui/card';
 import { Alert, AlertDescription } from './ui/alert';
-import { Bot, Send, Trash2, Loader2, User, MessageSquare, Menu, Plus, X, Edit2, Check } from 'lucide-react';
+import { Bot, Send, Trash2, Loader2, User, MessageSquare, Menu, Plus, X, Edit2, Check, RefreshCw, AlertTriangle } from 'lucide-react';
 import { apiService } from '@/services/api';
 import { format } from 'date-fns';
 import type { Conversation, Message } from '@/types/chat';
@@ -22,6 +22,7 @@ export function AIChat() {
   const [input, setInput] = useState('');
   const [isLoading, setIsLoading] = useState(false);
   const [isFetchingConversations, setIsFetchingConversations] = useState(true);
+  const [conversationsError, setConversationsError] = useState('');
   const [error, setError] = useState('');
   const [streamingMessage, setStreamingMessage] = useState('');
   const [status, setStatus] = useState('');
@@ -42,24 +43,26 @@ export function AIChat() {
 
   // Fetch conversations on mount
   useEffect(() => {
-    const fetchConversations = async () => {
-      try {
-        const convos = await apiService.getConversations();
-        setConversations(convos);
-
-        // Auto-select most recent conversation if any exist
-        if (convos.length > 0 && !activeConversationId) {
-          await loadConversation(convos[0].id);
-        }
-      } catch (err) {
-        console.error('Failed to fetch conversations:', err);
-      } finally {
-        setIsFetchingConversations(false);
-      }
-    };
-
     fetchConversations();
   }, []);
+
+  const fetchConversations = async () => {
+    try {
+      setConversationsError('');
+      const convos = await apiService.getConversations();
+      setConversations(convos);
+
+      // Auto-select most recent conversation if any exist
+      if (convos.length > 0 && !activeConversationId) {
+        await loadConversation(convos[0].id);
+      }
+    } catch (err: any) {
+      console.error('Failed to fetch conversations:', err);
+      setConversationsError(err.message || 'Failed to load conversations. Please check your connection.');
+    } finally {
+      setIsFetchingConversations(false);
+    }
+  };
 
   // Handle scrolling: scroll to top when PROCESSING starts, don't scroll when it ends
   useEffect(() => {
@@ -232,6 +235,11 @@ export function AIChat() {
     try {
       const token = localStorage.getItem('t1d_auth_token');
       const apiUrl = import.meta.env.VITE_API_URL || 'http://localhost:3002';
+
+      // Add timeout to fetch
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => controller.abort(), 60000); // 60 second timeout
+
       const response = await fetch(`${apiUrl}/api/chat/stream`, {
         method: 'POST',
         headers: {
@@ -242,10 +250,14 @@ export function AIChat() {
           message,
           conversationId: activeConversationId,
         }),
+        signal: controller.signal,
       });
 
+      clearTimeout(timeoutId);
+
       if (!response.ok) {
-        throw new Error('Failed to send message');
+        const errorData = await response.json().catch(() => ({ error: 'Failed to send message' }));
+        throw new Error(errorData.error || 'Failed to send message');
       }
 
       const reader = response.body?.getReader();
@@ -315,8 +327,16 @@ export function AIChat() {
       setMessages((prev) => [...prev, assistantMessage]);
       setStreamingMessage('');
       setStatus('');
-    } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to send message');
+    } catch (err: any) {
+      let errorMessage = 'Failed to send message';
+      if (err.name === 'AbortError') {
+        errorMessage = 'Request timed out. The server may be busy.';
+      } else if (err.message?.includes('fetch')) {
+        errorMessage = 'Connection failed. Please check your network.';
+      } else if (err.message) {
+        errorMessage = err.message;
+      }
+      setError(errorMessage);
       // Remove optimistic user message on error
       setMessages((prev) => prev.slice(0, -1));
       setStreamingMessage('');
@@ -339,6 +359,28 @@ export function AIChat() {
     return (
       <Card className="h-full flex items-center justify-center">
         <Loader2 className="h-8 w-8 animate-spin text-primary" />
+      </Card>
+    );
+  }
+
+  if (conversationsError) {
+    return (
+      <Card className="h-full flex items-center justify-center">
+        <div className="text-center space-y-4 p-6 max-w-md">
+          <AlertTriangle className="h-12 w-12 text-destructive mx-auto" />
+          <div>
+            <h3 className="font-semibold text-lg mb-2">Failed to Load Conversations</h3>
+            <p className="text-sm text-muted-foreground">{conversationsError}</p>
+          </div>
+          <Button onClick={() => {
+            setIsFetchingConversations(true);
+            setConversationsError('');
+            fetchConversations();
+          }}>
+            <RefreshCw className="h-4 w-4 mr-2" />
+            Retry
+          </Button>
+        </div>
       </Card>
     );
   }

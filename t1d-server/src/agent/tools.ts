@@ -2835,6 +2835,279 @@ export const getInsulinHistoryTool = new DynamicStructuredTool({
 
 /**
  * ============================================================================
+ * ROUTINE PATTERN DETECTION & PROACTIVE LOGGING
+ * ============================================================================
+ */
+
+/**
+ * Tool: Detect Routine Patterns
+ * Analyze user's regular meal, insulin, and exercise patterns
+ */
+export const detectRoutinePatternsTool = new DynamicStructuredTool({
+  name: 'detect_routine_patterns',
+  description: 'Analyze the user\'s regular meal, insulin, and exercise patterns over the last 30 days. Returns high-confidence patterns (>70% consistency) with typical timing, amounts, and descriptions. Use this to understand their routine and suggest missing logs.',
+  schema: z.object({
+    userId: z.string().optional().describe('The user ID (automatically provided)'),
+    userTimezone: z.string().optional().describe('User timezone (automatically provided)'),
+    days: z.number().default(30).describe('Number of days to analyze (default 30)'),
+  }),
+  func: async ({ userId, userTimezone, days }) => {
+    const timezone = userTimezone || 'America/New_York';
+
+    // Analyze meal patterns grouped by time of day
+    const mealResult = await query(
+      `SELECT
+        EXTRACT(HOUR FROM timezone($2, timestamp)) as hour,
+        description,
+        carbs,
+        COUNT(*) as frequency,
+        AVG(carbs) as avg_carbs,
+        ARRAY_AGG(DISTINCT description) as descriptions
+       FROM meals
+       WHERE user_id = $1
+         AND timestamp >= NOW() - INTERVAL '${days} days'
+       GROUP BY EXTRACT(HOUR FROM timezone($2, timestamp)), description, carbs
+       HAVING COUNT(*) >= ${Math.ceil(days * 0.7 / 7)} -- At least 70% of weeks
+       ORDER BY hour, frequency DESC`,
+      [userId, timezone]
+    );
+
+    // Group meals by time slot (breakfast, lunch, dinner, snack)
+    const mealPatterns: any[] = [];
+    const hourGroups = new Map<string, any[]>();
+
+    for (const row of mealResult.rows) {
+      const hour = parseInt(row.hour);
+      let slot = '';
+      if (hour >= 5 && hour < 10) slot = 'breakfast';
+      else if (hour >= 11 && hour < 14) slot = 'lunch';
+      else if (hour >= 17 && hour < 21) slot = 'dinner';
+      else slot = 'snack';
+
+      if (!hourGroups.has(slot)) hourGroups.set(slot, []);
+      hourGroups.get(slot)!.push({
+        hour: row.hour,
+        description: row.description,
+        avgCarbs: parseFloat(row.avg_carbs).toFixed(0),
+        frequency: parseInt(row.frequency),
+        daysAnalyzed: days,
+      });
+    }
+
+    // For each slot, pick the most common meal
+    for (const [slot, meals] of hourGroups.entries()) {
+      if (meals.length > 0) {
+        const topMeal = meals[0]; // Already sorted by frequency DESC
+        const consistency = (topMeal.frequency / days) * 100;
+
+        if (consistency >= 70) { // Only high-confidence patterns
+          mealPatterns.push({
+            type: 'meal',
+            slot,
+            typicalTime: `${topMeal.hour}:00`,
+            description: topMeal.description || `usual ${slot}`,
+            avgCarbs: topMeal.avgCarbs,
+            frequency: topMeal.frequency,
+            consistency: consistency.toFixed(0) + '%',
+          });
+        }
+      }
+    }
+
+    // Analyze insulin patterns (basal doses are very regular)
+    const insulinResult = await query(
+      `SELECT
+        EXTRACT(HOUR FROM timezone($2, timestamp)) as hour,
+        insulin_type,
+        brand_name,
+        AVG(units) as avg_units,
+        COUNT(*) as frequency,
+        purpose
+       FROM insulin_doses
+       WHERE user_id = $1
+         AND timestamp >= NOW() - INTERVAL '${days} days'
+       GROUP BY EXTRACT(HOUR FROM timezone($2, timestamp)), insulin_type, brand_name, purpose
+       HAVING COUNT(*) >= ${Math.ceil(days * 0.7 / 7)}
+       ORDER BY hour, frequency DESC`,
+      [userId, timezone]
+    );
+
+    const insulinPatterns = insulinResult.rows
+      .map((row: any) => {
+        const consistency = (parseInt(row.frequency) / days) * 100;
+        if (consistency >= 70) {
+          return {
+            type: 'insulin',
+            typicalTime: `${row.hour}:00`,
+            insulinType: row.insulin_type,
+            brandName: row.brand_name,
+            avgUnits: parseFloat(row.avg_units).toFixed(1),
+            purpose: row.purpose,
+            frequency: parseInt(row.frequency),
+            consistency: consistency.toFixed(0) + '%',
+          };
+        }
+        return null;
+      })
+      .filter((p: any) => p !== null);
+
+    // Analyze exercise patterns (grouped by day of week and time)
+    const exerciseResult = await query(
+      `SELECT
+        EXTRACT(DOW FROM timezone($2, timestamp)) as day_of_week,
+        EXTRACT(HOUR FROM timezone($2, timestamp)) as hour,
+        activity_type,
+        AVG(duration_minutes) as avg_duration,
+        intensity,
+        COUNT(*) as frequency
+       FROM exercise_logs
+       WHERE user_id = $1
+         AND timestamp >= NOW() - INTERVAL '${days} days'
+       GROUP BY day_of_week, hour, activity_type, intensity
+       HAVING COUNT(*) >= ${Math.ceil(days * 0.5 / 7)} -- 50% consistency for exercise
+       ORDER BY frequency DESC`,
+      [userId, timezone]
+    );
+
+    const exercisePatterns = exerciseResult.rows
+      .map((row: any) => {
+        const weeksInPeriod = days / 7;
+        const consistency = (parseInt(row.frequency) / weeksInPeriod) * 100;
+        if (consistency >= 50) {
+          const dayNames = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
+          return {
+            type: 'exercise',
+            dayOfWeek: dayNames[parseInt(row.day_of_week)],
+            typicalTime: `${row.hour}:00`,
+            activityType: row.activity_type,
+            avgDuration: Math.round(parseFloat(row.avg_duration)),
+            intensity: row.intensity,
+            frequency: parseInt(row.frequency),
+            consistency: consistency.toFixed(0) + '%',
+          };
+        }
+        return null;
+      })
+      .filter((p: any) => p !== null);
+
+    return JSON.stringify({
+      analysisWindow: `${days} days`,
+      mealPatterns,
+      insulinPatterns,
+      exercisePatterns,
+      summary: `Found ${mealPatterns.length} meal patterns, ${insulinPatterns.length} insulin patterns, ${exercisePatterns.length} exercise patterns with ≥70% consistency`,
+    });
+  },
+});
+
+/**
+ * Tool: Get Missing Logs Suggestions
+ * Check for missing logs based on detected routine patterns
+ */
+export const getMissingLogsSuggestionsTool = new DynamicStructuredTool({
+  name: 'get_missing_logs_suggestions',
+  description: 'Check what meals, insulin doses, or exercise sessions might be missing based on the user\'s routine patterns. Compares today\'s or a specific day\'s logs against their typical schedule. Use this proactively to help users log their data.',
+  schema: z.object({
+    userId: z.string().optional().describe('The user ID (automatically provided)'),
+    userTimezone: z.string().optional().describe('User timezone (automatically provided)'),
+    targetDate: z.string().optional().describe('Date to check (ISO date, YYYY-MM-DD). Defaults to today.'),
+    includeToday: z.boolean().default(true).describe('Include today in the check (default true)'),
+  }),
+  func: async ({ userId, userTimezone, targetDate, includeToday }) => {
+    const timezone = userTimezone || 'America/New_York';
+
+    // First, detect routine patterns
+    const patternsResult = await detectRoutinePatternsTool.func({ userId, userTimezone, days: 30 });
+    const patterns = JSON.parse(patternsResult);
+
+    // Determine target date
+    const checkDate = targetDate || new Date().toLocaleDateString('en-US', {
+      timeZone: timezone,
+      year: 'numeric',
+      month: '2-digit',
+      day: '2-digit'
+    }).split('/').reverse().join('-'); // Convert MM/DD/YYYY to YYYY-MM-DD
+
+    // Get current hour in user's timezone
+    const currentHour = parseInt(new Date().toLocaleString('en-US', {
+      timeZone: timezone,
+      hour: 'numeric',
+      hour12: false
+    }));
+
+    const suggestions: any[] = [];
+
+    // Check meal patterns
+    for (const pattern of patterns.mealPatterns) {
+      const patternHour = parseInt(pattern.typicalTime.split(':')[0]);
+
+      // Only check if the time has passed (or it's close)
+      if (!includeToday || currentHour >= patternHour - 1) {
+        // Check if this meal was logged
+        const mealCheck = await query(
+          `SELECT COUNT(*) as count FROM meals
+           WHERE user_id = $1
+             AND DATE(timezone($2, timestamp)) = $3
+             AND EXTRACT(HOUR FROM timezone($2, timestamp)) BETWEEN $4 AND $5`,
+          [userId, timezone, checkDate, patternHour - 1, patternHour + 1]
+        );
+
+        if (parseInt(mealCheck.rows[0].count) === 0) {
+          suggestions.push({
+            type: 'meal',
+            slot: pattern.slot,
+            description: pattern.description,
+            typicalTime: pattern.typicalTime,
+            avgCarbs: pattern.avgCarbs,
+            confidence: pattern.consistency,
+            suggestion: `I'd like to log your ${pattern.slot} for you. Did you eat around ${pattern.typicalTime} (usual ~${pattern.avgCarbs}g carbs)?`,
+          });
+        }
+      }
+    }
+
+    // Check insulin patterns
+    for (const pattern of patterns.insulinPatterns) {
+      const patternHour = parseInt(pattern.typicalTime.split(':')[0]);
+
+      if (!includeToday || currentHour >= patternHour - 1) {
+        const insulinCheck = await query(
+          `SELECT COUNT(*) as count FROM insulin_doses
+           WHERE user_id = $1
+             AND DATE(timezone($2, timestamp)) = $3
+             AND EXTRACT(HOUR FROM timezone($2, timestamp)) BETWEEN $4 AND $5
+             AND insulin_type = $6`,
+          [userId, timezone, checkDate, patternHour - 1, patternHour + 1, pattern.insulinType]
+        );
+
+        if (parseInt(insulinCheck.rows[0].count) === 0) {
+          suggestions.push({
+            type: 'insulin',
+            insulinType: pattern.insulinType,
+            brandName: pattern.brandName,
+            typicalTime: pattern.typicalTime,
+            avgUnits: pattern.avgUnits,
+            purpose: pattern.purpose,
+            confidence: pattern.consistency,
+            suggestion: `Did you take your usual ${pattern.avgUnits} units of ${pattern.brandName || pattern.insulinType} around ${pattern.typicalTime}?`,
+          });
+        }
+      }
+    }
+
+    return JSON.stringify({
+      targetDate: checkDate,
+      suggestionsCount: suggestions.length,
+      suggestions,
+      message: suggestions.length === 0
+        ? 'All regular logs appear to be up to date!'
+        : `Found ${suggestions.length} potential missing log(s) based on your routine.`,
+    });
+  },
+});
+
+/**
+ * ============================================================================
  * REPORT ACCESS TOOLS
  * ============================================================================
  */
@@ -3183,6 +3456,10 @@ export const allTools = [
   getRecentSageMessagesTool,
   sendProactiveMessageTool,
   getUserContextTool,
+
+  // Routine pattern detection & proactive logging
+  detectRoutinePatternsTool,
+  getMissingLogsSuggestionsTool,
 
   // Pattern analysis tools
   analyzeMealPatternsTool,

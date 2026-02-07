@@ -8,6 +8,41 @@ const API_BASE_URL = `${import.meta.env.VITE_API_URL || 'http://localhost:3002'}
 const TOKEN_KEY = 't1d_auth_token';
 const USER_KEY = 't1d_user';
 
+// Retry configuration
+const MAX_RETRIES = 3;
+const INITIAL_RETRY_DELAY = 1000; // 1 second
+const MAX_RETRY_DELAY = 10000; // 10 seconds
+const REQUEST_TIMEOUT = 30000; // 30 seconds
+
+// Helper to detect if an error is transient (should retry)
+function isTransientError(error: any): boolean {
+  // Network errors, timeouts, and 5xx server errors are transient
+  if (error instanceof TypeError && error.message.includes('fetch')) return true;
+  if (error.message?.includes('NetworkError')) return true;
+  if (error.message?.includes('timeout')) return true;
+  if (error.message?.includes('aborted')) return true;
+  if (error.status >= 500 && error.status < 600) return true;
+  if (error.status === 429) return true; // Rate limit
+  return false;
+}
+
+// Helper for exponential backoff delay
+function getRetryDelay(attempt: number): number {
+  const delay = INITIAL_RETRY_DELAY * Math.pow(2, attempt);
+  const jitter = Math.random() * 1000; // Add jitter to prevent thundering herd
+  return Math.min(delay + jitter, MAX_RETRY_DELAY);
+}
+
+// Helper to create fetch with timeout
+function fetchWithTimeout(url: string, options: RequestInit, timeout: number): Promise<Response> {
+  return Promise.race([
+    fetch(url, options),
+    new Promise<Response>((_, reject) =>
+      setTimeout(() => reject(new Error('Request timeout')), timeout)
+    ),
+  ]);
+}
+
 interface User {
   id: string;
   email: string;
@@ -75,7 +110,7 @@ class APIService {
     }
   }
 
-  private async request<T>(endpoint: string, options: RequestInit = {}): Promise<T> {
+  private async request<T>(endpoint: string, options: RequestInit = {}, retries = 0): Promise<T> {
     const headers: Record<string, string> = {
       'Content-Type': 'application/json',
       ...(options.headers as Record<string, string>),
@@ -86,17 +121,43 @@ class APIService {
       headers['Authorization'] = `Bearer ${this.token}`;
     }
 
-    const response = await fetch(`${API_BASE_URL}${endpoint}`, {
-      ...options,
-      headers,
-    });
+    try {
+      const response = await fetchWithTimeout(
+        `${API_BASE_URL}${endpoint}`,
+        {
+          ...options,
+          headers,
+        },
+        REQUEST_TIMEOUT
+      );
 
-    if (!response.ok) {
-      const error = await response.json().catch(() => ({ error: 'Request failed' }));
-      throw new Error(error.error || error.message || 'Request failed');
+      if (!response.ok) {
+        const errorData = await response.json().catch(() => ({ error: 'Request failed' }));
+        const error: any = new Error(errorData.error || errorData.message || 'Request failed');
+        error.status = response.status;
+
+        // Don't retry auth errors (401, 403) or client errors (4xx except 429)
+        if (response.status === 401 || response.status === 403 ||
+            (response.status >= 400 && response.status < 500 && response.status !== 429)) {
+          throw error;
+        }
+
+        throw error;
+      }
+
+      return response.json();
+    } catch (error: any) {
+      // Retry transient errors
+      if (isTransientError(error) && retries < MAX_RETRIES) {
+        const delay = getRetryDelay(retries);
+        console.log(`Request failed, retrying in ${delay}ms... (attempt ${retries + 1}/${MAX_RETRIES})`);
+        await new Promise(resolve => setTimeout(resolve, delay));
+        return this.request<T>(endpoint, options, retries + 1);
+      }
+
+      // Give up after max retries or non-transient error
+      throw error;
     }
-
-    return response.json();
   }
 
   // Auth methods
