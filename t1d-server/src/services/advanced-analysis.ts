@@ -8,6 +8,7 @@
  */
 
 import { query } from '../config/database.js';
+import { convertToUserTimezone } from '../utils/timezone.js';
 
 // ============================================================================
 // TYPE DEFINITIONS
@@ -465,7 +466,7 @@ export async function detectAnomalies(
     }
 
     anomalies.push({
-      timestamp: timestamp.toISOString(),
+      timestamp: convertToUserTimezone(timestamp, userTimezone),
       glucose: Math.round(glucose),
       severity,
       anomalyScore: parseFloat(anomalyScore.toFixed(2)),

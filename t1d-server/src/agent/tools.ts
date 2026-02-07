@@ -2237,16 +2237,18 @@ const detectAnomaliesTool = new DynamicStructuredTool({
     'Identify unusual glucose events that deviate from your established patterns. Returns anomalies with severity levels, possible causes, and recommendations. Use this when investigating unexpected glucose readings or trying to identify problems.',
   schema: z.object({
     userId: z.string().describe('User ID (auto-injected by system)'),
+    userTimezone: z.string().optional().describe('User timezone (automatically provided)'),
     days: z.number().default(7).describe('Number of days to analyze (default: 7)'),
     sensitivityLevel: z
       .enum(['low', 'medium', 'high'])
       .default('medium')
       .describe('Sensitivity level: low=only severe anomalies, medium=moderate+severe, high=all anomalies'),
   }),
-  func: async ({ userId, days = 7, sensitivityLevel = 'medium' }) => {
+  func: async ({ userId, userTimezone, days = 7, sensitivityLevel = 'medium' }) => {
     try {
+      const timezone = userTimezone || 'America/New_York';
       // Call advanced analysis function
-      const anomalyDetection = await detectAnomalies(userId, days, sensitivityLevel);
+      const anomalyDetection = await detectAnomalies(userId, days, sensitivityLevel, timezone);
 
       return JSON.stringify(anomalyDetection);
     } catch (error) {
