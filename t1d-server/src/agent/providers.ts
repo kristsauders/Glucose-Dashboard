@@ -94,11 +94,11 @@ export function getHybridAIProvider(mode: 'chat' | 'proactive' = 'chat'): Hybrid
       },
       temperature: 0.7,
       streaming: false, // Don't stream tool calling
-      modelKwargs: {
-        reasoning: {
-          effort: 'high' // Enable reasoning with high effort for cost/quality balance
-        }
-      }
+      // modelKwargs: {
+      //   reasoning: {
+      //     effort: 'high' // Enable reasoning with high effort for cost/quality balance
+      //   }
+      // }
     });
     smallModel.getNumTokens = async () => 0;
   }
