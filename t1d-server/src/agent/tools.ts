@@ -1300,9 +1300,7 @@ const analyzeIndividualMealTool = new DynamicStructuredTool({
             c.peak_glucose,
             c.time_to_peak_minutes,
             c.total_change,
-            c.time_in_range_pct,
-            c.time_above_180_minutes,
-            c.post_meal_duration_minutes
+            c.time_in_range_pct
           FROM meals m
           LEFT JOIN glucose_correlations c ON m.correlation_id = c.id
           WHERE m.id = $1 AND m.user_id = $2
@@ -1319,9 +1317,7 @@ const analyzeIndividualMealTool = new DynamicStructuredTool({
             c.peak_glucose,
             c.time_to_peak_minutes,
             c.total_change,
-            c.time_in_range_pct,
-            c.time_above_180_minutes,
-            c.post_meal_duration_minutes
+            c.time_in_range_pct
           FROM meals m
           LEFT JOIN glucose_correlations c ON m.correlation_id = c.id
           WHERE m.user_id = $1
@@ -1366,9 +1362,7 @@ const analyzeIndividualMealTool = new DynamicStructuredTool({
           c.peak_glucose,
           c.time_to_peak_minutes,
           c.total_change,
-          c.time_in_range_pct,
-          c.time_above_180_minutes,
-          c.post_meal_duration_minutes
+          c.time_in_range_pct
         FROM meals m
         LEFT JOIN glucose_correlations c ON m.correlation_id = c.id
         WHERE m.user_id = $1
@@ -1391,14 +1385,12 @@ const analyzeIndividualMealTool = new DynamicStructuredTool({
         const avgChange = similarMeals.reduce((sum, m) => sum + (parseFloat(m.total_change) || 0), 0) / similarMeals.length;
         const avgTimeToPeak = similarMeals.reduce((sum, m) => sum + (m.time_to_peak_minutes || 0), 0) / similarMeals.length;
         const avgTimeInRange = similarMeals.reduce((sum, m) => sum + (parseFloat(m.time_in_range_pct) || 0), 0) / similarMeals.length;
-        const avgTimeAbove180 = similarMeals.reduce((sum, m) => sum + (m.time_above_180_minutes || 0), 0) / similarMeals.length;
 
         typicalResponse = {
           avgPeak: avgPeak.toFixed(1),
           avgChange: avgChange.toFixed(1),
           avgTimeToPeak: Math.round(avgTimeToPeak),
           avgTimeInRange: avgTimeInRange.toFixed(1),
-          avgTimeAbove180: Math.round(avgTimeAbove180),
           sampleSize: similarMeals.length,
         };
       }
@@ -1614,12 +1606,12 @@ const analyzeIndividualMealTool = new DynamicStructuredTool({
       }
 
       // General improvement recommendations
-      if (performanceScore < 50 && targetMeal.time_above_180_minutes > 60) {
+      if (performanceScore < 50 && parseFloat(targetMeal.peak_glucose) > 200) {
         recommendations.push({
           category: 'general',
           priority: 'high',
           recommendation: 'Review this meal composition and consider alternatives',
-          reasoning: `Spent ${targetMeal.time_above_180_minutes} minutes above 180 mg/dL - this meal type may be challenging`,
+          reasoning: `Peak glucose exceeded 200 mg/dL - this meal type may be challenging`,
         });
       }
 
@@ -1639,7 +1631,6 @@ const analyzeIndividualMealTool = new DynamicStructuredTool({
           change: parseFloat(targetMeal.total_change).toFixed(1),
           timeToPeak: targetMeal.time_to_peak_minutes,
           timeInRange: parseFloat(targetMeal.time_in_range_pct).toFixed(1),
-          timeAbove180: targetMeal.time_above_180_minutes,
         },
         performance: {
           score: performanceScore,
