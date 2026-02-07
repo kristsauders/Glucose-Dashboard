@@ -1256,7 +1256,7 @@ const analyzeMealPatternsTool = new DynamicStructuredTool({
           id: m.id,
           timestamp: m.timestamp,
           description: m.description,
-          carbs: m.estimated_carbs,
+          carbs: m.carbs,
           mealType: m.meal_type,
           spike: m.total_change,
           timeToPeak: m.time_to_peak_minutes,
@@ -1343,11 +1343,24 @@ const analyzeIndividualMealTool = new DynamicStructuredTool({
         });
       }
 
+      // Get insulin doses for this meal
+      const insulinResult = await query(
+        `SELECT insulin_type, units, timestamp, purpose
+         FROM insulin_doses
+         WHERE related_meal_id = $1
+         ORDER BY timestamp ASC`,
+        [targetMeal.id]
+      );
+
+      const insulinDoses = insulinResult.rows;
+      const totalInsulin = insulinDoses.reduce((sum, d) => sum + parseFloat(d.units), 0);
+
       console.log('[analyze_individual_meal] Found meal:', {
         id: targetMeal.id,
         description: targetMeal.description,
         timestamp: targetMeal.timestamp,
-        insulin_dose: targetMeal.insulin_dose,
+        insulin_doses: insulinDoses.length,
+        total_insulin: totalInsulin,
         carbs: targetMeal.carbs,
         has_correlation: !!targetMeal.correlation_id
       });
@@ -1392,7 +1405,12 @@ const analyzeIndividualMealTool = new DynamicStructuredTool({
             carbs: targetMeal.carbs,
             fat: targetMeal.fat_grams,
             protein: targetMeal.protein_grams,
-            insulinDose: targetMeal.insulin_dose,
+            insulinDoses: insulinDoses.map(d => ({
+              type: d.insulin_type,
+              units: parseFloat(d.units),
+              timestamp: d.timestamp,
+            })),
+            totalInsulin: totalInsulin > 0 ? totalInsulin : null,
           },
           currentStatus: {
             hoursSinceMeal: hoursSinceMeal.toFixed(1),
@@ -1405,8 +1423,8 @@ const analyzeIndividualMealTool = new DynamicStructuredTool({
           message: hoursSinceMeal < 3
             ? 'Real-time analysis (full correlation analysis available after 3 hours)'
             : 'Correlation data not yet computed. Showing real-time analysis.',
-          note: targetMeal.insulin_dose
-            ? `Took ${targetMeal.insulin_dose} units of insulin for this meal.`
+          note: totalInsulin > 0
+            ? `Took ${totalInsulin} units of insulin for this meal (${insulinDoses.map(d => `${d.units}u ${d.insulin_type}`).join(', ')}).`
             : 'No insulin was logged for this meal.',
         });
       }
@@ -1533,7 +1551,7 @@ const analyzeIndividualMealTool = new DynamicStructuredTool({
       let doseAssessment = '';
       const thisPeak = parseFloat(targetMeal.peak_glucose);
       const thisChange = parseFloat(targetMeal.total_change);
-      const insulinDose = targetMeal.insulin_dose;
+      const insulinDose = totalInsulin;
 
       if (!insulinDose || insulinDose === 0) {
         doseAssessment = 'No insulin logged for this meal. Consider logging insulin doses for better analysis.';
@@ -1687,7 +1705,12 @@ const analyzeIndividualMealTool = new DynamicStructuredTool({
           carbs: targetMeal.carbs,
           fat: targetMeal.fat_grams,
           protein: targetMeal.protein_grams,
-          insulinDose: targetMeal.insulin_dose,
+          insulinDoses: insulinDoses.map(d => ({
+            type: d.insulin_type,
+            units: parseFloat(d.units),
+            timestamp: d.timestamp,
+          })),
+          totalInsulin: totalInsulin > 0 ? totalInsulin : null,
         },
         glucoseResponse: {
           baseline: parseFloat(targetMeal.baseline_glucose).toFixed(1),
@@ -2590,7 +2613,7 @@ export const getMealHistoryTool = new DynamicStructuredTool({
 
     // Use date arithmetic for full calendar days
     let queryText = `
-      SELECT id, timestamp, description, estimated_carbs, meal_type, tags, notes
+      SELECT id, timestamp, description, carbs, meal_type, tags, notes
       FROM meals
       WHERE user_id = $1
         AND timestamp >= DATE_TRUNC('day', NOW() AT TIME ZONE '${timezone}') - INTERVAL '${days} days'
@@ -2624,7 +2647,7 @@ export const getMealHistoryTool = new DynamicStructuredTool({
       id: r.id,
       timestamp: convertToUserTimezone(r.timestamp, timezone),
       description: r.description,
-      carbs: parseFloat(r.estimated_carbs || 0),
+      carbs: parseFloat(r.carbs || 0),
       mealType: r.meal_type,
       tags: r.tags,
       notes: r.notes,
