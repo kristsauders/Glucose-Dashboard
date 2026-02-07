@@ -688,6 +688,12 @@ export function AIChat() {
               value={input}
               onChange={(e) => setInput(e.target.value)}
               onKeyPress={handleKeyPress}
+              onFocus={() => {
+                // Scroll to bottom when input is focused (e.g., when keyboard appears on mobile)
+                setTimeout(() => {
+                  messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
+                }, 100);
+              }}
               placeholder="Ask about your glucose data..."
               disabled={isLoading}
               className="flex-1"
