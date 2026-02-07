@@ -136,7 +136,13 @@ export function useAudioRecorder(options: AudioRecorderOptions = {}) {
       let errorMessage = 'Failed to start recording';
 
       if (err.name === 'NotAllowedError') {
-        errorMessage = 'Microphone permission denied';
+        // Check if iOS Safari
+        const isIOS = /iPad|iPhone|iPod/.test(navigator.userAgent);
+        if (isIOS) {
+          errorMessage = 'Microphone permission denied. Grant permission when prompted. Note: iOS may ask each time you open the app.';
+        } else {
+          errorMessage = 'Microphone permission denied. Check browser settings to allow microphone access.';
+        }
       } else if (err.name === 'NotFoundError') {
         errorMessage = 'No microphone found';
       } else if (err.message) {

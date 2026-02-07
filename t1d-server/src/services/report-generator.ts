@@ -194,6 +194,10 @@ export class ReportGenerator {
       timeInRange?: string;
       dailyPattern?: string;
       distribution?: string;
+      weeklyOverview?: string;
+      spikeAnalysis?: string;
+      bedtimeGlucose?: string;
+      dailyTrends?: string;
     },
     comparisonStats?: GlucoseStats
   ): Promise<string> {
@@ -542,6 +546,30 @@ export class ReportGenerator {
       <img src="data:image/png;base64,${chartImages.distribution}" alt="Glucose Distribution" />
     </div>
     ` : ''}
+
+    ${chartImages.dailyTrends ? `
+    <div class="chart-container">
+      <img src="data:image/png;base64,${chartImages.dailyTrends}" alt="Daily Trends (Avg/Min/Max)" />
+    </div>
+    ` : ''}
+
+    ${chartImages.weeklyOverview ? `
+    <div class="chart-container">
+      <img src="data:image/png;base64,${chartImages.weeklyOverview}" alt="Weekly Overview (Avg/Min/Max)" />
+    </div>
+    ` : ''}
+
+    ${chartImages.spikeAnalysis ? `
+    <div class="chart-container">
+      <img src="data:image/png;base64,${chartImages.spikeAnalysis}" alt="Spike Analysis" />
+    </div>
+    ` : ''}
+
+    ${chartImages.bedtimeGlucose ? `
+    <div class="chart-container">
+      <img src="data:image/png;base64,${chartImages.bedtimeGlucose}" alt="Bedtime Glucose (9-11 PM)" />
+    </div>
+    ` : ''}
   </div>
 
   ${config.notes ? `
@@ -651,6 +679,23 @@ export class ReportGenerator {
 
       chartImages.distribution = (
         await this.chartGenerator.generateDistributionChart(readings)
+      ).toString('base64');
+
+      // Generate dashboard-style charts
+      chartImages.weeklyOverview = (
+        await this.chartGenerator.generateWeeklyOverviewChart(readings)
+      ).toString('base64');
+
+      chartImages.spikeAnalysis = (
+        await this.chartGenerator.generateSpikeAnalysisChart(readings)
+      ).toString('base64');
+
+      chartImages.bedtimeGlucose = (
+        await this.chartGenerator.generateBedtimeGlucoseChart(readings)
+      ).toString('base64');
+
+      chartImages.dailyTrends = (
+        await this.chartGenerator.generateDailyTrendsChart(readings)
       ).toString('base64');
 
       // Generate HTML

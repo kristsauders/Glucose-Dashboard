@@ -507,6 +507,423 @@ export class ChartGenerator {
   }
 
   /**
+   * Generate a weekly overview chart with avg/min/max
+   */
+  async generateWeeklyOverviewChart(
+    readings: GlucoseReading[],
+    title: string = 'Weekly Overview (Avg/Min/Max)'
+  ): Promise<Buffer> {
+    // Group readings by week
+    const weeklyData = new Map<string, GlucoseReading[]>();
+
+    readings.forEach(r => {
+      const weekStart = new Date(r.timestamp);
+      weekStart.setDate(weekStart.getDate() - weekStart.getDay()); // Start of week (Sunday)
+      weekStart.setHours(0, 0, 0, 0);
+      const weekKey = weekStart.toISOString().split('T')[0];
+
+      if (!weeklyData.has(weekKey)) {
+        weeklyData.set(weekKey, []);
+      }
+      weeklyData.get(weekKey)!.push(r);
+    });
+
+    const weeks: string[] = [];
+    const avgValues: number[] = [];
+    const minValues: number[] = [];
+    const maxValues: number[] = [];
+
+    Array.from(weeklyData.entries())
+      .sort(([a], [b]) => a.localeCompare(b))
+      .forEach(([week, weekReadings]) => {
+        const values = weekReadings.map(r => r.value);
+        weeks.push(new Date(week).toLocaleDateString());
+        avgValues.push(values.reduce((sum, v) => sum + v, 0) / values.length);
+        minValues.push(Math.min(...values));
+        maxValues.push(Math.max(...values));
+      });
+
+    const config: ChartConfiguration = {
+      type: 'line',
+      data: {
+        labels: weeks,
+        datasets: [
+          {
+            label: 'Average',
+            data: avgValues,
+            borderColor: 'rgb(59, 130, 246)',
+            backgroundColor: 'rgba(59, 130, 246, 0.1)',
+            borderWidth: 3,
+            pointRadius: 4,
+            fill: false,
+          },
+          {
+            label: 'Maximum',
+            data: maxValues,
+            borderColor: 'rgb(239, 68, 68)',
+            backgroundColor: 'rgba(239, 68, 68, 0.1)',
+            borderWidth: 2,
+            pointRadius: 3,
+            borderDash: [5, 5],
+            fill: false,
+          },
+          {
+            label: 'Minimum',
+            data: minValues,
+            borderColor: 'rgb(34, 197, 94)',
+            backgroundColor: 'rgba(34, 197, 94, 0.1)',
+            borderWidth: 2,
+            pointRadius: 3,
+            borderDash: [5, 5],
+            fill: false,
+          },
+        ],
+      },
+      options: {
+        responsive: true,
+        plugins: {
+          title: {
+            display: true,
+            text: title,
+            font: { size: 16, weight: 'bold' },
+          },
+          legend: {
+            display: true,
+            position: 'top',
+          },
+        },
+        scales: {
+          y: {
+            title: {
+              display: true,
+              text: 'Glucose (mg/dL)',
+            },
+            suggestedMin: 50,
+            suggestedMax: 250,
+          },
+          x: {
+            title: {
+              display: true,
+              text: 'Week',
+            },
+          },
+        },
+      },
+    };
+
+    return await this.canvas.renderToBuffer(config);
+  }
+
+  /**
+   * Generate a spike analysis chart
+   */
+  async generateSpikeAnalysisChart(
+    readings: GlucoseReading[],
+    title: string = 'Glucose Spikes Analysis'
+  ): Promise<Buffer> {
+    // Detect spikes (increase of >50 mg/dL within 30 minutes)
+    const spikesByDay = new Map<string, number>();
+
+    for (let i = 1; i < readings.length; i++) {
+      const current = readings[i];
+      const previous = readings[i - 1];
+      const timeDiff = (current.timestamp.getTime() - previous.timestamp.getTime()) / 1000 / 60; // minutes
+      const valueDiff = current.value - previous.value;
+
+      if (timeDiff <= 30 && valueDiff >= 50) {
+        const day = current.timestamp.toISOString().split('T')[0];
+        spikesByDay.set(day, (spikesByDay.get(day) || 0) + 1);
+      }
+    }
+
+    // Get all days in range
+    const days: string[] = [];
+    const spikeCounts: number[] = [];
+
+    const daySet = new Set<string>();
+    readings.forEach(r => {
+      daySet.add(r.timestamp.toISOString().split('T')[0]);
+    });
+
+    Array.from(daySet)
+      .sort()
+      .forEach(day => {
+        days.push(new Date(day).toLocaleDateString());
+        spikeCounts.push(spikesByDay.get(day) || 0);
+      });
+
+    const config: ChartConfiguration = {
+      type: 'bar',
+      data: {
+        labels: days,
+        datasets: [
+          {
+            label: 'Number of Spikes (>50 mg/dL in 30 min)',
+            data: spikeCounts,
+            backgroundColor: 'rgba(239, 68, 68, 0.6)',
+            borderColor: 'rgb(239, 68, 68)',
+            borderWidth: 1,
+          },
+        ],
+      },
+      options: {
+        responsive: true,
+        plugins: {
+          title: {
+            display: true,
+            text: title,
+            font: { size: 16, weight: 'bold' },
+          },
+          legend: {
+            display: true,
+            position: 'top',
+          },
+        },
+        scales: {
+          y: {
+            title: {
+              display: true,
+              text: 'Number of Spikes',
+            },
+            beginAtZero: true,
+            ticks: {
+              stepSize: 1,
+            },
+          },
+          x: {
+            title: {
+              display: true,
+              text: 'Date',
+            },
+            ticks: {
+              maxRotation: 45,
+              minRotation: 45,
+            },
+          },
+        },
+      },
+    };
+
+    return await this.canvas.renderToBuffer(config);
+  }
+
+  /**
+   * Generate a bedtime glucose chart
+   */
+  async generateBedtimeGlucoseChart(
+    readings: GlucoseReading[],
+    title: string = 'Bedtime Glucose Trends (9-11 PM)'
+  ): Promise<Buffer> {
+    // Filter readings between 9 PM and 11 PM
+    const bedtimeReadings = readings.filter(r => {
+      const hour = r.timestamp.getHours();
+      return hour >= 21 && hour < 23;
+    });
+
+    // Group by date
+    const bedtimeByDay = new Map<string, number[]>();
+
+    bedtimeReadings.forEach(r => {
+      const day = r.timestamp.toISOString().split('T')[0];
+      if (!bedtimeByDay.has(day)) {
+        bedtimeByDay.set(day, []);
+      }
+      bedtimeByDay.get(day)!.push(r.value);
+    });
+
+    const days: string[] = [];
+    const avgValues: number[] = [];
+
+    Array.from(bedtimeByDay.entries())
+      .sort(([a], [b]) => a.localeCompare(b))
+      .forEach(([day, values]) => {
+        days.push(new Date(day).toLocaleDateString());
+        avgValues.push(values.reduce((sum, v) => sum + v, 0) / values.length);
+      });
+
+    const config: ChartConfiguration = {
+      type: 'line',
+      data: {
+        labels: days,
+        datasets: [
+          {
+            label: 'Average Bedtime Glucose',
+            data: avgValues,
+            borderColor: 'rgb(139, 92, 246)',
+            backgroundColor: 'rgba(139, 92, 246, 0.1)',
+            borderWidth: 3,
+            pointRadius: 4,
+            fill: true,
+            tension: 0.4,
+          },
+        ],
+      },
+      options: {
+        responsive: true,
+        plugins: {
+          title: {
+            display: true,
+            text: title,
+            font: { size: 16, weight: 'bold' },
+          },
+          legend: {
+            display: true,
+            position: 'top',
+          },
+        },
+        scales: {
+          y: {
+            title: {
+              display: true,
+              text: 'Glucose (mg/dL)',
+            },
+            suggestedMin: 50,
+            suggestedMax: 200,
+            grid: {
+              color: (context) => {
+                const value = context.tick.value;
+                if (value === 70 || value === 140) {
+                  return 'rgba(255, 0, 0, 0.3)';
+                }
+                return 'rgba(0, 0, 0, 0.1)';
+              },
+            },
+          },
+          x: {
+            title: {
+              display: true,
+              text: 'Date',
+            },
+            ticks: {
+              maxRotation: 45,
+              minRotation: 45,
+            },
+          },
+        },
+      },
+    };
+
+    return await this.canvas.renderToBuffer(config);
+  }
+
+  /**
+   * Generate a daily trends chart with avg/min/max
+   */
+  async generateDailyTrendsChart(
+    readings: GlucoseReading[],
+    title: string = 'Daily Glucose Trends (Avg/Min/Max)'
+  ): Promise<Buffer> {
+    // Group readings by day
+    const dailyData = new Map<string, GlucoseReading[]>();
+
+    readings.forEach(r => {
+      const day = r.timestamp.toISOString().split('T')[0];
+      if (!dailyData.has(day)) {
+        dailyData.set(day, []);
+      }
+      dailyData.get(day)!.push(r);
+    });
+
+    const days: string[] = [];
+    const avgValues: number[] = [];
+    const minValues: number[] = [];
+    const maxValues: number[] = [];
+
+    Array.from(dailyData.entries())
+      .sort(([a], [b]) => a.localeCompare(b))
+      .forEach(([day, dayReadings]) => {
+        const values = dayReadings.map(r => r.value);
+        days.push(new Date(day).toLocaleDateString());
+        avgValues.push(values.reduce((sum, v) => sum + v, 0) / values.length);
+        minValues.push(Math.min(...values));
+        maxValues.push(Math.max(...values));
+      });
+
+    const config: ChartConfiguration = {
+      type: 'line',
+      data: {
+        labels: days,
+        datasets: [
+          {
+            label: 'Average',
+            data: avgValues,
+            borderColor: 'rgb(59, 130, 246)',
+            backgroundColor: 'rgba(59, 130, 246, 0.1)',
+            borderWidth: 3,
+            pointRadius: 4,
+            fill: false,
+          },
+          {
+            label: 'Maximum',
+            data: maxValues,
+            borderColor: 'rgb(239, 68, 68)',
+            backgroundColor: 'rgba(239, 68, 68, 0.1)',
+            borderWidth: 2,
+            pointRadius: 3,
+            borderDash: [5, 5],
+            fill: false,
+          },
+          {
+            label: 'Minimum',
+            data: minValues,
+            borderColor: 'rgb(34, 197, 94)',
+            backgroundColor: 'rgba(34, 197, 94, 0.1)',
+            borderWidth: 2,
+            pointRadius: 3,
+            borderDash: [5, 5],
+            fill: false,
+          },
+        ],
+      },
+      options: {
+        responsive: true,
+        plugins: {
+          title: {
+            display: true,
+            text: title,
+            font: { size: 16, weight: 'bold' },
+          },
+          legend: {
+            display: true,
+            position: 'top',
+          },
+        },
+        scales: {
+          y: {
+            title: {
+              display: true,
+              text: 'Glucose (mg/dL)',
+            },
+            suggestedMin: 50,
+            suggestedMax: 250,
+            grid: {
+              color: (context) => {
+                const value = context.tick.value;
+                if (value === 70 || value === 140) {
+                  return 'rgba(255, 0, 0, 0.3)';
+                }
+                return 'rgba(0, 0, 0, 0.1)';
+              },
+            },
+          },
+          x: {
+            title: {
+              display: true,
+              text: 'Date',
+            },
+            ticks: {
+              maxRotation: 45,
+              minRotation: 45,
+            },
+          },
+        },
+      },
+    };
+
+    return await this.canvas.renderToBuffer(config);
+  }
+
+  /**
    * Fetch glucose readings for a user within a date range
    */
   static async fetchReadings(

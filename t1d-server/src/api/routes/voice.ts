@@ -4,7 +4,7 @@ import multer from 'multer';
 import { authMiddleware } from '../middleware/auth.js';
 import { audioService } from '../../services/audio-service.js';
 import { createConfiguredAgentGraph } from '../../agent/graph.js';
-import { HumanMessage } from '@langchain/core/messages';
+import { HumanMessage, AIMessage } from '@langchain/core/messages';
 import type { AuthRequest } from '../../types/index.js';
 import { query } from '../../config/database.js';
 
@@ -137,6 +137,20 @@ router.post('/chat', upload.single('audio'), async (req, res, next) => {
     );
     const user = userResult.rows[0];
 
+    // Get recent chat history from this conversation (last 10 messages)
+    let history: any[] = [];
+    if (conversationId) {
+      const historyResult = await query(
+        `SELECT role, content
+         FROM chat_messages
+         WHERE conversation_id = $1
+         ORDER BY created_at DESC
+         LIMIT 10`,
+        [conversationId]
+      );
+      history = historyResult.rows.reverse();
+    }
+
     // Create agent instance
     const agent = createConfiguredAgentGraph();
 
@@ -153,8 +167,18 @@ router.post('/chat', upload.single('audio'), async (req, res, next) => {
           timezone: user.timezone || undefined,
         };
 
+        // Prepare messages with history (same as chat mode)
+        const messages = [
+          ...history.map(h =>
+            h.role === 'user'
+              ? new HumanMessage(h.content)
+              : new AIMessage(h.content)
+          ),
+          new HumanMessage(transcript),
+        ];
+
         const stream = await agent.stream({
-          messages: [new HumanMessage(transcript)],
+          messages,
           userId,
           userContext: userCtx,
         }, {

@@ -19,6 +19,7 @@ export function VoiceChat({ conversationId, onTranscript, onResponse }: VoiceCha
   const [audioUrl, setAudioUrl] = useState<string | null>(null);
   const [isMuted, setIsMuted] = useState(false);
   const [isPlaying, setIsPlaying] = useState(false);
+  const [audioUnlocked, setAudioUnlocked] = useState(false);
 
   const audioRef = useRef<HTMLAudioElement | null>(null);
 
@@ -29,13 +30,29 @@ export function VoiceChat({ conversationId, onTranscript, onResponse }: VoiceCha
 
   // Auto-play response audio when available
   useEffect(() => {
-    if (audioUrl && !isMuted && audioRef.current) {
-      audioRef.current.play().catch(err => {
-        console.error('Auto-play failed:', err);
-        setError('Auto-play blocked. Click play button.');
-      });
+    if (audioUrl && !isMuted && audioRef.current && mode === 'playing') {
+      // Attempt auto-play
+      const playPromise = audioRef.current.play();
+
+      if (playPromise !== undefined) {
+        playPromise
+          .then(() => {
+            // Autoplay started successfully
+            setIsPlaying(true);
+          })
+          .catch((err) => {
+            // Autoplay was prevented
+            console.log('Autoplay prevented:', err.name);
+            setIsPlaying(false);
+
+            // If audio hasn't been unlocked yet, show a hint
+            if (!audioUnlocked) {
+              setError('Tap the play button to hear the response (first time only)');
+            }
+          });
+      }
     }
-  }, [audioUrl, isMuted]);
+  }, [audioUrl, isMuted, mode, audioUnlocked]);
 
   async function handleAudioRecorded(blob: Blob) {
     try {
@@ -112,6 +129,22 @@ export function VoiceChat({ conversationId, onTranscript, onResponse }: VoiceCha
 
   function handleMicButtonDown() {
     if (mode === 'idle') {
+      // Unlock audio playback using this user gesture
+      if (!audioUnlocked) {
+        try {
+          // Create a silent audio element and play it to unlock audio
+          const silentAudio = new Audio('data:audio/mp3;base64,SUQzBAAAAAAAI1RTU0UAAAAPAAADTGF2ZjU4Ljc2LjEwMAAAAAAAAAAAAAAA//tQAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAWGluZwAAAA8AAAACAAADhAC7u7u7u7u7u7u7u7u7u7u7u7u7u7u7u7u7u7u7u7u7u7u7u7u7u7u7u7u7u7u7u7u7//////////////////////////////////////////////////////////////////8AAAAATGF2YzU4LjEzAAAAAAAAAAAAAAAAJAAAAAAAAAAAA4SC3RqvAAAAAAAAAAAAAAAAAAAA//sQZAAP8AAAaQAAAAgAAA0gAAABAAABpAAAACAAADSAAAAETEFNRTMuMTAwVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVV');
+          silentAudio.play().then(() => {
+            setAudioUnlocked(true);
+            console.log('Audio unlocked successfully');
+          }).catch((err) => {
+            console.log('Audio unlock failed:', err);
+          });
+        } catch (err) {
+          console.log('Audio unlock error:', err);
+        }
+      }
+
       recorder.startRecording();
       setMode('recording');
       setError('');
@@ -142,7 +175,12 @@ export function VoiceChat({ conversationId, onTranscript, onResponse }: VoiceCha
       if (isPlaying) {
         audioRef.current.pause();
       } else {
-        audioRef.current.play();
+        audioRef.current.play().then(() => {
+          // Mark audio as unlocked after first manual play
+          setAudioUnlocked(true);
+        }).catch((err) => {
+          console.error('Play failed:', err);
+        });
       }
       setIsPlaying(!isPlaying);
     }
@@ -160,6 +198,18 @@ export function VoiceChat({ conversationId, onTranscript, onResponse }: VoiceCha
 
   return (
     <div className="space-y-4">
+      {/* iOS Permission Info */}
+      {mode === 'idle' && !transcript && !audioUnlocked && (
+        <Alert>
+          <AlertDescription className="text-xs">
+            <strong>Tip:</strong> You'll need to grant microphone permission when prompted.
+            {/iPad|iPhone|iPod/.test(navigator.userAgent) &&
+              " On iOS, you may need to grant permission each time you open the app."}
+            {" "}Responses will play automatically after your first recording.
+          </AlertDescription>
+        </Alert>
+      )}
+
       {/* Error Alert */}
       {error && (
         <Alert variant="destructive">
