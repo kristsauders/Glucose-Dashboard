@@ -38,6 +38,8 @@
     "@types/multer": "^2.0.0",
     "@types/xml2js": "^0.4.14",
     "bcryptjs": "^2.4.3",
+    "chart.js": "^4.5.1",
+    "chartjs-node-canvas": "^5.0.0",
     "compression": "^1.8.1",
     "cors": "^2.8.5",
     "discord.js": "^14.25.1",
@@ -48,6 +50,7 @@
     "multer": "^2.0.2",
     "node-fetch": "^3.3.2",
     "pg": "^8.11.3",
+    "puppeteer": "^19.11.1",
     "web-push": "^3.6.7",
     "xml2js": "^0.6.2",
     "zod": "^3.22.4"

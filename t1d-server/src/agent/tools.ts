@@ -17,6 +17,7 @@ import {
 import { convertToUserTimezone } from '../utils/timezone.js';
 import { researchService } from '../services/research-service.js';
 import { researchMonitor } from '../services/research-monitor.js';
+import { ReportGenerator } from '../services/report-generator.js';
 
 /**
  * Tool: Get recent glucose readings
@@ -3518,6 +3519,85 @@ export const requestResearchTool = new DynamicStructuredTool({
   },
 });
 
+/**
+ * Tool: Generate medical report
+ */
+export const generateReportTool = new DynamicStructuredTool({
+  name: 'generate_report',
+  description: 'Generate a comprehensive medical report (PDF) for the user to share with their healthcare provider. Includes glucose charts, statistics, and analysis. Use when user asks to create/generate a report.',
+  schema: z.object({
+    userId: z.string().optional().describe('User ID (automatically provided)'),
+    title: z.string().describe('Report title (e.g., "Weekly Review - December 2024")'),
+    reportType: z.enum(['general', 'comparison', 'decision-support']).default('general').describe('Type of report: general (overview), comparison (compare periods), decision-support (specific question)'),
+    dateRangeStart: z.string().describe('Start date for primary period (ISO format YYYY-MM-DD)'),
+    dateRangeEnd: z.string().describe('End date for primary period (ISO format YYYY-MM-DD)'),
+    comparisonRangeStart: z.string().optional().describe('Start date for comparison period (required for comparison reports)'),
+    comparisonRangeEnd: z.string().optional().describe('End date for comparison period (required for comparison reports)'),
+    notes: z.string().optional().describe('Optional notes or questions for healthcare provider'),
+  }),
+  func: async ({ userId, title, reportType, dateRangeStart, dateRangeEnd, comparisonRangeStart, comparisonRangeEnd, notes }) => {
+    try {
+      const reportGenerator = new ReportGenerator();
+
+      // Validate dates
+      const startDate = new Date(dateRangeStart);
+      const endDate = new Date(dateRangeEnd);
+
+      if (isNaN(startDate.getTime()) || isNaN(endDate.getTime())) {
+        return JSON.stringify({
+          error: 'Invalid date format. Please use YYYY-MM-DD format.'
+        });
+      }
+
+      // Validate comparison dates if provided
+      let compStartDate: Date | undefined;
+      let compEndDate: Date | undefined;
+
+      if (reportType === 'comparison') {
+        if (!comparisonRangeStart || !comparisonRangeEnd) {
+          return JSON.stringify({
+            error: 'Comparison report requires both comparisonRangeStart and comparisonRangeEnd'
+          });
+        }
+
+        compStartDate = new Date(comparisonRangeStart);
+        compEndDate = new Date(comparisonRangeEnd);
+
+        if (isNaN(compStartDate.getTime()) || isNaN(compEndDate.getTime())) {
+          return JSON.stringify({
+            error: 'Invalid comparison date format. Please use YYYY-MM-DD format.'
+          });
+        }
+      }
+
+      // Generate report
+      const reportId = await reportGenerator.generateReport({
+        userId: userId!,
+        title,
+        reportType,
+        dateRangeStart: startDate,
+        dateRangeEnd: endDate,
+        comparisonRangeStart: compStartDate,
+        comparisonRangeEnd: compEndDate,
+        notes,
+      });
+
+      return JSON.stringify({
+        success: true,
+        reportId,
+        title,
+        message: `Report "${title}" is being generated. It will be available for download shortly in the Reports page. The report includes glucose charts, statistics, and analysis for ${dateRangeStart} to ${dateRangeEnd}.`
+      });
+    } catch (error) {
+      console.error('Generate report error:', error);
+      return JSON.stringify({
+        error: 'Failed to generate report',
+        details: error instanceof Error ? error.message : 'Unknown error'
+      });
+    }
+  },
+});
+
 export const allTools = [
   // Glucose analysis tools
   getRecentGlucoseTool,
@@ -3577,4 +3657,7 @@ export const allTools = [
   // Research tools
   searchResearchPapersTool,
   requestResearchTool,
+
+  // Report generation tools
+  generateReportTool,
 ];

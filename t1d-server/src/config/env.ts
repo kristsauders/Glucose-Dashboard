@@ -30,6 +30,8 @@ const envSchema = z.object({
   VAPID_PUBLIC_KEY: z.string().optional(),
   VAPID_PRIVATE_KEY: z.string().optional(),
   VAPID_EMAIL: z.string().optional(), // Format: mailto:email@example.com
+  // Voice/Audio configuration (OpenAI for Whisper STT and TTS)
+  OPENAI_API_KEY: z.string().optional(),
 });
 
 export const env = envSchema.parse(process.env);

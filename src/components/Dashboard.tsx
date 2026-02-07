@@ -1,4 +1,5 @@
 import { useState, useMemo, useEffect, useCallback } from 'react';
+import { Link } from 'react-router-dom';
 import { motion } from 'framer-motion';
 import type { GlucoseReading } from '@/types/glucose';
 import {
@@ -27,7 +28,7 @@ import { Settings } from './Settings';
 import { LogsModal } from './logs';
 import { Button } from './ui/button';
 import { ThemeToggle } from './ThemeToggle';
-import { Upload, MessageSquare, LogOut, X, Settings as SettingsIcon, ClipboardList } from 'lucide-react';
+import { Upload, MessageSquare, LogOut, X, Settings as SettingsIcon, ClipboardList, FileText } from 'lucide-react';
 import { apiService } from '@/services/api';
 import { subDays, subWeeks, startOfDay, setHours, setMinutes, setSeconds, setMilliseconds } from 'date-fns';
 
@@ -240,6 +241,16 @@ export function Dashboard({ readings, onDataUpdated }: DashboardProps) {
               >
                 <SettingsIcon className="h-4 w-4 md:mr-2" />
                 <span className="hidden md:inline">Settings</span>
+              </Button>
+              <Button
+                variant="outline"
+                size="sm"
+                asChild
+              >
+                <Link to="/reports" className="flex items-center">
+                  <FileText className="h-4 w-4 md:mr-2" />
+                  <span className="hidden md:inline">Reports</span>
+                </Link>
               </Button>
               <Button
                 variant="outline"
