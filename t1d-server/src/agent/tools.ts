@@ -1303,7 +1303,7 @@ const analyzeIndividualMealTool = new DynamicStructuredTool({
             c.time_in_range_pct,
             c.time_above_180_minutes,
             c.post_meal_duration_minutes
-          FROM meal_logs m
+          FROM meals m
           LEFT JOIN glucose_correlations c ON m.correlation_id = c.id
           WHERE m.id = $1 AND m.user_id = $2
         `,
@@ -1322,7 +1322,7 @@ const analyzeIndividualMealTool = new DynamicStructuredTool({
             c.time_in_range_pct,
             c.time_above_180_minutes,
             c.post_meal_duration_minutes
-          FROM meal_logs m
+          FROM meals m
           LEFT JOIN glucose_correlations c ON m.correlation_id = c.id
           WHERE m.user_id = $1
             AND m.timestamp >= $2::timestamptz - interval '5 minutes'
@@ -1369,7 +1369,7 @@ const analyzeIndividualMealTool = new DynamicStructuredTool({
           c.time_in_range_pct,
           c.time_above_180_minutes,
           c.post_meal_duration_minutes
-        FROM meal_logs m
+        FROM meals m
         LEFT JOIN glucose_correlations c ON m.correlation_id = c.id
         WHERE m.user_id = $1
           AND m.id != $2

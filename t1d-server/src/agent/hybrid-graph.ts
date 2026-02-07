@@ -216,10 +216,10 @@ When asked to analyze: Use tools to gather comprehensive data in parallel, then 
       }
     }
 
-    // Safety: Limit to 8 iterations maximum (6 suggested in prompt + 2 buffer)
+    // Safety: Limit to 12 iterations maximum (allows for more complex queries)
     const currentIteration = state.iterationCount || 0;
-    if (currentIteration >= 8) {
-      console.log('[analysisNode] Maximum iterations reached (8), forcing synthesis');
+    if (currentIteration >= 12) {
+      console.log('[analysisNode] Maximum iterations reached (12), forcing synthesis');
 
       // Calculate context size even for the max iteration case
       const totalSize = JSON.stringify(messagesToSend).length;
