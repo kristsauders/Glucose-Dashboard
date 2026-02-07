@@ -218,7 +218,7 @@ When asked to analyze: Use tools to gather comprehensive data in parallel, then 
 
     // Safety: Limit to 16 iterations maximum (allows for more complex queries)
     const currentIteration = state.iterationCount || 0;
-    if (currentIteration >= 12) {
+    if (currentIteration >= 16) {
       console.log('[analysisNode] Maximum iterations reached (16), forcing synthesis');
 
       // Calculate context size even for the max iteration case
