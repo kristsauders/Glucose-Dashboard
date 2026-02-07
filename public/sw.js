@@ -32,7 +32,8 @@ self.addEventListener('push', (event) => {
       data: data.data,
       requireInteraction: false,
       vibrate: [200, 100, 200],
-      actions: [
+      // Use action buttons from payload if provided, otherwise default "Open" button
+      actions: data.actions || [
         {
           action: 'open',
           title: 'Open'
@@ -49,12 +50,54 @@ self.addEventListener('push', (event) => {
 });
 
 // Handle notification click
-self.addEventListener('notificationclick', (event) => {
+self.addEventListener('notificationclick', async (event) => {
   console.log('[Service Worker] Notification clicked:', event);
 
   event.notification.close();
 
   const conversationId = event.notification.data?.conversationId;
+  const messageId = event.notification.data?.messageId;
+  const actions = event.notification.data?.actions || [];
+
+  // Check if user clicked an action button
+  if (event.action && event.action !== 'open') {
+    const action = actions.find(a => a.id === event.action);
+
+    if (action) {
+      console.log('[Service Worker] Action button clicked:', action);
+
+      // Send action response to backend
+      try {
+        // Get the auth token from IndexedDB or localStorage
+        // For now, we'll try to get it from the client
+        const response = await fetch('/api/notifications/action-response', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            // Note: We need to include the auth token here
+            // This will be handled by the fetch interceptor in the client
+          },
+          body: JSON.stringify({
+            messageId: messageId,
+            conversationId: conversationId,
+            actionId: action.id,
+            message: action.message
+          }),
+          credentials: 'include' // Include cookies for auth
+        });
+
+        if (response.ok) {
+          console.log('[Service Worker] Action response sent successfully');
+        } else {
+          console.error('[Service Worker] Action response failed:', response.status);
+        }
+      } catch (error) {
+        console.error('[Service Worker] Error sending action response:', error);
+      }
+    }
+  }
+
+  // Open or focus the chat window
   const urlToOpen = conversationId
     ? `/chat?conversation=${conversationId}`
     : '/chat';

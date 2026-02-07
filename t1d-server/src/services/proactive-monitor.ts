@@ -4,23 +4,31 @@ import { HumanMessage, SystemMessage, BaseMessage } from '@langchain/core/messag
 import { logContextSize } from '../utils/token-counter.js';
 import { getHybridAIProvider } from '../agent/providers.js';
 import { USER_CONTEXT_PROMPT } from '../agent/prompts.js';
+import { createHybridAgentGraph } from '../agent/hybrid-graph.js';
 
 /**
  * ProactiveMonitor service
  * Monitors glucose data and proactively reaches out with insights, questions, and suggestions
  */
 export class ProactiveMonitor {
-  private agent: any;
+  private smallModel: any;
   private toolOnlyAgent: any;
   private isRunning: boolean = false;
   private checkInterval: number = 30 * 60 * 1000; // 30 minutes for responsive monitoring
   private intervalId: NodeJS.Timeout | null = null;
 
   constructor() {
-    // Phase 2 decision agent (hybrid graph)
-    this.agent = createConfiguredAgentGraph(undefined, 'proactive');
-    // Phase 1 data gathering agent (tool-only, no synthesis routing)
-    this.toolOnlyAgent = createAgentGraph();
+    // Get proactive providers (small model for Phases 1 & 2, large model for Phase 3)
+    const providers = getHybridAIProvider('proactive');
+    console.log('✓ ProactiveMonitor using models:');
+    console.log(`  - Phase 1 (tool calling): ${providers.smallModelName}`);
+    console.log(`  - Phase 2 (decision): ${providers.smallModelName}`);
+    console.log(`  - Phase 3 (synthesis): ${providers.largeModelName}`);
+
+    // Phase 1 & 2: Use small model for tool calling and decision
+    this.smallModel = providers.smallModel;
+    // Phase 1: Use hybrid graph for tool calling with small model
+    this.toolOnlyAgent = createHybridAgentGraph('proactive');
   }
 
   /**
@@ -373,7 +381,7 @@ export class ProactiveMonitor {
         return;
       }
 
-      // PHASE 2: Decide whether to send
+      // PHASE 2: Decide whether to send (using small model for simple decision)
       const decisionPrompt = `I wrote this proactive message for the user. Should I send it?
 
 **The message:**
@@ -403,37 +411,19 @@ Respond with ONLY "SEND" or "DONT_SEND" (no explanation needed).`;
 
       // Log context size for decision call
       logContextSize([new HumanMessage(decisionPrompt)], userCtx, {
-        label: 'Proactive Monitor - Send Decision',
+        label: 'Proactive Monitor - Phase 2 Decision (Small Model)',
         isFirstMessage: true,
       });
 
-      const decisionStream = await this.agent.stream({
-        messages: [new HumanMessage(decisionPrompt)],
-        userId: user.id,
-        userContext: userCtx,
-      }, {
-        streamMode: 'values', // LangGraph 1.x explicit mode
-      });
+      // Use small model directly for simple SEND/DONT_SEND decision (no need for synthesis)
+      const decisionResponse = await this.smallModel.invoke([
+        new HumanMessage(decisionPrompt)
+      ]);
 
-      // Get the decision
-      let decision = '';
-      for await (const chunk of decisionStream) {
-        // LangGraph 1.x returns state directly in 'values' mode
-        if (chunk && typeof chunk === 'object' && 'messages' in chunk) {
-          const messages = chunk.messages;
-          if (Array.isArray(messages) && messages.length > 0) {
-            const lastMessage = messages[messages.length - 1];
-            const isAIMessage = lastMessage.constructor?.name === 'AIMessage' ||
-                               lastMessage.constructor?.name === 'AIMessageChunk';
-            const isFinalMessage = !lastMessage.tool_calls || lastMessage.tool_calls.length === 0;
-            const shouldUse = isFinalMessage;
-
-            if (isAIMessage && shouldUse && lastMessage.content && typeof lastMessage.content === 'string') {
-              decision = lastMessage.content.trim().toUpperCase();
-            }
-          }
-        }
-      }
+      const decision = (typeof decisionResponse.content === 'string'
+        ? decisionResponse.content
+        : JSON.stringify(decisionResponse.content)
+      ).trim().toUpperCase();
 
       console.log(`  Decision: ${decision}`);
 

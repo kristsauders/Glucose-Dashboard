@@ -22,14 +22,28 @@ interface PushSubscription {
   };
 }
 
+export interface ActionButton {
+  id: string;
+  label: string;
+  message: string;
+  style?: 'primary' | 'secondary' | 'success' | 'danger';
+}
+
 interface NotificationPayload {
   title: string;
   body: string;
   icon?: string;
   badge?: string;
+  actions?: Array<{
+    action: string;      // Action ID
+    title: string;       // Button label (max 20 chars)
+    icon?: string;       // Optional icon URL
+  }>;
   data?: {
     conversationId: string;
+    messageId?: string;   // For action tracking
     url: string;
+    actions?: ActionButton[];  // Full action definitions for service worker
   };
 }
 

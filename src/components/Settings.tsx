@@ -5,6 +5,8 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/com
 import { LibreViewSettings } from './LibreViewSettings';
 import { DiscordSettings } from './DiscordSettings';
 import { NotificationSettings } from './NotificationSettings';
+import { VoiceSettings } from './VoiceSettings';
+import { ResearchSettings } from './ResearchSettings';
 
 interface SettingsProps {
   onClose: () => void;
@@ -50,6 +52,16 @@ export function Settings({ onClose }: SettingsProps) {
             <div>
               <h3 className="text-sm font-semibold mb-3">Notifications</h3>
               <NotificationSettings />
+            </div>
+
+            <div>
+              <h3 className="text-sm font-semibold mb-3">Voice Mode</h3>
+              <VoiceSettings />
+            </div>
+
+            <div>
+              <h3 className="text-sm font-semibold mb-3">Research</h3>
+              <ResearchSettings />
             </div>
 
             <div>

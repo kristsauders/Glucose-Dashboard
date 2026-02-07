@@ -2,7 +2,7 @@ import { DynamicStructuredTool } from '@langchain/core/tools';
 import { z } from 'zod';
 import { query } from '../config/database.js';
 import { discordService } from '../services/discord.js';
-import { pushNotificationService } from '../services/push-notification-service.js';
+import { pushNotificationService, type ActionButton } from '../services/push-notification-service.js';
 import { reportingService } from '../services/reporting-service.js';
 import {
   detectMealResponse,
@@ -15,6 +15,8 @@ import {
   comparePeriods,
 } from '../services/advanced-analysis.js';
 import { convertToUserTimezone } from '../utils/timezone.js';
+import { researchService } from '../services/research-service.js';
+import { researchMonitor } from '../services/research-monitor.js';
 
 /**
  * Tool: Get recent glucose readings
@@ -841,21 +843,28 @@ export const getRecentSageMessagesTool = new DynamicStructuredTool({
  */
 export const sendProactiveMessageTool = new DynamicStructuredTool({
   name: 'send_proactive_message',
-  description: 'Send a proactive message to the user via push notification and Discord. Use this to reach out with insights, questions, or suggestions.',
+  description: 'Send a proactive message to the user via push notification and Discord. Use this to reach out with insights, questions, or suggestions. Optionally include quick action buttons for easy responses.',
   schema: z.object({
     userId: z.string().optional().describe('The user ID (automatically provided)'),
     type: z.enum(['insight', 'question', 'suggestion', 'daily_summary'])
       .describe('Type of message'),
     title: z.string().describe('Message title'),
     content: z.string().describe('Message content (supports markdown)'),
+    actions: z.array(z.object({
+      id: z.string().describe('Unique action ID'),
+      label: z.string().describe('Button label (max 20 chars for push notifications)'),
+      message: z.string().describe('Message to send when button is clicked'),
+      style: z.enum(['primary', 'secondary', 'success', 'danger']).optional().describe('Button style (Discord only)')
+    })).max(3).optional().describe('Quick action buttons (max 3 for good UX)'),
     metadata: z.object({}).optional().describe('Optional metadata to store with message'),
   }),
-  func: async ({ userId, type, title, content, metadata }) => {
+  func: async ({ userId, type, title, content, actions, metadata }) => {
     try {
       console.log('[Proactive Message] Preparing to send:', {
         type,
         title,
         preview: content.substring(0, 100),
+        actionCount: actions?.length || 0,
       });
 
       // 1. Find or create conversation for proactive messages
@@ -902,12 +911,17 @@ export const sendProactiveMessageTool = new DynamicStructuredTool({
         console.log('[Proactive Message] Created new proactive conversation');
       }
 
-      // 2. Store message in sage_messages with conversation_id
+      // 2. Store message in sage_messages with conversation_id and actions in metadata
+      const messageMetadata = {
+        ...metadata,
+        actions: actions || []
+      };
+
       const dbResult = await query(
         `INSERT INTO sage_messages (user_id, conversation_id, type, title, content, metadata)
          VALUES ($1, $2, $3, $4, $5, $6)
          RETURNING id, sent_at`,
-        [userId, conversationId, type, title, content, metadata ? JSON.stringify(metadata) : null]
+        [userId, conversationId, type, title, content, JSON.stringify(messageMetadata)]
       );
 
       const messageId = dbResult.rows[0].id;
@@ -960,27 +974,33 @@ export const sendProactiveMessageTool = new DynamicStructuredTool({
       const preferences = await pushNotificationService.getPreferences(userId);
 
       if (preferences.proactive_enabled) {
-        // 6. Send push notification with deep-link
+        // 6. Send push notification with deep-link and action buttons
         await pushNotificationService.sendToUser(userId, {
           title: title,
           body: content.length > 100 ? content.substring(0, 97) + '...' : content,
           icon: '/sage-icon.png',
           badge: '/sage-badge.png',
+          actions: actions?.slice(0, 2).map(a => ({  // Max 2 for mobile UX
+            action: a.id,
+            title: a.label.substring(0, 20)  // Max 20 chars for notifications
+          })),
           data: {
             conversationId,
+            messageId,  // Include messageId for action tracking
             url: `/chat?conversation=${conversationId}`,
+            actions  // Store full definitions for service worker
           },
         });
 
-        console.log('[Proactive Message] Push notification sent');
+        console.log('[Proactive Message] Push notification sent with', actions?.length || 0, 'actions');
       } else {
         console.log('[Proactive Message] Push notifications disabled for user');
       }
 
       // 7. Optionally still send to Discord if configured
       if (discordService.isConfigured()) {
-        await discordService.sendSageMessage(type, title, content);
-        console.log('[Proactive Message] Discord message sent');
+        await discordService.sendSageMessage(type, title, content, undefined, actions, messageId);
+        console.log('[Proactive Message] Discord message sent with', actions?.length || 0, 'actions');
       }
 
       // Update monitoring state
@@ -3423,6 +3443,81 @@ const getMonthlyReportTool = new DynamicStructuredTool({
   },
 });
 
+/**
+ * Tool: Search research papers
+ */
+export const searchResearchPapersTool = new DynamicStructuredTool({
+  name: 'search_research_papers',
+  description: 'Search for recent diabetes research papers on a specific topic. Use this when user asks about research or scientific studies.',
+  schema: z.object({
+    query: z.string().describe('Search query for research papers'),
+    maxResults: z.number().default(5).describe('Maximum number of results (default 5)'),
+    startYear: z.number().optional().describe('Only include papers from this year onwards'),
+  }),
+  func: async ({ query, maxResults, startYear }) => {
+    try {
+      const papers = await researchService.searchPapers(query, maxResults, startYear);
+
+      if (papers.length === 0) {
+        return JSON.stringify({
+          found: 0,
+          message: `No research papers found for "${query}". Try broadening the search terms.`
+        });
+      }
+
+      const results = papers.map(p => ({
+        title: p.title,
+        authors: p.authors.slice(0, 3).join(', ') + (p.authors.length > 3 ? ' et al.' : ''),
+        journal: p.journal,
+        year: p.publishedDate.getFullYear(),
+        abstract: p.abstract.substring(0, 300) + '...',
+        url: p.url
+      }));
+
+      return JSON.stringify({
+        found: papers.length,
+        query,
+        papers: results
+      });
+    } catch (error) {
+      console.error('Search research papers error:', error);
+      return JSON.stringify({
+        error: 'Failed to search research papers',
+        details: error instanceof Error ? error.message : 'Unknown error'
+      });
+    }
+  },
+});
+
+/**
+ * Tool: Request research on a topic (async)
+ */
+export const requestResearchTool = new DynamicStructuredTool({
+  name: 'request_research',
+  description: 'Request in-depth research on a diabetes topic. This will search, analyze, and send findings to the user proactively. Use when user asks to "research" something.',
+  schema: z.object({
+    userId: z.string().optional().describe('User ID (automatically provided)'),
+    topic: z.string().describe('Research topic to investigate'),
+  }),
+  func: async ({ userId, topic }) => {
+    try {
+      // Acknowledge request immediately
+      const response = await researchMonitor.handleOnDemandRequest(userId!, topic);
+
+      return JSON.stringify({
+        success: true,
+        message: response
+      });
+    } catch (error) {
+      console.error('Request research error:', error);
+      return JSON.stringify({
+        error: 'Failed to process research request',
+        details: error instanceof Error ? error.message : 'Unknown error'
+      });
+    }
+  },
+});
+
 export const allTools = [
   // Glucose analysis tools
   getRecentGlucoseTool,
@@ -3478,4 +3573,8 @@ export const allTools = [
   getDailyReportTool,
   getWeeklyReportTool,
   getMonthlyReportTool,
+
+  // Research tools
+  searchResearchPapersTool,
+  requestResearchTool,
 ];

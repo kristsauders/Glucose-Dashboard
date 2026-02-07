@@ -91,6 +91,57 @@ router.put('/preferences', async (req, res, next) => {
   }
 });
 
+// Handle action button response from notification
+const actionResponseSchema = z.object({
+  messageId: z.string().uuid(),
+  conversationId: z.string().uuid(),
+  actionId: z.string(),
+  message: z.string(),
+});
+
+router.post('/action-response', async (req, res, next) => {
+  try {
+    const authReq = req as AuthRequest;
+    const { messageId, conversationId, actionId, message: actionMessage } = actionResponseSchema.parse(req.body);
+
+    // 1. Verify message belongs to user
+    const sageMessage = await query(
+      'SELECT * FROM sage_messages WHERE id = $1 AND user_id = $2',
+      [messageId, authReq.user!.id]
+    );
+
+    if (sageMessage.rows.length === 0) {
+      return res.status(404).json({ error: 'Message not found' });
+    }
+
+    // 2. Save user's response as chat message
+    await query(
+      `INSERT INTO chat_messages (conversation_id, user_id, role, content, metadata)
+       VALUES ($1, $2, 'user', $3, $4)`,
+      [
+        conversationId,
+        authReq.user!.id,
+        actionMessage,
+        JSON.stringify({ actionResponse: true, actionId, messageId })
+      ]
+    );
+
+    // 3. Mark sage_message as acknowledged
+    await query(
+      `UPDATE sage_messages
+       SET acknowledged = true, acknowledged_at = NOW()
+       WHERE id = $1`,
+      [messageId]
+    );
+
+    console.log(`[ActionResponse] User ${authReq.user!.id} clicked action ${actionId} on message ${messageId}`);
+
+    res.json({ success: true });
+  } catch (error) {
+    next(error);
+  }
+});
+
 // Test endpoint - Send a test notification
 const testSchema = z.object({
   message: z.string().optional(),

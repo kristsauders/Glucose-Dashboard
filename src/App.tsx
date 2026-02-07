@@ -10,6 +10,7 @@ import { Button } from './components/ui/button';
 // Lazy load routes for better performance
 const Dashboard = lazy(() => import('./components/Dashboard').then(m => ({ default: m.Dashboard })));
 const ChatOnly = lazy(() => import('./pages/ChatOnly').then(m => ({ default: m.ChatOnly })));
+const Voice = lazy(() => import('./pages/Voice').then(m => ({ default: m.Voice })));
 
 function AppContent() {
   const location = useLocation();
@@ -84,6 +85,7 @@ function AppContent() {
       <Routes>
         <Route path="/" element={<Dashboard readings={readings} onDataUpdated={handleDataUpdated} />} />
         <Route path="/chat" element={<ChatOnly />} />
+        <Route path="/voice" element={<Voice />} />
         <Route path="*" element={<Navigate to="/" replace />} />
       </Routes>
     </Suspense>

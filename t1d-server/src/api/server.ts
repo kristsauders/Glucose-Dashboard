@@ -10,6 +10,7 @@ import { testConnection } from '../config/database.js';
 import { errorHandler } from './middleware/errorHandler.js';
 import { authMiddleware } from './middleware/auth.js';
 import { libreViewPoller } from '../services/libreviewPoller.js';
+import { researchMonitor } from '../services/research-monitor.js';
 import authRoutes from './routes/auth.js';
 import glucoseRoutes from './routes/glucose.js';
 import importRoutes from './routes/import.js';
@@ -18,6 +19,7 @@ import chatRoutes from './routes/chat.js';
 import conversationsRoutes from './routes/conversations.js';
 import logsRoutes from './routes/logs.js';
 import notificationRoutes from './routes/notifications.js';
+import voiceRoutes from './routes/voice.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -81,6 +83,7 @@ app.use('/api/chat', chatRoutes);
 app.use('/api/conversations', conversationsRoutes);
 app.use('/api/logs', logsRoutes);
 app.use('/api/notifications', notificationRoutes);
+app.use('/api/voice', voiceRoutes);
 
 // Admin endpoint to manually trigger proactive check (for testing)
 // Development only - no auth required for easier testing
@@ -155,6 +158,9 @@ export function startServer() {
           // Resume LibreView polling for users with saved credentials
           await libreViewPoller.resumeAllPolling();
 
+          // Start research monitoring
+          researchMonitor.start();
+
           console.log('Press Ctrl+C to stop');
           console.log('════════════════════════════════════════════════════════');
           console.log('');
@@ -177,6 +183,9 @@ export function startServer() {
 
           // Resume LibreView polling for users with saved credentials
           await libreViewPoller.resumeAllPolling();
+
+          // Start research monitoring
+          researchMonitor.start();
 
           console.log('Press Ctrl+C to stop');
           console.log('════════════════════════════════════════════════════════');

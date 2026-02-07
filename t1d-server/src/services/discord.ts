@@ -1,4 +1,5 @@
 import { env } from '../config/env.js';
+import type { ActionButton } from './push-notification-service.js';
 
 export interface DiscordEmbed {
   title?: string;
@@ -15,9 +16,22 @@ export interface DiscordEmbed {
   };
 }
 
+export interface DiscordButton {
+  type: 2;  // Button component type
+  style: 1 | 2 | 3 | 4;  // Primary, Secondary, Success, Danger
+  label: string;
+  custom_id: string;
+}
+
+export interface DiscordActionRow {
+  type: 1;  // Action row type
+  components: DiscordButton[];
+}
+
 export interface DiscordMessage {
   content?: string;
   embeds?: DiscordEmbed[];
+  components?: DiscordActionRow[];  // Action buttons
 }
 
 export type MessageType = 'insight' | 'question' | 'suggestion' | 'daily_summary';
@@ -68,13 +82,15 @@ export class DiscordService {
   }
 
   /**
-   * Send a formatted Sage message
+   * Send a formatted Sage message with optional action buttons
    */
   async sendSageMessage(
     type: MessageType,
     title: string,
     content: string,
-    fields?: Array<{ name: string; value: string; inline?: boolean }>
+    fields?: Array<{ name: string; value: string; inline?: boolean }>,
+    actions?: ActionButton[],
+    messageId?: string
   ): Promise<void> {
     const colors = {
       insight: 0x3498db, // Blue
@@ -97,7 +113,28 @@ export class DiscordService {
       embed.fields = fields;
     }
 
-    await this.sendMessage({ embeds: [embed] });
+    // Convert actions to Discord button components
+    const components: DiscordActionRow[] | undefined = actions && actions.length > 0 && messageId ? [{
+      type: 1,
+      components: actions.slice(0, 5).map((action) => {  // Discord allows max 5 buttons per row
+        // Map action style to Discord button style
+        const styleMap = {
+          primary: 1,
+          secondary: 2,
+          success: 3,
+          danger: 4
+        };
+
+        return {
+          type: 2,
+          style: action.style ? styleMap[action.style] : 2,  // Default to secondary
+          label: action.label.substring(0, 80),  // Discord max label length
+          custom_id: `${messageId}:${action.id}`  // Embed messageId for tracking
+        };
+      })
+    }] : undefined;
+
+    await this.sendMessage({ embeds: [embed], components });
   }
 
   /**

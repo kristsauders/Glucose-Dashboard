@@ -287,4 +287,66 @@ router.delete('/discord', async (req, res, next) => {
   }
 });
 
+// Get research preferences
+router.get('/research-preferences', async (req, res, next) => {
+  try {
+    const authReq = req as AuthRequest;
+
+    const result = await query(
+      `SELECT research_preferences FROM users WHERE id = $1`,
+      [authReq.user!.id]
+    );
+
+    if (result.rows.length === 0) {
+      return res.status(404).json({ error: 'User not found' });
+    }
+
+    const prefs = result.rows[0].research_preferences || {
+      enabled: true,
+      max_papers_per_week: 2
+    };
+
+    res.json(prefs);
+  } catch (error) {
+    next(error);
+  }
+});
+
+// Update research preferences
+const researchPreferencesSchema = z.object({
+  enabled: z.boolean().optional(),
+  max_papers_per_week: z.number().int().min(1).max(5).optional(),
+});
+
+router.put('/research-preferences', async (req, res, next) => {
+  try {
+    const authReq = req as AuthRequest;
+    const updates = researchPreferencesSchema.parse(req.body);
+
+    // Get current preferences
+    const result = await query(
+      `SELECT research_preferences FROM users WHERE id = $1`,
+      [authReq.user!.id]
+    );
+
+    const currentPrefs = result.rows[0]?.research_preferences || {
+      enabled: true,
+      max_papers_per_week: 2
+    };
+
+    // Merge updates with current preferences
+    const newPrefs = { ...currentPrefs, ...updates };
+
+    // Update in database
+    await query(
+      `UPDATE users SET research_preferences = $1 WHERE id = $2`,
+      [JSON.stringify(newPrefs), authReq.user!.id]
+    );
+
+    res.json(newPrefs);
+  } catch (error) {
+    next(error);
+  }
+});
+
 export default router;
