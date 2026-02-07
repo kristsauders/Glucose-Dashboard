@@ -2531,6 +2531,8 @@ export const getMealHistoryTool = new DynamicStructuredTool({
     // Use provided timezone or fallback
     const timezone = userTimezone || 'America/New_York';
 
+    console.log('[get_meal_history] Called with:', { userId, days, mealType, limit, timezone });
+
     // Use date arithmetic for full calendar days
     let queryText = `
       SELECT id, timestamp, description, estimated_carbs, meal_type, tags, notes
@@ -2549,20 +2551,34 @@ export const getMealHistoryTool = new DynamicStructuredTool({
     queryText += ` ORDER BY timestamp DESC LIMIT $${params.length + 1}`;
     params.push(limit);
 
+    console.log('[get_meal_history] Executing query with params:', params);
+    console.log('[get_meal_history] Query:', queryText.replace(/\s+/g, ' ').trim());
+
     const result = await query(queryText, params);
+
+    console.log('[get_meal_history] Found', result.rows.length, 'meals');
+    if (result.rows.length > 0) {
+      console.log('[get_meal_history] First meal:', {
+        description: result.rows[0].description,
+        timestamp: result.rows[0].timestamp,
+        meal_type: result.rows[0].meal_type
+      });
+    }
+
+    const meals = result.rows.map(r => ({
+      id: r.id,
+      timestamp: convertToUserTimezone(r.timestamp, timezone),
+      description: r.description,
+      carbs: parseFloat(r.estimated_carbs || 0),
+      mealType: r.meal_type,
+      tags: r.tags,
+      notes: r.notes,
+    }));
 
     return JSON.stringify({
       count: result.rows.length,
       timezone: timezone,
-      meals: result.rows.map(r => ({
-        id: r.id,
-        timestamp: convertToUserTimezone(r.timestamp, timezone),
-        description: r.description,
-        carbs: parseFloat(r.estimated_carbs || 0),
-        mealType: r.meal_type,
-        tags: r.tags,
-        notes: r.notes,
-      })),
+      meals: meals,
     });
   },
 });

@@ -25,9 +25,20 @@ export function Voice() {
     try {
       // Create a new "Voice Session" conversation
       const conversation = await apiService.createConversation();
+      console.log('[Voice] Created conversation:', conversation.id);
       setConversationId(conversation.id);
     } catch (error) {
-      console.error('Failed to create voice conversation:', error);
+      console.error('[Voice] Failed to create voice conversation:', error);
+      // Retry once after a delay
+      setTimeout(() => {
+        console.log('[Voice] Retrying conversation creation...');
+        apiService.createConversation()
+          .then(conv => {
+            console.log('[Voice] Retry succeeded:', conv.id);
+            setConversationId(conv.id);
+          })
+          .catch(err => console.error('[Voice] Retry failed:', err));
+      }, 2000);
     }
   }
 

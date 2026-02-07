@@ -190,22 +190,47 @@ router.post('/chat', upload.single('audio'), async (req, res, next) => {
         });
 
         let fullResponse = '';
-        let iterationCount = 0;
+        let agentIterationCount = 0;
+        let chunkCount = 0;
 
         for await (const chunk of stream) {
-          iterationCount++;
+          chunkCount++;
           if (chunk && typeof chunk === 'object' && 'messages' in chunk) {
             const messages = chunk.messages;
             if (Array.isArray(messages) && messages.length > 0) {
               const lastMessage = messages[messages.length - 1];
-              console.log(`[Voice API] Iteration ${iterationCount}: ${lastMessage.constructor.name}`, {
-                hasToolCalls: !!lastMessage.tool_calls?.length,
-                toolCount: lastMessage.tool_calls?.length || 0,
-                contentLength: typeof lastMessage.content === 'string' ? lastMessage.content.length : 0,
-              });
 
+              // Count actual agent iterations (AIMessages only, not tool messages)
               const isAIMessage = lastMessage.constructor.name === 'AIMessage' ||
                                  lastMessage.constructor.name === 'AIMessageChunk';
+              const isToolMessage = lastMessage.constructor.name === 'ToolMessage';
+
+              if (isAIMessage) {
+                agentIterationCount++;
+                const hasCalls = !!lastMessage.tool_calls?.length;
+                console.log(`[Voice API] Agent Iteration ${agentIterationCount} (chunk ${chunkCount}):`, {
+                  hasToolCalls: hasCalls,
+                  toolCount: lastMessage.tool_calls?.length || 0,
+                  contentLength: typeof lastMessage.content === 'string' ? lastMessage.content.length : 0,
+                });
+
+                // Log tool calls with arguments
+                if (hasCalls) {
+                  lastMessage.tool_calls.forEach((tc: any) => {
+                    console.log(`  → Calling tool: ${tc.name}`, tc.args);
+                  });
+                }
+              }
+
+              // Log tool responses
+              if (isToolMessage) {
+                console.log(`[Voice API] Tool Response (chunk ${chunkCount}):`, {
+                  contentPreview: typeof lastMessage.content === 'string'
+                    ? lastMessage.content.substring(0, 200)
+                    : lastMessage.content
+                });
+              }
+
               const isFinalMessage = !lastMessage.tool_calls || lastMessage.tool_calls.length === 0;
 
               if (isAIMessage && isFinalMessage && lastMessage.content && typeof lastMessage.content === 'string') {
@@ -214,6 +239,8 @@ router.post('/chat', upload.single('audio'), async (req, res, next) => {
             }
           }
         }
+
+        console.log(`[Voice API] Completed: ${agentIterationCount} agent iterations, ${chunkCount} total chunks`);
 
         console.log('[Voice API] Final response length:', fullResponse.length);
         return fullResponse || 'I processed your message but had no response.';
