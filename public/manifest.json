@@ -1,8 +1,8 @@
 {
-  "name": "Sage - AI Diabetes Assistant",
+  "name": "Sage Dashboard",
   "short_name": "Sage",
-  "description": "AI-powered Type 1 Diabetes management assistant",
-  "start_url": "/chat",
+  "description": "AI-powered Type 1 Diabetes management dashboard",
+  "start_url": "/",
   "display": "standalone",
   "background_color": "#ffffff",
   "theme_color": "#4f46e5",

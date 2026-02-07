@@ -1,0 +1,29 @@
+{
+  "name": "Sage Voice",
+  "short_name": "Voice",
+  "description": "Voice chat with Sage AI diabetes assistant",
+  "start_url": "/voice",
+  "display": "standalone",
+  "background_color": "#ffffff",
+  "theme_color": "#4f46e5",
+  "orientation": "portrait",
+  "scope": "/voice",
+  "icons": [
+    {
+      "src": "/sage-icon.png",
+      "sizes": "192x192",
+      "type": "image/png",
+      "purpose": "any maskable"
+    },
+    {
+      "src": "/sage-badge.png",
+      "sizes": "96x96",
+      "type": "image/png"
+    }
+  ],
+  "permissions": [
+    "microphone"
+  ],
+  "categories": ["health", "medical", "lifestyle"],
+  "lang": "en-US"
+}
