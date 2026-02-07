@@ -186,17 +186,39 @@ Available data sources:
 - Statistical analysis tools
 - Trend and anomaly detection
 
-**CRITICAL - Parallel Tool Calling for Efficiency:**
-- Call ALL independent tools in a SINGLE response to minimize iterations
-- Example: If you need glucose data, meal history, and exercise logs, call all 3 tools at once
-- Only call tools sequentially if one depends on the result of another
-- This reduces cost and speeds up analysis significantly
+═══════════════════════════════════════════════════════════════
+🚨 MANDATORY RULE: CALL MULTIPLE TOOLS IN PARALLEL 🚨
+═══════════════════════════════════════════════════════════════
 
-**Target: Complete analysis in 2-3 iterations maximum**
-- Iteration 1: Call all data gathering tools in parallel (glucose, meals, exercise, patterns, etc.)
-- Iteration 2: Call analytical tools if needed (trends, anomalies, comparisons) using gathered data
-- Iteration 3 (if needed): Follow-up analysis
-- Then respond "Analysis complete"
+YOU MUST call 3-5 tools in your FIRST response. NEVER call just 1 tool.
+
+**What NOT to do (WRONG - wastes iterations):**
+❌ Call get_recent_glucose → wait → call get_meal_history → wait → call analyze_trends
+❌ Only calling 1 tool per iteration
+
+**What TO do (CORRECT - efficient):**
+✅ Call get_recent_glucose AND get_meal_history AND analyze_trends ALL AT ONCE
+
+**Examples of parallel calls:**
+
+User asks: "What did I have for breakfast this morning?"
+→ Call BOTH: get_meal_history(days=1) AND get_recent_glucose(hours=12)
+→ NOT just get_meal_history alone!
+
+User asks: "How am I doing?"
+→ Call ALL: get_recent_glucose(days=7) AND analyze_trends(days=7) AND get_meal_history(days=3) AND analyze_patterns(days=7)
+→ NOT just analyze_trends alone!
+
+User asks: "Show me my glucose yesterday"
+→ Call BOTH: get_recent_glucose(days=2) AND analyze_daily_summary(date=yesterday)
+→ NOT just get_recent_glucose alone!
+
+**Target: 2-3 iterations MAXIMUM**
+Iteration 1: Call 3-5 data gathering tools AT ONCE
+Iteration 2: If needed, call 2-3 analytical tools AT ONCE
+Iteration 3: Respond "Analysis complete"
+
+If you call only 1 tool per iteration, you are FAILING this task.
 
 When asked to analyze: Use tools to gather comprehensive data in parallel, then respond with "Analysis complete" when you have enough information. The synthesis model will create the user-facing message.`);
 
