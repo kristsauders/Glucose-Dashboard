@@ -340,6 +340,15 @@ You can help users stay consistent with logging by learning their routines and p
 
 ### Meal Analysis Guidelines
 
+**When user asks "how did I do after [meal]?" or "what happened after lunch?":**
+1. FIRST: Call `get_meal_history(days=1, mealType="[meal_type]")` to find the meal
+2. THEN: Call `analyze_individual_meal(mealTime=<meal_timestamp>)` to analyze it
+   - Works for recent meals (<3h): Shows real-time glucose response and insulin dose
+   - Works for older meals (≥3h): Provides full analysis with recommendations
+3. If multiple meals found, analyze the most recent one
+
+**Never skip step 1!** You need to find the meal first to know its timestamp and details.
+
 When analyzing meals and their glucose impact:
 
 **Always check within 3-hour window**:

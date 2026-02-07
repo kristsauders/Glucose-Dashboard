@@ -1280,7 +1280,7 @@ const analyzeMealPatternsTool = new DynamicStructuredTool({
 const analyzeIndividualMealTool = new DynamicStructuredTool({
   name: 'analyze_individual_meal',
   description:
-    'Analyze a specific meal to provide personalized coaching on glucose response, insulin dose, timing, and composition. Returns performance vs typical response, dose/timing assessment, actionable recommendations, and improvement tracking. Use when user asks about a specific meal or wants feedback on how they did.',
+    'Analyze a specific meal to show glucose response, insulin dose, and meal details. For meals eaten <3 hours ago, provides real-time analysis (current glucose, peak, baseline). For older meals, provides full coaching with performance comparison, dose/timing assessment, and recommendations. Use when user asks about a specific meal or "how did I do after [meal]?".',
   schema: z.object({
     userId: z.string().describe('User ID (auto-injected by system)'),
     mealId: z.string().optional().describe('Specific meal ID to analyze'),
@@ -1288,6 +1288,7 @@ const analyzeIndividualMealTool = new DynamicStructuredTool({
     lookbackDays: z.number().default(30).describe('Days to look back for comparison data (default: 30)'),
   }),
   func: async ({ userId, mealId, mealTime, lookbackDays = 30 }) => {
+    console.log('[analyze_individual_meal] Called with:', { userId, mealId, mealTime, lookbackDays });
     try {
       // Get the specific meal
       let targetMeal;
@@ -1336,14 +1337,77 @@ const analyzeIndividualMealTool = new DynamicStructuredTool({
       }
 
       if (!targetMeal) {
+        console.log('[analyze_individual_meal] Meal not found');
         return JSON.stringify({
           error: 'Meal not found',
         });
       }
 
+      console.log('[analyze_individual_meal] Found meal:', {
+        id: targetMeal.id,
+        description: targetMeal.description,
+        timestamp: targetMeal.timestamp,
+        insulin_dose: targetMeal.insulin_dose,
+        carbs: targetMeal.carbs,
+        has_correlation: !!targetMeal.correlation_id
+      });
+
+      // If no correlation data yet, provide real-time analysis instead
       if (!targetMeal.correlation_id) {
+        // Get glucose readings since the meal
+        const mealTime = new Date(targetMeal.timestamp);
+        const now = new Date();
+        const hoursSinceMeal = (now.getTime() - mealTime.getTime()) / (1000 * 60 * 60);
+
+        const glucoseResult = await query(
+          `SELECT glucose_value, timestamp
+           FROM glucose_readings
+           WHERE user_id = $1
+             AND timestamp >= $2
+             AND timestamp <= NOW()
+           ORDER BY timestamp ASC`,
+          [userId, targetMeal.timestamp]
+        );
+
+        const readings = glucoseResult.rows;
+        let currentGlucose = null;
+        let peakGlucose = null;
+        let baseline = null;
+
+        if (readings.length > 0) {
+          // First reading after meal is baseline
+          baseline = readings[0].glucose_value;
+          // Find peak
+          peakGlucose = Math.max(...readings.map(r => r.glucose_value));
+          // Last reading is current
+          currentGlucose = readings[readings.length - 1].glucose_value;
+        }
+
         return JSON.stringify({
-          error: 'This meal does not have glucose correlation data yet. Wait 3 hours after eating for analysis.',
+          realTimeAnalysis: true,
+          meal: {
+            timestamp: targetMeal.timestamp,
+            mealType: targetMeal.meal_type,
+            description: targetMeal.description,
+            carbs: targetMeal.carbs,
+            fat: targetMeal.fat_grams,
+            protein: targetMeal.protein_grams,
+            insulinDose: targetMeal.insulin_dose,
+          },
+          currentStatus: {
+            hoursSinceMeal: hoursSinceMeal.toFixed(1),
+            baseline: baseline,
+            peak: peakGlucose,
+            current: currentGlucose,
+            change: baseline && currentGlucose ? (currentGlucose - baseline).toFixed(1) : null,
+            readingsCount: readings.length,
+          },
+          message: hoursSinceMeal < 3
+            ? 'Real-time analysis (full correlation analysis available after 3 hours)'
+            : 'Correlation data not yet computed. Showing real-time analysis.',
+          note: targetMeal.insulin_dose
+            ? `Took ${targetMeal.insulin_dose} units of insulin for this meal.`
+            : 'No insulin was logged for this meal.',
         });
       }
 
