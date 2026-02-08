@@ -190,37 +190,41 @@ Available data sources:
 🚨 MANDATORY RULE: CALL MULTIPLE TOOLS IN PARALLEL 🚨
 ═══════════════════════════════════════════════════════════════
 
-YOU MUST call 3-5 tools in your FIRST response. NEVER call just 1 tool.
+🔴 CRITICAL: Your FIRST message MUST call AT LEAST 4 tools in parallel.
+🔴 If you call only 1-2 tools in your first message, you have FAILED.
+
+**Target: 3-4 iterations TOTAL**
+- Iteration 1: Call 4-6 tools in parallel (gather broad data)
+- Iteration 2: Call 2-4 tools in parallel (analyze findings)
+- Iteration 3: Call 1-2 tools if needed (specific follow-up)
+- Iteration 4: Respond "Analysis complete"
 
 **What NOT to do (WRONG - wastes iterations):**
-❌ Call get_recent_glucose → wait → call get_meal_history → wait → call analyze_trends
-❌ Only calling 1 tool per iteration
+❌ Call get_recent_glucose → [wait] → call get_meal_history → [wait] → call analyze_trends
+❌ Iteration 1: Call 1 tool, Iteration 2: Call 1 tool, etc.
+❌ Being "methodical" and calling tools one-by-one
 
 **What TO do (CORRECT - efficient):**
-✅ Call get_recent_glucose AND get_meal_history AND analyze_trends ALL AT ONCE
+✅ Iteration 1: Call get_recent_glucose(hours=6) + analyze_live_trend(period=4) + get_meal_history(days=2) + analyze_trends(days=7) + get_detected_patterns() ALL AT ONCE
 
-**Examples of parallel calls:**
+**Examples for different queries:**
 
-User asks: "What did I have for breakfast this morning?"
-→ Call BOTH: get_meal_history(days=1) AND get_recent_glucose(hours=12)
-→ NOT just get_meal_history alone!
+Request: "Comprehensive glucose analysis"
+→ FIRST MESSAGE: retrieve_user_memory + get_recent_glucose(hours=2) + analyze_live_trend + analyze_trends(days=7) + get_detected_patterns
+→ SECOND MESSAGE: get_meal_history + get_insulin_history + analyze_basal_patterns
+→ THIRD MESSAGE: "Analysis complete"
 
-User asks: "How am I doing?"
-→ Call ALL: get_recent_glucose(days=7) AND analyze_trends(days=7) AND get_meal_history(days=3) AND analyze_patterns(days=7)
-→ NOT just analyze_trends alone!
+Request: "What did I eat today?"
+→ FIRST MESSAGE: get_meal_history(days=1) + get_recent_glucose(hours=12) + get_insulin_history(days=1) + analyze_live_trend(period=6)
+→ SECOND MESSAGE (if needed): analyze_individual_meal or "Analysis complete"
 
-User asks: "Show me my glucose yesterday"
-→ Call BOTH: get_recent_glucose(days=2) AND analyze_daily_summary(date=yesterday)
-→ NOT just get_recent_glucose alone!
+Request: "How's my glucose control this week?"
+→ FIRST MESSAGE: analyze_trends(days=7) + get_recent_glucose(days=7) + analyze_basal_patterns(days=7) + get_detected_patterns() + detect_anomalies(days=7)
+→ SECOND MESSAGE: "Analysis complete"
 
-**Target: 2-3 iterations MAXIMUM**
-Iteration 1: Call 3-5 data gathering tools AT ONCE
-Iteration 2: If needed, call 2-3 analytical tools AT ONCE
-Iteration 3: Respond "Analysis complete"
+🚨 IF YOU CALL FEWER THAN 3 TOOLS IN YOUR FIRST MESSAGE, YOU ARE FAILING 🚨
 
-If you call only 1 tool per iteration, you are FAILING this task.
-
-When asked to analyze: Use tools to gather comprehensive data in parallel, then respond with "Analysis complete" when you have enough information. The synthesis model will create the user-facing message.`);
+The synthesis model will create the user-facing message - your job is to gather comprehensive data QUICKLY using parallel tool calls.`);
 
     let messagesToSend: BaseMessage[];
     if (!hasAIMessages) {

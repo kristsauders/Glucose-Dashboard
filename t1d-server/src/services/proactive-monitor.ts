@@ -309,25 +309,33 @@ export class ProactiveMonitor {
 
       const analysisPrompt = `Perform comprehensive glucose data analysis for proactive monitoring. ${timeContext}
 
-**Your goal:** Gather sufficient data to understand the user's glucose patterns, trends, and any notable findings. You have access to 32+ analysis tools - use your judgment to call the most relevant ones.
+🚨 CRITICAL REQUIREMENT: You MUST call AT LEAST 5 TOOLS in your VERY FIRST response. Not 1 tool, not 2 tools - MINIMUM 5 tools in parallel in your first message.
 
-**Recommended approach:**
-1. **Start with context and current status** (call in parallel):
-   - retrieve_user_memory - Understand user context
-   - analyze_live_trend - Current glucose status
-   - get_recent_glucose - Recent readings
+**FIRST MESSAGE - Call these 5 tools in parallel (all at once):**
+1. retrieve_user_memory(key="user_context")
+2. get_recent_glucose(hours=2)
+3. analyze_live_trend(period=4)
+4. analyze_trends(days=7)
+5. get_detected_patterns()
 
-2. **Then analyze patterns based on what you find** (you can call these in parallel too):
-   - If you need trend analysis: analyze_trends, compare_periods_statistical
-   - If you want to check patterns: get_detected_patterns, analyze_basal_patterns, analyze_meal_patterns
-   - If you find anomalies: detect_anomalies, get_glucose_around_time, check meal/insulin/exercise logs
-   - Any other tools that seem relevant based on the time of day or what you discover
+**SECOND MESSAGE (if needed) - Call these in parallel:**
+- get_meal_history(days=2)
+- get_insulin_history(days=2)
+- analyze_basal_patterns(days=7)
+- detect_anomalies(days=7, limit=10)
 
-**Key points:**
-- Call multiple tools in PARALLEL whenever possible to minimize iterations
-- You can make multiple rounds of tool calls if you need to dig deeper into something you discovered
-- Maximum 5 iterations to stay cost-effective
-- Once you have comprehensive data, you're done - no need to write a summary`;
+**THIRD MESSAGE (if needed) - Call based on findings:**
+- get_missing_logs_suggestions() if you see gaps
+- analyze_meal_patterns() if meal patterns are relevant
+- Any other specific tools for deeper analysis
+
+**CRITICAL RULES:**
+- FIRST message MUST have 5+ tool calls
+- Target: 3 iterations MAXIMUM (not 15!)
+- If you call only 1-2 tools per message, you are FAILING
+- Once you have sufficient data, respond "Analysis complete" to trigger synthesis
+
+The synthesis model will write the user-facing message - your job is just to gather data efficiently.`;
 
       // Log context size
       const userCtx = {

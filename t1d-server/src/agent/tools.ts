@@ -1142,15 +1142,16 @@ const analyzeMealPatternsTool = new DynamicStructuredTool({
       .enum(['breakfast', 'lunch', 'dinner', 'snack'])
       .optional()
       .describe('Filter by specific meal type'),
+    userTimezone: z.string().optional().describe('User timezone (automatically provided)'),
   }),
-  func: async ({ userId, days = 14, mealType }) => {
+  func: async ({ userId, days = 14, mealType, userTimezone }) => {
     try {
-      const startDate = new Date();
-      startDate.setDate(startDate.getDate() - days);
+      // Use provided timezone or fallback
+      const timezone = userTimezone || 'America/New_York';
 
-      console.log('[analyze_meal_patterns] Called with:', { userId, days, mealType, startDate: startDate.toISOString() });
+      console.log('[analyze_meal_patterns] Called with:', { userId, days, mealType, timezone });
 
-      // Get meals in the time period
+      // Get meals in the time period using PostgreSQL timezone-aware date functions
       let mealQuery = `
         SELECT
           m.*,
@@ -1163,18 +1164,20 @@ const analyzeMealPatternsTool = new DynamicStructuredTool({
         FROM meals m
         LEFT JOIN glucose_correlations c ON m.correlation_id = c.id
         WHERE m.user_id = $1
-          AND m.timestamp >= $2
+          AND m.timestamp >= DATE_TRUNC('day', NOW() AT TIME ZONE '${timezone}') - INTERVAL '${days} days'
+          AND m.timestamp < DATE_TRUNC('day', NOW() AT TIME ZONE '${timezone}') + INTERVAL '1 day'
       `;
-      const params: any[] = [userId, startDate.toISOString()];
+      const params: any[] = [userId];
 
       if (mealType) {
-        mealQuery += ` AND m.meal_type = $3`;
+        mealQuery += ` AND m.meal_type = $2`;
         params.push(mealType);
       }
 
       mealQuery += ` ORDER BY m.timestamp DESC`;
 
       console.log('[analyze_meal_patterns] Executing with params:', params);
+      console.log('[analyze_meal_patterns] Query:', mealQuery.replace(/\s+/g, ' ').trim());
       const mealsResult = await query(mealQuery, params);
       console.log('[analyze_meal_patterns] Found', mealsResult.rows.length, 'meals');
 
@@ -1347,13 +1350,15 @@ const analyzeIndividualMealTool = new DynamicStructuredTool({
         });
       }
 
-      // Get insulin doses for this meal
+      // Get insulin doses within 30 minutes before or after this meal
       const insulinResult = await query(
-        `SELECT insulin_type, units, timestamp, purpose
+        `SELECT insulin_type, units, timestamp, purpose, notes
          FROM insulin_doses
-         WHERE related_meal_id = $1
+         WHERE user_id = $1
+           AND timestamp >= $2 - INTERVAL '30 minutes'
+           AND timestamp <= $2 + INTERVAL '30 minutes'
          ORDER BY timestamp ASC`,
-        [targetMeal.id]
+        [userId, targetMeal.timestamp]
       );
 
       const insulinDoses = insulinResult.rows;
@@ -2346,12 +2351,28 @@ const detectAnomaliesTool = new DynamicStructuredTool({
       .enum(['low', 'medium', 'high'])
       .default('medium')
       .describe('Sensitivity level: low=only severe anomalies, medium=moderate+severe, high=all anomalies'),
+    limit: z.number().default(10).describe('Maximum number of anomalies to return (default: 10, max: 50)'),
   }),
-  func: async ({ userId, userTimezone, days = 7, sensitivityLevel = 'medium' }) => {
+  func: async ({ userId, userTimezone, days = 7, sensitivityLevel = 'medium', limit = 10 }) => {
     try {
       const timezone = userTimezone || 'America/New_York';
+      const maxLimit = Math.min(limit, 50); // Cap at 50 to prevent context explosion
+
       // Call advanced analysis function
       const anomalyDetection = await detectAnomalies(userId, days, sensitivityLevel, timezone);
+
+      // Limit the number of anomalies returned to prevent context explosion
+      if (anomalyDetection.anomalies && anomalyDetection.anomalies.length > maxLimit) {
+        const truncatedAnomalies = anomalyDetection.anomalies.slice(0, maxLimit);
+        return JSON.stringify({
+          ...anomalyDetection,
+          anomalies: truncatedAnomalies,
+          anomaliesDetected: anomalyDetection.anomaliesDetected,
+          anomaliesReturned: truncatedAnomalies.length,
+          truncated: true,
+          note: `Showing top ${maxLimit} of ${anomalyDetection.anomaliesDetected} anomalies detected`,
+        });
+      }
 
       return JSON.stringify(anomalyDetection);
     } catch (error) {
@@ -2856,26 +2877,24 @@ export const logInsulinTool = new DynamicStructuredTool({
   schema: z.object({
     userId: z.string().optional().describe('The user ID (automatically provided)'),
     timestamp: z.string().optional().describe('Insulin dose timestamp in ISO format (YYYY-MM-DDTHH:mm:ss.000Z). CRITICAL: Follow the "Timezone Conversion for Timestamps" instructions in User Context. Convert user\'s local time to UTC. Leave empty ONLY if user wants exact current time.'),
-    insulinType: z.enum(['rapid', 'long', 'ultra_long', 'mixed'])
-      .describe('Insulin type'),
-    brandName: z.string().optional().describe('Brand name (e.g., Humalog, Novolog, Lantus)'),
+    insulinType: z.string()
+      .describe('Insulin brand/type (e.g., Humalog, Novolog, Lantus, Fiasp)'),
     units: z.number().describe('Number of units'),
     purpose: z.enum(['meal', 'correction', 'basal'])
       .describe('Purpose of dose'),
-    relatedMealId: z.string().optional().describe('Related meal ID if meal bolus'),
     notes: z.string().optional().describe('Additional notes'),
   }),
-  func: async ({ userId, timestamp, insulinType, brandName, units, purpose, relatedMealId, notes }) => {
+  func: async ({ userId, timestamp, insulinType, units, purpose, notes }) => {
     try {
       const doseTimestamp = timestamp || new Date().toISOString();
 
       const result = await query(
         `INSERT INTO insulin_doses (
-          user_id, timestamp, insulin_type, brand_name, units, purpose, related_meal_id, notes, source
+          user_id, timestamp, type, insulin_type, units, notes, source
         )
-        VALUES ($1, $2, $3, $4, $5, $6, $7, $8, 'agent')
-        RETURNING id, timestamp, insulin_type, units, purpose`,
-        [userId, doseTimestamp, insulinType, brandName, units, purpose, relatedMealId, notes]
+        VALUES ($1, $2, $3, $4, $5, $6, 'agent')
+        RETURNING id, timestamp, type, insulin_type, units`,
+        [userId, doseTimestamp, purpose, insulinType, units, notes]
       );
 
       return JSON.stringify({
@@ -2883,11 +2902,11 @@ export const logInsulinTool = new DynamicStructuredTool({
         dose: {
           id: result.rows[0].id,
           timestamp: result.rows[0].timestamp,
-          type: result.rows[0].insulin_type,
+          type: result.rows[0].type,
+          insulinType: result.rows[0].insulin_type,
           units: parseFloat(result.rows[0].units),
-          purpose: result.rows[0].purpose,
         },
-        message: `Logged: ${units} units ${insulinType} insulin (${purpose})`,
+        message: `Logged: ${units} units of ${insulinType} (${purpose})`,
       });
     } catch (error) {
       return JSON.stringify({
@@ -2918,7 +2937,7 @@ export const getInsulinHistoryTool = new DynamicStructuredTool({
     // Use date arithmetic to get full calendar days, not just 24-hour periods
     // This ensures "yesterday" means "all of yesterday" not "last 24 hours"
     let queryText = `
-      SELECT id, timestamp, insulin_type, brand_name, units, purpose, notes
+      SELECT id, timestamp, type, insulin_type, units, notes
       FROM insulin_doses
       WHERE user_id = $1
         AND timestamp >= DATE_TRUNC('day', NOW() AT TIME ZONE '${timezone}') - INTERVAL '${days} days'
@@ -2927,7 +2946,7 @@ export const getInsulinHistoryTool = new DynamicStructuredTool({
     const params = [userId];
 
     if (purpose) {
-      queryText += ` AND purpose = $2`;
+      queryText += ` AND type = $2`;
       params.push(purpose);
     }
 
@@ -2942,10 +2961,9 @@ export const getInsulinHistoryTool = new DynamicStructuredTool({
       doses: result.rows.map(r => ({
         id: r.id,
         timestamp: convertToUserTimezone(r.timestamp, timezone),
-        type: r.insulin_type,
-        brand: r.brand_name,
+        insulinType: r.insulin_type,
         units: parseFloat(r.units),
-        purpose: r.purpose,
+        purpose: r.type,
         notes: r.notes,
       })),
     });
@@ -3038,14 +3056,13 @@ export const detectRoutinePatternsTool = new DynamicStructuredTool({
       `SELECT
         EXTRACT(HOUR FROM timezone($2, timestamp)) as hour,
         insulin_type,
-        brand_name,
+        type as purpose,
         AVG(units) as avg_units,
-        COUNT(*) as frequency,
-        purpose
+        COUNT(*) as frequency
        FROM insulin_doses
        WHERE user_id = $1
          AND timestamp >= NOW() - INTERVAL '${days} days'
-       GROUP BY EXTRACT(HOUR FROM timezone($2, timestamp)), insulin_type, brand_name, purpose
+       GROUP BY EXTRACT(HOUR FROM timezone($2, timestamp)), insulin_type, type
        HAVING COUNT(*) >= ${Math.ceil(days * 0.7 / 7)}
        ORDER BY hour, frequency DESC`,
       [userId, timezone]
@@ -3059,7 +3076,6 @@ export const detectRoutinePatternsTool = new DynamicStructuredTool({
             type: 'insulin',
             typicalTime: `${row.hour}:00`,
             insulinType: row.insulin_type,
-            brandName: row.brand_name,
             avgUnits: parseFloat(row.avg_units).toFixed(1),
             purpose: row.purpose,
             frequency: parseInt(row.frequency),
