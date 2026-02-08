@@ -420,7 +420,8 @@ class APIService {
 
   // Report generation
   async getReports(): Promise<any[]> {
-    return this.request('/reports');
+    const response = await this.request<{ success: boolean; reports: any[] }>('/reports');
+    return response.reports;
   }
 
   async generateReport(params: {

@@ -26,7 +26,7 @@ export function Reports() {
   const fetchReports = async () => {
     try {
       const data = await apiService.getReports();
-      setReports(data.reports);
+      setReports(data);
     } catch (error) {
       console.error('Failed to fetch reports:', error);
     } finally {
