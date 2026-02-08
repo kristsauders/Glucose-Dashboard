@@ -435,22 +435,49 @@ CRITICAL INSTRUCTION: The data above is the ONLY data you have access to.
     }
 
     // Add synthesis-specific user prompt (replaces original "gather data" prompt)
-    transformedMessages.push(new HumanMessage(`Synthesize the data above into a comprehensive, user-facing analysis message.
+    // Include the original user question for context
+    const originalUserMessage = messages.find(m => m.constructor.name === 'HumanMessage');
+    const userQuestion = originalUserMessage ? (typeof originalUserMessage.content === 'string' ? originalUserMessage.content : '') : '';
 
-Write a direct analytical message that:
-- Presents the key findings and insights from the data
-- Explains trends, patterns, and correlations
-- Provides physiological context where relevant
-- Uses exact values from the tool results (no estimation)
-- Is written in natural prose (NOT XML tags or structured formats)
+    transformedMessages.push(new HumanMessage(`The user asked: "${userQuestion}"
 
-DO NOT:
-- Attempt to call any tools or gather more data
-- Use XML tags like <get_data> or <analysis>
-- Say "let me gather" or "I'll collect" - the data is already gathered
-- Reference the data gathering process
+Synthesize the tool data above to answer this question in a conversational, direct way.
 
-Begin your response directly with the analysis.`));
+**CRITICAL - Response Strategy:**
+
+1. **ANSWER THE SPECIFIC QUESTION FIRST** (1-2 paragraphs maximum)
+   - If they asked about "dinner last night", talk about dinner last night
+   - If they asked about "research papers", list research papers
+   - If they asked "how did I do", evaluate their performance
+   - Be direct, specific, and concise - answer exactly what was asked
+
+2. **Add relevant supporting context** (1-2 paragraphs)
+   - Only include data that directly relates to their question
+   - Provide physiological explanations if relevant
+
+3. **Optional: Brief additional insights** (1 paragraph maximum)
+   - ONLY if you noticed something important unrelated to their question
+   - Keep it brief - one or two sentences
+   - Don't turn this into a comprehensive analysis
+
+**What this looks like:**
+- Question: "How did dinner go?" → Answer: Talk about dinner specifically, then glucose response, then maybe mention if you see a pattern
+- Question: "What research papers?" → Answer: List the papers found, briefly summarize each
+- Question: "How am I doing today?" → Answer: Evaluate today specifically, don't analyze the last 2 weeks unless relevant
+
+**Do NOT:**
+- Give comprehensive multi-week analysis when asked about one meal
+- List all available data when asked a specific question
+- Turn every question into a full report
+- Reference tools, data gathering, or analysis phases
+
+**Rules:**
+- Use exact values from tool results (never estimate)
+- If you don't have data to answer their question, say so directly
+- Write in natural, conversational prose
+- Keep your response focused and relevant
+
+Begin your response by directly answering their question.`));
 
     // Create a synthesis-specific system prompt (without tool descriptions)
     const synthesisSystemPrompt = new SystemMessage(`You are Sage, an AI assistant specialized in Type 1 Diabetes (T1D) and LADA management.

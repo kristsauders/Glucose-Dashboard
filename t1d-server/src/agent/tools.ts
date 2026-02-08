@@ -2570,7 +2570,8 @@ export const logMealTool = new DynamicStructuredTool({
   description: 'Save a meal to the database with nutrition estimates. Always confirm with user before saving.',
   schema: z.object({
     userId: z.string().optional().describe('The user ID (automatically provided)'),
-    timestamp: z.string().optional().describe('Meal timestamp in ISO format (YYYY-MM-DDTHH:mm:ss.000Z). CRITICAL: Follow the "Timezone Conversion for Timestamps" instructions in User Context. User times are in their LOCAL timezone and MUST be converted to UTC. For "yesterday", subtract 1 day. Leave empty ONLY if user wants exact current time.'),
+    timezone: z.string().optional().describe('User timezone (automatically provided from context)'),
+    timestamp: z.string().optional().describe('Meal timestamp in USER\'S LOCAL TIMEZONE in format "YYYY-MM-DD HH:MM" (24-hour format). Examples: "2026-02-07 18:30" for 6:30 PM, "2026-02-07 08:15" for 8:15 AM. Server will convert to UTC. Leave empty for current time. For "yesterday", use yesterday\'s date. DO NOT manually convert to UTC - just provide the local time.'),
     description: z.string().describe('Meal description'),
     estimatedCarbs: z.number().describe('Estimated carbohydrates (grams)'),
     estimatedProtein: z.number().optional().describe('Estimated protein (grams)'),
@@ -2583,9 +2584,47 @@ export const logMealTool = new DynamicStructuredTool({
     tags: z.array(z.string()).optional().describe('Tags for categorization'),
     notes: z.string().optional().describe('Additional notes'),
   }),
-  func: async ({ userId, timestamp, description, estimatedCarbs, estimatedProtein, estimatedFat, estimatedCalories, carbConfidence, estimationMethod, mealType, tags, notes }) => {
+  func: async ({ userId, timezone, timestamp, description, estimatedCarbs, estimatedProtein, estimatedFat, estimatedCalories, carbConfidence, estimationMethod, mealType, tags, notes }) => {
     try {
-      const mealTimestamp = timestamp || new Date().toISOString();
+      let mealTimestamp: string;
+
+      if (timestamp) {
+        // Parse local timestamp and convert to UTC
+        // Expected format: "YYYY-MM-DD HH:MM" or ISO string
+        const userTimezone = timezone || 'America/New_York';
+
+        try {
+          // Check if it's already an ISO string (has 'T' or 'Z')
+          if (timestamp.includes('T') || timestamp.includes('Z')) {
+            // Already in UTC ISO format
+            mealTimestamp = timestamp;
+          } else {
+            // Parse as local time and convert to UTC
+            // Format: "YYYY-MM-DD HH:MM"
+            const [datePart, timePart] = timestamp.split(' ');
+            const [year, month, day] = datePart.split('-').map(Number);
+            const [hour, minute] = timePart.split(':').map(Number);
+
+            // Create date in user's timezone
+            const localTimeStr = `${year}-${String(month).padStart(2, '0')}-${String(day).padStart(2, '0')}T${String(hour).padStart(2, '0')}:${String(minute).padStart(2, '0')}:00`;
+
+            // Convert to UTC using PostgreSQL's timezone function
+            const tzResult = await query(
+              `SELECT timezone('UTC', timezone($1, $2::timestamp)) as utc_time`,
+              [userTimezone, localTimeStr]
+            );
+
+            mealTimestamp = tzResult.rows[0].utc_time.toISOString();
+            console.log(`[log_meal] Converted ${timestamp} (${userTimezone}) -> ${mealTimestamp} (UTC)`);
+          }
+        } catch (parseError) {
+          console.error(`[log_meal] Error parsing timestamp "${timestamp}":`, parseError);
+          // Fallback to current time
+          mealTimestamp = new Date().toISOString();
+        }
+      } else {
+        mealTimestamp = new Date().toISOString();
+      }
 
       const result = await query(
         `INSERT INTO meals (
