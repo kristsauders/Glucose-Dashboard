@@ -19,6 +19,25 @@ export interface PubMedPaper {
 export class PubMedService {
   private baseUrl = 'https://eutils.ncbi.nlm.nih.gov/entrez/eutils';
   private email = 'sage@example.com'; // Polite to include email for NCBI
+  private lastRequestTime: number = 0;
+  private minRequestInterval: number = 400; // Minimum 400ms between requests (NCBI recommends max 3 requests/sec)
+
+  /**
+   * Throttle requests to respect NCBI rate limits (max 3 requests/second)
+   * This prevents rapid-fire requests from the agent triggering 429 errors
+   */
+  private async throttle(): Promise<void> {
+    const now = Date.now();
+    const timeSinceLastRequest = now - this.lastRequestTime;
+
+    if (timeSinceLastRequest < this.minRequestInterval) {
+      const waitTime = this.minRequestInterval - timeSinceLastRequest;
+      console.log(`[PubMed] Throttling: waiting ${waitTime}ms before next request`);
+      await new Promise(resolve => setTimeout(resolve, waitTime));
+    }
+
+    this.lastRequestTime = Date.now();
+  }
 
   /**
    * Fetch with retry logic and exponential backoff for rate limiting
@@ -98,6 +117,9 @@ export class PubMedService {
    * Search for PubMed IDs matching query
    */
   private async searchIds(query: string, maxResults: number): Promise<string[]> {
+    // Throttle before making request
+    await this.throttle();
+
     const params = new URLSearchParams({
       db: 'pubmed',
       term: query,
@@ -123,6 +145,9 @@ export class PubMedService {
    * Fetch detailed information for PubMed IDs
    */
   private async fetchDetails(ids: string[]): Promise<PubMedPaper[]> {
+    // Throttle before making request
+    await this.throttle();
+
     const params = new URLSearchParams({
       db: 'pubmed',
       id: ids.join(','),

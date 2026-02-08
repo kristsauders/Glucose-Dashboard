@@ -67,12 +67,15 @@ export function AIChat() {
   // Handle scrolling: scroll to top when PROCESSING starts, don't scroll when it ends
   useEffect(() => {
     if (isLoading && !wasStreamingRef.current) {
-      // Processing just started (thinking/using tools) - scroll to top of message area with max room
-      streamingMessageRef.current?.scrollIntoView({
-        behavior: 'smooth',
-        block: 'start',    // Align top of element with top of viewport
-        inline: 'nearest'  // Don't scroll horizontally
-      });
+      // Processing just started (thinking/using tools) - scroll to show message at top
+      // Use a slight delay to ensure the element has rendered
+      setTimeout(() => {
+        streamingMessageRef.current?.scrollIntoView({
+          behavior: 'smooth',
+          block: 'start',    // Align top of element with top of viewport
+          inline: 'nearest'  // Don't scroll horizontally
+        });
+      }, 50);
     } else if (!isLoading && !wasStreamingRef.current) {
       // Not loading and wasn't loading - normal message added, scroll to bottom
       messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
@@ -645,6 +648,7 @@ export function AIChat() {
               initial={{ opacity: 0, y: 10 }}
               animate={{ opacity: 1, y: 0 }}
               className="w-full"
+              style={{ minHeight: '70vh' }} // Extra space below so message can scroll to top with room to fill
             >
               <div className="w-full">
                 {status && (
@@ -689,10 +693,16 @@ export function AIChat() {
               onChange={(e) => setInput(e.target.value)}
               onKeyPress={handleKeyPress}
               onFocus={() => {
-                // Scroll to bottom when input is focused (e.g., when keyboard appears on mobile)
-                setTimeout(() => {
+                // Scroll to bottom when input is focused, with retries to handle keyboard animation on mobile
+                const scrollToBottom = () => {
                   messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
-                }, 100);
+                };
+
+                // Try multiple times with increasing delays to handle keyboard animation
+                scrollToBottom(); // Immediate
+                setTimeout(scrollToBottom, 100);  // After 100ms
+                setTimeout(scrollToBottom, 300);  // After 300ms
+                setTimeout(scrollToBottom, 500);  // After 500ms (keyboard should be fully up)
               }}
               placeholder="Ask about your glucose data..."
               disabled={isLoading}
