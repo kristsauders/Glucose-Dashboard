@@ -423,10 +423,30 @@ class APIService {
     return this.request('/reports');
   }
 
+  async generateReport(params: {
+    title: string;
+    reportType: 'general' | 'comparison' | 'decision-support';
+    dateRangeStart: string;
+    dateRangeEnd: string;
+    comparisonRangeStart?: string;
+    comparisonRangeEnd?: string;
+    notes?: string;
+  }): Promise<any> {
+    return this.request('/reports', {
+      method: 'POST',
+      body: JSON.stringify(params),
+    });
+  }
+
   async downloadReport(reportId: string): Promise<Blob> {
-    const response = await this.request(`/reports/${reportId}/download`, {
-      method: 'GET',
-    }, false); // Don't parse as JSON
+    const response = await fetch(`${API_BASE_URL}/reports/${reportId}/download`, {
+      headers: {
+        'Authorization': `Bearer ${this.token}`,
+      },
+    });
+    if (!response.ok) {
+      throw new Error('Failed to download report');
+    }
     return response.blob();
   }
 
