@@ -287,8 +287,20 @@ The synthesis model will create the user-facing message - your job is to gather 
     if (response.tool_calls && response.tool_calls.length > 0) {
       const toolNames = response.tool_calls.map(tc => tc.name).join(', ');
       console.log(`[analysisNode] Iteration ${currentIteration + 1} called ${response.tool_calls.length} tools: ${toolNames}`);
+
+      // Debug: Log full tool_calls array to verify we're getting multiple calls
+      console.log(`[analysisNode] DEBUG: Full tool_calls array:`, JSON.stringify(response.tool_calls.map(tc => ({
+        name: tc.name,
+        id: tc.id
+      })), null, 2));
     } else {
       console.log(`[analysisNode] Iteration ${currentIteration + 1} - no tools called, ready for synthesis`);
+    }
+
+    // Debug: Check if response has any other fields that might contain tool calls
+    const responseAny = response as any;
+    if (responseAny.additional_kwargs?.tool_calls) {
+      console.log(`[analysisNode] DEBUG: Found tool_calls in additional_kwargs:`, responseAny.additional_kwargs.tool_calls.length);
     }
 
     // IMPORTANT: Only return NEW messages (not the full array)

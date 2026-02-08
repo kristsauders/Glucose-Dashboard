@@ -54,7 +54,8 @@ export class ReportGenerator {
   constructor() {
     // Store reports in server/reports directory
     this.reportsDir = path.join(__dirname, '../../reports');
-    this.chartGenerator = new ChartGenerator({ width: 800, height: 400 });
+    // Larger charts to better utilize page space
+    this.chartGenerator = new ChartGenerator({ width: 900, height: 500 });
   }
 
   /**
@@ -195,7 +196,6 @@ export class ReportGenerator {
       dailyPattern?: string;
       distribution?: string;
       weeklyOverview?: string;
-      spikeAnalysis?: string;
       bedtimeGlucose?: string;
       dailyTrends?: string;
       overnightGlucose?: string;
@@ -222,12 +222,12 @@ export class ReportGenerator {
       line-height: 1.5;
       color: #1f2937;
       background: white;
-      padding: 30px;
+      padding: 15px;
     }
     .header {
       text-align: center;
-      margin-bottom: 25px;
-      padding-bottom: 20px;
+      margin-bottom: 15px;
+      padding-bottom: 15px;
       border-bottom: 3px solid #3b82f6;
     }
     h1 {
@@ -249,14 +249,14 @@ export class ReportGenerator {
       margin-top: 15px;
     }
     .section {
-      margin-bottom: 30px;
+      margin-bottom: 20px;
       page-break-inside: avoid;
     }
     h2 {
       font-size: 20px;
       color: #1f2937;
-      margin-bottom: 20px;
-      padding-bottom: 10px;
+      margin-bottom: 12px;
+      padding-bottom: 8px;
       border-bottom: 2px solid #e5e7eb;
     }
     .stats-grid {
@@ -317,7 +317,7 @@ export class ReportGenerator {
       font-weight: bold;
     }
     .chart-container {
-      margin: 30px 0;
+      margin: 15px 0;
       text-align: center;
     }
     .chart-container img {
@@ -361,8 +361,8 @@ export class ReportGenerator {
       text-align: center;
     }
     .footer {
-      margin-top: 60px;
-      padding-top: 20px;
+      margin-top: 30px;
+      padding-top: 15px;
       border-top: 2px solid #e5e7eb;
       text-align: center;
       font-size: 12px;
@@ -611,13 +611,6 @@ export class ReportGenerator {
     </div>
     ` : ''}
 
-    ${chartImages.spikeAnalysis ? `
-    <div class="chart-container">
-      <img src="data:image/png;base64,${chartImages.spikeAnalysis}" alt="Spike Analysis" />
-      <div class="chart-description">Number of glucose spikes per day. A spike is glucose above 180 mg/dL.</div>
-    </div>
-    ` : ''}
-
     ${chartImages.overnightGlucose ? `
     <div class="chart-container">
       <img src="data:image/png;base64,${chartImages.overnightGlucose}" alt="Overnight Glucose (10 PM - 7 AM)" />
@@ -743,10 +736,6 @@ export class ReportGenerator {
         await this.chartGenerator.generateWeeklyOverviewChart(readings)
       ).toString('base64');
 
-      chartImages.spikeAnalysis = (
-        await this.chartGenerator.generateSpikeAnalysisChart(readings)
-      ).toString('base64');
-
       chartImages.bedtimeGlucose = (
         await this.chartGenerator.generateBedtimeGlucoseChart(readings)
       ).toString('base64');
@@ -777,10 +766,10 @@ export class ReportGenerator {
         format: 'A4',
         printBackground: true,
         margin: {
-          top: '20mm',
-          right: '15mm',
-          bottom: '20mm',
-          left: '15mm',
+          top: '12mm',
+          right: '10mm',
+          bottom: '12mm',
+          left: '10mm',
         },
       });
 

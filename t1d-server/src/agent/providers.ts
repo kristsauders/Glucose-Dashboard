@@ -94,11 +94,8 @@ export function getHybridAIProvider(mode: 'chat' | 'proactive' = 'chat'): Hybrid
       },
       temperature: 0.7,
       streaming: false, // Don't stream tool calling
-      modelKwargs: {
-        reasoning: {
-          effort: 'high' // Enable reasoning with high effort for cost/quality balance
-        }
-      }
+      // Note: modelKwargs.reasoning removed - only needed for reasoning models (o1, DeepSeek R1)
+      // gpt-oss-120b is not a reasoning model and this parameter may interfere with tool calling
     });
     smallModel.getNumTokens = async () => 0;
   }
