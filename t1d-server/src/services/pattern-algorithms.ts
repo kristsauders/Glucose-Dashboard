@@ -147,8 +147,9 @@ export async function detectMealResponse(
 
     const baselineGlucose = average(baselineReadings.map(r => r.glucose));
 
-    // 3. Get response window (4 hours after meal)
-    const responseEnd = new Date(mealTime.getTime() + 4 * 60 * 60 * 1000);
+    // 3. Get response window (3 hours after meal - standard post-meal analysis window)
+    // CRITICAL: Use 3-hour window to avoid including unrelated readings (overnight lows, etc.)
+    const responseEnd = new Date(mealTime.getTime() + 3 * 60 * 60 * 1000);
     const responseReadings = await getGlucoseWindow(userId, mealTime, responseEnd);
 
     if (responseReadings.length < 8) {
