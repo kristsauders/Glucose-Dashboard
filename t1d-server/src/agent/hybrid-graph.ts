@@ -322,9 +322,9 @@ The synthesis model will create the user-facing message - your job is to gather 
       const msgType = msg.constructor.name;
       const msgRole = 'role' in msg ? (msg as any).role : undefined;
 
-      // Keep HumanMessages (user questions)
+      // Replace HumanMessages with synthesis-specific prompt
       if (msgType === 'HumanMessage') {
-        transformedMessages.push(msg);
+        // Don't push the original message - we'll replace it with a synthesis-specific prompt
         continue;
       }
 
@@ -408,8 +408,33 @@ CRITICAL INSTRUCTION: The data above is the ONLY data you have access to.
       transformedMessages.push(new SystemMessage(toolResultsContext));
     }
 
+    // Add synthesis-specific user prompt (replaces original "gather data" prompt)
+    transformedMessages.push(new HumanMessage(`Synthesize the data above into a comprehensive, user-facing analysis message.
+
+Write a direct analytical message that:
+- Presents the key findings and insights from the data
+- Explains trends, patterns, and correlations
+- Provides physiological context where relevant
+- Uses exact values from the tool results (no estimation)
+- Is written in natural prose (NOT XML tags or structured formats)
+
+DO NOT:
+- Attempt to call any tools or gather more data
+- Use XML tags like <get_data> or <analysis>
+- Say "let me gather" or "I'll collect" - the data is already gathered
+- Reference the data gathering process
+
+Begin your response directly with the analysis.`));
+
     // Create a synthesis-specific system prompt (without tool descriptions)
     const synthesisSystemPrompt = new SystemMessage(`You are Sage, an AI assistant specialized in Type 1 Diabetes (T1D) and LADA management.
+
+🚨 CRITICAL: YOU ARE IN SYNTHESIS MODE 🚨
+- You have NO access to tools - do NOT attempt to call any tools
+- Do NOT generate XML tags like <get_recent_glucose> or <analyze_trends>
+- Do NOT say "Let me gather data" or "I'll collect information"
+- The data gathering phase is COMPLETE - you are now synthesizing results
+- Write a direct, user-facing message analyzing the data you already have
 
 ## CRITICAL: DATA ACCURACY REQUIREMENTS
 **YOU MUST USE ONLY DATA FROM THE TOOL RESULTS PROVIDED BELOW. ANY DEVIATION IS UNACCEPTABLE.**
