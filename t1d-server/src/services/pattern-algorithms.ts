@@ -724,5 +724,6 @@ async function getGlucoseWindow(
   return result.rows.map(row => ({
     ...row,
     timestamp: new Date(row.timestamp),
+    glucose: parseFloat(row.glucose as any), // Convert from string to number (pg returns NUMERIC as string)
   }));
 }
