@@ -1376,19 +1376,24 @@ const analyzeIndividualMealTool = new DynamicStructuredTool({
 
       // If no correlation data yet, provide real-time analysis instead
       if (!targetMeal.correlation_id) {
-        // Get glucose readings since the meal
+        // Get glucose readings since the meal (limit to 3 hours for meal response window)
         const mealTime = new Date(targetMeal.timestamp);
         const now = new Date();
         const hoursSinceMeal = (now.getTime() - mealTime.getTime()) / (1000 * 60 * 60);
+
+        // CRITICAL: Only look at 3-hour post-meal window to find the meal's glucose response
+        // Don't query all the way to NOW() as that includes unrelated readings (overnight, next morning, etc.)
+        const threeHoursAfterMeal = new Date(mealTime.getTime() + (3 * 60 * 60 * 1000));
+        const queryEndTime = hoursSinceMeal < 3 ? now : threeHoursAfterMeal;
 
         const glucoseResult = await query(
           `SELECT glucose, timestamp
            FROM glucose_readings
            WHERE user_id = $1
              AND timestamp >= $2
-             AND timestamp <= NOW()
+             AND timestamp <= $3
            ORDER BY timestamp ASC`,
-          [userId, targetMeal.timestamp]
+          [userId, targetMeal.timestamp, queryEndTime.toISOString()]
         );
 
         const readings = glucoseResult.rows;
@@ -1399,9 +1404,9 @@ const analyzeIndividualMealTool = new DynamicStructuredTool({
         if (readings.length > 0) {
           // First reading after meal is baseline
           baseline = readings[0].glucose;
-          // Find peak
+          // Find peak within the 3-hour post-meal window
           peakGlucose = Math.max(...readings.map(r => r.glucose));
-          // Last reading is current
+          // Last reading in window is current
           currentGlucose = readings[readings.length - 1].glucose;
         }
 

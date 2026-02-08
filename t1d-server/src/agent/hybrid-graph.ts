@@ -222,7 +222,19 @@ Request: "How's my glucose control this week?"
 → FIRST MESSAGE: analyze_trends(days=7) + get_recent_glucose(days=7) + analyze_basal_patterns(days=7) + get_detected_patterns() + detect_anomalies(days=7)
 → SECOND MESSAGE: "Analysis complete"
 
+Request: "Log my insulin - I took 12 units of Lantus last night at 10pm"
+→ FIRST MESSAGE: log_insulin(timestamp="last night 10pm", insulinType="Lantus", units=12, purpose="basal")
+→ SECOND MESSAGE: "Analysis complete"
+→ NOTE: You MUST actually call the log_insulin tool! Don't just say you'll log it - CALL THE TOOL.
+
 🚨 IF YOU CALL FEWER THAN 3 TOOLS IN YOUR FIRST MESSAGE, YOU ARE FAILING 🚨
+(Exception: Simple logging requests like above only need 1 tool call)
+
+🚨 CRITICAL FOR LOGGING ACTIONS 🚨
+- If user asks to LOG something (insulin, meal, exercise), you MUST call the tool
+- NEVER respond with "I'll log that" or "Logged" without actually calling the tool
+- The synthesis model will only confirm success if your tool call succeeds
+- Always call the appropriate tool: log_insulin, log_meal, log_exercise
 
 The synthesis model will create the user-facing message - your job is to gather comprehensive data QUICKLY using parallel tool calls.`);
 
@@ -435,21 +447,33 @@ CRITICAL INSTRUCTION: The data above is the ONLY data you have access to.
     }
 
     // Add synthesis-specific user prompt (replaces original "gather data" prompt)
-    // Include the original user question for context
-    const originalUserMessage = messages.find(m => m.constructor.name === 'HumanMessage');
-    const userQuestion = originalUserMessage ? (typeof originalUserMessage.content === 'string' ? originalUserMessage.content : '') : '';
+    // CRITICAL: Get the LAST HumanMessage (current question), not the first
+    const allHumanMessages = messages.filter(m => m.constructor.name === 'HumanMessage');
+    const currentUserMessage = allHumanMessages[allHumanMessages.length - 1];
+    const userQuestion = currentUserMessage ? (typeof currentUserMessage.content === 'string' ? currentUserMessage.content : '') : '';
 
-    transformedMessages.push(new HumanMessage(`The user asked: "${userQuestion}"
+    // Check if there are previous conversation turns
+    const hasPreviousTurns = transformedMessages.some(m => m.constructor.name === 'AIMessage');
+    const contextNote = hasPreviousTurns
+      ? '\n\n**IMPORTANT CONTEXT**: The conversation history above shows previous turns. The user has now asked a NEW question (below). Focus on answering THIS NEW question - don\'t repeat information from previous turns unless it\'s directly relevant to the current question.'
+      : '';
 
-Synthesize the tool data above to answer this question in a conversational, direct way.
+    transformedMessages.push(new HumanMessage(`═══════════════════════════════════════════════════════════════
+🎯 CURRENT USER QUESTION (THIS IS WHAT TO ANSWER):
+"${userQuestion}"
+═══════════════════════════════════════════════════════════════${contextNote}
+
+Synthesize the tool data above to answer this CURRENT question in a conversational, direct way.
 
 **CRITICAL - Response Strategy:**
 
 1. **ANSWER THE SPECIFIC QUESTION FIRST** (1-2 paragraphs maximum)
    - If they asked about "dinner last night", talk about dinner last night
+   - If they asked about "breakfast today", talk about breakfast today (NOT dinner!)
    - If they asked about "research papers", list research papers
    - If they asked "how did I do", evaluate their performance
    - Be direct, specific, and concise - answer exactly what was asked
+   - THIS IS THE MOST IMPORTANT PART - answer their actual question
 
 2. **Add relevant supporting context** (1-2 paragraphs)
    - Only include data that directly relates to their question
@@ -460,24 +484,34 @@ Synthesize the tool data above to answer this question in a conversational, dire
    - Keep it brief - one or two sentences
    - Don't turn this into a comprehensive analysis
 
+**Tool Call Confirmation:**
+- ONLY confirm an action (like "I logged your insulin") if you see a SUCCESS result in the tool data
+- If log_insulin tool result shows {"success": true}, THEN you can say "I've logged your insulin"
+- If you DON'T see a tool result for logging, DO NOT claim you logged anything
+- Check the tool results carefully before confirming any action was taken
+
 **What this looks like:**
-- Question: "How did dinner go?" → Answer: Talk about dinner specifically, then glucose response, then maybe mention if you see a pattern
+- Question: "How did dinner go?" → Answer: Talk about dinner specifically, then glucose response
+- Question: "How about breakfast today?" → Answer: Talk about breakfast today (don't talk about dinner from a previous turn!)
 - Question: "What research papers?" → Answer: List the papers found, briefly summarize each
-- Question: "How am I doing today?" → Answer: Evaluate today specifically, don't analyze the last 2 weeks unless relevant
+- Question: "How am I doing today?" → Answer: Evaluate today specifically
 
 **Do NOT:**
 - Give comprehensive multi-week analysis when asked about one meal
 - List all available data when asked a specific question
 - Turn every question into a full report
 - Reference tools, data gathering, or analysis phases
+- Confuse the current question with previous questions from earlier turns
+- Claim you performed an action unless the tool result confirms success
 
 **Rules:**
 - Use exact values from tool results (never estimate)
 - If you don't have data to answer their question, say so directly
 - Write in natural, conversational prose
 - Keep your response focused and relevant
+- Answer the CURRENT question, not previous questions
 
-Begin your response by directly answering their question.`));
+Begin your response by directly answering their CURRENT question above.`));
 
     // Create a synthesis-specific system prompt (without tool descriptions)
     const synthesisSystemPrompt = new SystemMessage(`You are Sage, an AI assistant specialized in Type 1 Diabetes (T1D) and LADA management.
