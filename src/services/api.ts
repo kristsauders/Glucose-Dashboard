@@ -417,6 +417,24 @@ class APIService {
       method: 'DELETE',
     });
   }
+
+  // Report generation
+  async getReports(): Promise<any[]> {
+    return this.request('/reports');
+  }
+
+  async downloadReport(reportId: string): Promise<Blob> {
+    const response = await this.request(`/reports/${reportId}/download`, {
+      method: 'GET',
+    }, false); // Don't parse as JSON
+    return response.blob();
+  }
+
+  async deleteReport(reportId: string): Promise<void> {
+    await this.request(`/reports/${reportId}`, {
+      method: 'DELETE',
+    });
+  }
 }
 
 export const apiService = new APIService();

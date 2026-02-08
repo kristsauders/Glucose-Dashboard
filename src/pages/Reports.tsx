@@ -5,7 +5,7 @@ import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { GenerateReportModal } from '@/components/GenerateReportModal';
-import { useAuth } from '@/hooks/useAuth';
+import { apiService } from '@/services/api';
 
 interface Report {
   id: string;
@@ -22,20 +22,10 @@ export function Reports() {
   const [reports, setReports] = useState<Report[]>([]);
   const [loading, setLoading] = useState(true);
   const [showGenerateModal, setShowGenerateModal] = useState(false);
-  const { getAuthHeaders } = useAuth();
 
   const fetchReports = async () => {
     try {
-      const headers = await getAuthHeaders();
-      const response = await fetch('http://localhost:3002/api/reports', {
-        headers,
-      });
-
-      if (!response.ok) {
-        throw new Error('Failed to fetch reports');
-      }
-
-      const data = await response.json();
+      const data = await apiService.getReports();
       setReports(data.reports);
     } catch (error) {
       console.error('Failed to fetch reports:', error);
@@ -50,16 +40,7 @@ export function Reports() {
 
   const handleDownload = async (reportId: string, title: string) => {
     try {
-      const headers = await getAuthHeaders();
-      const response = await fetch(`http://localhost:3002/api/reports/${reportId}/download`, {
-        headers,
-      });
-
-      if (!response.ok) {
-        throw new Error('Failed to download report');
-      }
-
-      const blob = await response.blob();
+      const blob = await apiService.downloadReport(reportId);
       const url = window.URL.createObjectURL(blob);
       const a = document.createElement('a');
       a.href = url;
@@ -80,16 +61,7 @@ export function Reports() {
     }
 
     try {
-      const headers = await getAuthHeaders();
-      const response = await fetch(`http://localhost:3002/api/reports/${reportId}`, {
-        method: 'DELETE',
-        headers,
-      });
-
-      if (!response.ok) {
-        throw new Error('Failed to delete report');
-      }
-
+      await apiService.deleteReport(reportId);
       // Refresh reports list
       fetchReports();
     } catch (error) {

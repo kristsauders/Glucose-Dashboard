@@ -18,7 +18,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select';
-import { useAuth } from '@/hooks/useAuth';
+import { apiService } from '@/services/api';
 
 interface GenerateReportModalProps {
   open: boolean;
@@ -35,7 +35,6 @@ export function GenerateReportModal({ open, onClose, onReportGenerated }: Genera
   const [comparisonRangeEnd, setComparisonRangeEnd] = useState('');
   const [notes, setNotes] = useState('');
   const [generating, setGenerating] = useState(false);
-  const { getAuthHeaders } = useAuth();
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -53,28 +52,15 @@ export function GenerateReportModal({ open, onClose, onReportGenerated }: Genera
     setGenerating(true);
 
     try {
-      const headers = await getAuthHeaders();
-      const response = await fetch('http://localhost:3002/api/reports', {
-        method: 'POST',
-        headers: {
-          ...headers,
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          title,
-          reportType,
-          dateRangeStart,
-          dateRangeEnd,
-          comparisonRangeStart: reportType === 'comparison' ? comparisonRangeStart : undefined,
-          comparisonRangeEnd: reportType === 'comparison' ? comparisonRangeEnd : undefined,
-          notes,
-        }),
+      await apiService.generateReport({
+        title,
+        reportType,
+        dateRangeStart,
+        dateRangeEnd,
+        comparisonRangeStart: reportType === 'comparison' ? comparisonRangeStart : undefined,
+        comparisonRangeEnd: reportType === 'comparison' ? comparisonRangeEnd : undefined,
+        notes,
       });
-
-      if (!response.ok) {
-        const data = await response.json();
-        throw new Error(data.error || 'Failed to generate report');
-      }
 
       // Reset form
       setTitle('');
