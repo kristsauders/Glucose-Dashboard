@@ -1355,8 +1355,8 @@ const analyzeIndividualMealTool = new DynamicStructuredTool({
         `SELECT insulin_type, units, timestamp, purpose, notes
          FROM insulin_doses
          WHERE user_id = $1
-           AND timestamp >= $2 - INTERVAL '30 minutes'
-           AND timestamp <= $2 + INTERVAL '30 minutes'
+           AND timestamp >= $2::timestamptz - INTERVAL '30 minutes'
+           AND timestamp <= $2::timestamptz + INTERVAL '30 minutes'
          ORDER BY timestamp ASC`,
         [userId, targetMeal.timestamp]
       );
