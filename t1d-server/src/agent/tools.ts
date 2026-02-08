@@ -2196,8 +2196,8 @@ const runPatternDetectionTool = new DynamicStructuredTool({
       if (analysisType === 'basal' || analysisType === 'all') {
         // Get yesterday's date in user's timezone from database
         const yesterdayResult = await query(
-          `SELECT DATE(timezone($2, NOW() - INTERVAL '1 day')) as date`,
-          [userId, userTimezone]
+          `SELECT DATE(timezone($1, NOW() - INTERVAL '1 day')) as date`,
+          [userTimezone]
         );
         const dateStr = yesterdayResult.rows[0].date instanceof Date
           ? yesterdayResult.rows[0].date.toISOString().split('T')[0]

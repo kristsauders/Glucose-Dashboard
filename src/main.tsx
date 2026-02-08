@@ -17,6 +17,10 @@ import './index.css'
 import App from './App.tsx'
 import { ThemeProvider } from './components/ThemeProvider'
 import { ErrorBoundary } from './components/ErrorBoundary'
+import { initGlobalErrorHandlers } from './utils/error-handler'
+
+// Initialize global error handlers to catch and suppress profiler errors
+initGlobalErrorHandlers();
 
 createRoot(document.getElementById('root')!).render(
   <ErrorBoundary>

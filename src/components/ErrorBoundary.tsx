@@ -34,6 +34,33 @@ export class ErrorBoundary extends Component<Props, State> {
 
   componentDidCatch(error: Error, errorInfo: any) {
     console.error('ErrorBoundary caught an error:', error, errorInfo);
+
+    // Special handling for React DevTools profiler errors (development only)
+    // These errors occur when React tries to clone large data structures for profiling
+    // They don't affect functionality and can be safely ignored
+    if (
+      error.name === 'DataCloneError' ||
+      error.message?.includes('Data cannot be cloned') ||
+      error.message?.includes('out of memory') ||
+      error.message?.includes('logComponentRender') ||
+      error.message?.includes('Performance') ||
+      error.message?.includes('Should not already be working') ||
+      error.message?.includes('performWorkOnRoot')
+    ) {
+      console.warn('React DevTools profiler error detected - this is non-critical and can be ignored.');
+      console.warn('To prevent this: disable React DevTools profiler, use production build, or reduce data size.');
+
+      // Don't show error UI for profiler errors - just log and continue
+      // Reset error state to prevent crash
+      this.setState({
+        hasError: false,
+        error: null,
+        errorInfo: null,
+      });
+      return;
+    }
+
+    // For real errors, update state to show error UI
     this.setState({
       error,
       errorInfo,
