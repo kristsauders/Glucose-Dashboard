@@ -2687,6 +2687,7 @@ export const getMealHistoryTool = new DynamicStructuredTool({
       WHERE user_id = $1
         AND timestamp >= DATE_TRUNC('day', NOW() AT TIME ZONE '${timezone}') - INTERVAL '${days} days'
         AND timestamp < DATE_TRUNC('day', NOW() AT TIME ZONE '${timezone}') + INTERVAL '1 day'
+        AND timestamp <= NOW()
     `;
     const params = [userId];
 
@@ -2885,6 +2886,7 @@ export const getExerciseHistoryTool = new DynamicStructuredTool({
        WHERE user_id = $1
          AND timestamp >= DATE_TRUNC('day', NOW() AT TIME ZONE '${timezone}') - INTERVAL '${days} days'
          AND timestamp < DATE_TRUNC('day', NOW() AT TIME ZONE '${timezone}') + INTERVAL '1 day'
+         AND timestamp <= NOW()
        ORDER BY timestamp DESC
        LIMIT $2`,
       [userId, limit]
@@ -2986,6 +2988,7 @@ export const getInsulinHistoryTool = new DynamicStructuredTool({
       WHERE user_id = $1
         AND timestamp >= DATE_TRUNC('day', NOW() AT TIME ZONE '${timezone}') - INTERVAL '${days} days'
         AND timestamp < DATE_TRUNC('day', NOW() AT TIME ZONE '${timezone}') + INTERVAL '1 day'
+        AND timestamp <= NOW()
     `;
     const params = [userId];
 

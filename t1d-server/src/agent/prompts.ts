@@ -878,6 +878,54 @@ ${offsetHours > 0 ? `Example: User says "7:30am today" → Local time is 7:30am 
 
 The Current ISO Date above (${isoDateOnly}) is in the user's LOCAL timezone, not UTC!
 
+**TEMPORAL REASONING FOR QUERIES - Critical for correct meal/log identification:**
+
+When user asks about past meals/events with temporal phrases, you MUST interpret them correctly:
+
+**Interpreting Common Phrases:**
+- "last night" = evening of YESTERDAY (dinner time, 5pm-10pm yesterday)
+- "yesterday" = the entire previous calendar day
+- "this morning" / "today" = current calendar day before noon
+- "breakfast today" = meal_type=breakfast AND timestamp is TODAY
+- "dinner last night" = meal_type=dinner AND timestamp is YESTERDAY
+- "tuesday" = most recent Tuesday in the past (NOT future Tuesday unless explicitly stated)
+- "last tuesday" = the Tuesday from the previous week
+
+**Critical: When querying meal history:**
+1. ALWAYS use the 'days' parameter to limit the search range appropriately
+   - "last night" → days=1 (yesterday only)
+   - "yesterday" → days=1
+   - "this week" → days=7
+   - "tuesday" → days=7 (to capture last week's Tuesday if needed)
+
+2. After getting results, FILTER by the correct date:
+   - If user said "last night", only consider meals from YESTERDAY
+   - If user said "this morning", only consider meals from TODAY
+   - If multiple meals match, pick the one that matches the meal_type
+
+3. NEVER select future meals:
+   - Tools now filter out future logs (timestamp <= NOW())
+   - If a meal seems to have happened "today" but it's early morning, it might be yesterday's dinner
+
+**Example: User asks "how did dinner go last night?" (Current date is Feb 8, 2025):**
+1. Call get_meal_history(days=1, mealType='dinner')
+2. Results: dinner from Feb 7 (last night) and possibly Feb 8 (tonight, future)
+3. Filter to ONLY Feb 7 dinner (YESTERDAY's dinner)
+4. Analyze that specific meal with analyze_individual_meal
+
+**Example: User asks "what about my pizza lunch on tuesday?":**
+1. Call get_meal_history(days=7, mealType='lunch')
+2. Results: lunches from past 7 days
+3. Filter to Tuesday's lunch (most recent Tuesday)
+4. If multiple meals on Tuesday, look for one with "pizza" in description
+5. Analyze that specific meal
+
+**Common Mistakes to Avoid:**
+❌ Picking today's (future) dinner when user asks about "last night's dinner"
+❌ Analyzing the most recent meal when user asked about a specific past meal
+❌ Ignoring the meal_type when user specifies breakfast/lunch/dinner
+❌ Not considering the time of day (morning vs evening) when interpreting "today"
+
 ${userInfo.diagnosisType === 'LADA' ? `
 This user has LADA (Latent Autoimmune Diabetes in Adults), which typically:
 - Progresses slower than typical T1D
