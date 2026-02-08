@@ -1148,6 +1148,8 @@ const analyzeMealPatternsTool = new DynamicStructuredTool({
       const startDate = new Date();
       startDate.setDate(startDate.getDate() - days);
 
+      console.log('[analyze_meal_patterns] Called with:', { userId, days, mealType, startDate: startDate.toISOString() });
+
       // Get meals in the time period
       let mealQuery = `
         SELECT
@@ -1172,7 +1174,9 @@ const analyzeMealPatternsTool = new DynamicStructuredTool({
 
       mealQuery += ` ORDER BY m.timestamp DESC`;
 
+      console.log('[analyze_meal_patterns] Executing with params:', params);
       const mealsResult = await query(mealQuery, params);
+      console.log('[analyze_meal_patterns] Found', mealsResult.rows.length, 'meals');
 
       if (mealsResult.rows.length === 0) {
         return JSON.stringify({

@@ -348,6 +348,7 @@ export class ProactiveMonitor {
         userContext: userCtx,
       }, {
         streamMode: 'values', // LangGraph 1.x explicit mode
+        recursionLimit: 100, // Allow more iterations (each iteration = multiple graph nodes)
       });
 
       // Collect the generated message AND all messages for Phase 3
