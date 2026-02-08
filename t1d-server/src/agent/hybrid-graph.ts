@@ -244,6 +244,12 @@ The synthesis model will create the user-facing message - your job is to gather 
 
     // Safety: Limit to 16 iterations maximum (allows for more complex queries)
     const currentIteration = state.iterationCount || 0;
+
+    // Log iteration progress
+    if (currentIteration > 0) {
+      console.log(`[analysisNode] Iteration ${currentIteration + 1}/16`);
+    }
+
     if (currentIteration >= 16) {
       console.log('[analysisNode] Maximum iterations reached (16), forcing synthesis');
 
@@ -276,6 +282,14 @@ The synthesis model will create the user-facing message - your job is to gather 
     };
 
     const response = await smallModelWithTools.invoke(messagesToSend);
+
+    // Log what tools were called in this iteration
+    if (response.tool_calls && response.tool_calls.length > 0) {
+      const toolNames = response.tool_calls.map(tc => tc.name).join(', ');
+      console.log(`[analysisNode] Iteration ${currentIteration + 1} called ${response.tool_calls.length} tools: ${toolNames}`);
+    } else {
+      console.log(`[analysisNode] Iteration ${currentIteration + 1} - no tools called, ready for synthesis`);
+    }
 
     // IMPORTANT: Only return NEW messages (not the full array)
     // The state reducer uses concat, so returning the full array causes exponential duplication!

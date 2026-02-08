@@ -133,6 +133,7 @@ router.post('/stream', async (req, res, next) => {
         },
       }, {
         streamMode: ['values', 'messages'],
+        recursionLimit: 60, // Increased from default 25 to handle complex multi-tool queries
       });
 
       let chunkCount = 0;

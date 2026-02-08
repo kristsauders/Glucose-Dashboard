@@ -619,22 +619,17 @@ export class ChartGenerator {
    */
   async generateSpikeAnalysisChart(
     readings: GlucoseReading[],
-    title: string = 'Glucose Spikes Analysis'
+    title: string = 'Glucose Spikes Analysis (>180 mg/dL)'
   ): Promise<Buffer> {
-    // Detect spikes (increase of >50 mg/dL within 30 minutes)
+    // Detect spikes (any reading above 180 mg/dL)
     const spikesByDay = new Map<string, number>();
 
-    for (let i = 1; i < readings.length; i++) {
-      const current = readings[i];
-      const previous = readings[i - 1];
-      const timeDiff = (current.timestamp.getTime() - previous.timestamp.getTime()) / 1000 / 60; // minutes
-      const valueDiff = current.value - previous.value;
-
-      if (timeDiff <= 30 && valueDiff >= 50) {
-        const day = current.timestamp.toISOString().split('T')[0];
+    readings.forEach(r => {
+      if (r.value > 180) {
+        const day = r.timestamp.toISOString().split('T')[0];
         spikesByDay.set(day, (spikesByDay.get(day) || 0) + 1);
       }
-    }
+    });
 
     // Get all days in range
     const days: string[] = [];
@@ -658,7 +653,7 @@ export class ChartGenerator {
         labels: days,
         datasets: [
           {
-            label: 'Number of Spikes (>50 mg/dL in 30 min)',
+            label: 'Number of Spikes (>180 mg/dL)',
             data: spikeCounts,
             backgroundColor: 'rgba(239, 68, 68, 0.6)',
             borderColor: 'rgb(239, 68, 68)',
@@ -755,6 +750,128 @@ export class ChartGenerator {
             pointRadius: 4,
             fill: true,
             tension: 0.4,
+          },
+        ],
+      },
+      options: {
+        responsive: true,
+        plugins: {
+          title: {
+            display: true,
+            text: title,
+            font: { size: 16, weight: 'bold' },
+          },
+          legend: {
+            display: true,
+            position: 'top',
+          },
+        },
+        scales: {
+          y: {
+            title: {
+              display: true,
+              text: 'Glucose (mg/dL)',
+            },
+            suggestedMin: 50,
+            suggestedMax: 200,
+            grid: {
+              color: (context) => {
+                const value = context.tick.value;
+                if (value === 70 || value === 140) {
+                  return 'rgba(255, 0, 0, 0.3)';
+                }
+                return 'rgba(0, 0, 0, 0.1)';
+              },
+            },
+          },
+          x: {
+            title: {
+              display: true,
+              text: 'Date',
+            },
+            ticks: {
+              maxRotation: 45,
+              minRotation: 45,
+            },
+          },
+        },
+      },
+    };
+
+    return await this.canvas.renderToBuffer(config);
+  }
+
+  /**
+   * Generate an overnight glucose chart (10 PM - 7 AM)
+   */
+  async generateOvernightGlucoseChart(
+    readings: GlucoseReading[],
+    title: string = 'Overnight Glucose Trends (10 PM - 7 AM)'
+  ): Promise<Buffer> {
+    // Filter readings between 10 PM and 7 AM
+    const overnightReadings = readings.filter(r => {
+      const hour = r.timestamp.getHours();
+      return hour >= 22 || hour < 7;
+    });
+
+    // Group by date
+    const overnightByDay = new Map<string, number[]>();
+
+    overnightReadings.forEach(r => {
+      const day = r.timestamp.toISOString().split('T')[0];
+      if (!overnightByDay.has(day)) {
+        overnightByDay.set(day, []);
+      }
+      overnightByDay.get(day)!.push(r.value);
+    });
+
+    const days: string[] = [];
+    const avgValues: number[] = [];
+    const minValues: number[] = [];
+    const maxValues: number[] = [];
+
+    Array.from(overnightByDay.entries())
+      .sort(([a], [b]) => a.localeCompare(b))
+      .forEach(([day, values]) => {
+        days.push(new Date(day).toLocaleDateString());
+        avgValues.push(values.reduce((sum, v) => sum + v, 0) / values.length);
+        minValues.push(Math.min(...values));
+        maxValues.push(Math.max(...values));
+      });
+
+    const config: ChartConfiguration = {
+      type: 'line',
+      data: {
+        labels: days,
+        datasets: [
+          {
+            label: 'Average',
+            data: avgValues,
+            borderColor: 'rgb(99, 102, 241)',
+            backgroundColor: 'rgba(99, 102, 241, 0.1)',
+            borderWidth: 3,
+            pointRadius: 4,
+            fill: false,
+          },
+          {
+            label: 'Maximum',
+            data: maxValues,
+            borderColor: 'rgb(239, 68, 68)',
+            backgroundColor: 'rgba(239, 68, 68, 0.1)',
+            borderWidth: 2,
+            pointRadius: 3,
+            borderDash: [5, 5],
+            fill: false,
+          },
+          {
+            label: 'Minimum',
+            data: minValues,
+            borderColor: 'rgb(34, 197, 94)',
+            backgroundColor: 'rgba(34, 197, 94, 0.1)',
+            borderWidth: 2,
+            pointRadius: 3,
+            borderDash: [5, 5],
+            fill: false,
           },
         ],
       },

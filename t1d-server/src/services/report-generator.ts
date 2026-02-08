@@ -198,6 +198,7 @@ export class ReportGenerator {
       spikeAnalysis?: string;
       bedtimeGlucose?: string;
       dailyTrends?: string;
+      overnightGlucose?: string;
     },
     comparisonStats?: GlucoseStats
   ): Promise<string> {
@@ -218,19 +219,19 @@ export class ReportGenerator {
     }
     body {
       font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
-      line-height: 1.6;
+      line-height: 1.5;
       color: #1f2937;
       background: white;
-      padding: 40px;
+      padding: 30px;
     }
     .header {
       text-align: center;
-      margin-bottom: 40px;
+      margin-bottom: 25px;
       padding-bottom: 20px;
       border-bottom: 3px solid #3b82f6;
     }
     h1 {
-      font-size: 32px;
+      font-size: 28px;
       color: #1f2937;
       margin-bottom: 10px;
     }
@@ -248,11 +249,11 @@ export class ReportGenerator {
       margin-top: 15px;
     }
     .section {
-      margin-bottom: 40px;
+      margin-bottom: 30px;
       page-break-inside: avoid;
     }
     h2 {
-      font-size: 24px;
+      font-size: 20px;
       color: #1f2937;
       margin-bottom: 20px;
       padding-bottom: 10px;
@@ -261,12 +262,12 @@ export class ReportGenerator {
     .stats-grid {
       display: grid;
       grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
-      gap: 20px;
+      gap: 12px;
       margin-bottom: 30px;
     }
     .stat-card {
       background: #f9fafb;
-      padding: 20px;
+      padding: 12px;
       border-radius: 8px;
       border: 1px solid #e5e7eb;
     }
@@ -276,7 +277,7 @@ export class ReportGenerator {
       margin-bottom: 5px;
     }
     .stat-value {
-      font-size: 28px;
+      font-size: 22px;
       font-weight: bold;
       color: #1f2937;
     }
@@ -286,13 +287,13 @@ export class ReportGenerator {
       margin-left: 5px;
     }
     .tir-bars {
-      margin: 20px 0;
+      margin: 15px 0;
     }
     .tir-bar {
       display: flex;
       align-items: center;
-      margin-bottom: 10px;
-      font-size: 14px;
+      margin-bottom: 8px;
+      font-size: 13px;
     }
     .tir-label {
       width: 150px;
@@ -300,11 +301,11 @@ export class ReportGenerator {
     }
     .tir-progress {
       flex: 1;
-      height: 24px;
+      height: 20px;
       background: #e5e7eb;
       border-radius: 4px;
       overflow: hidden;
-      margin: 0 10px;
+      margin: 0 8px;
     }
     .tir-fill {
       height: 100%;
@@ -351,6 +352,13 @@ export class ReportGenerator {
     .notes p {
       color: #78350f;
       font-size: 14px;
+    }
+    .chart-description {
+      font-size: 11px;
+      color: #6b7280;
+      margin-top: 8px;
+      font-style: italic;
+      text-align: center;
     }
     .footer {
       margin-top: 60px;
@@ -473,11 +481,11 @@ export class ReportGenerator {
   </div>
 
   ${config.reportType === 'comparison' && comparisonStats ? `
-  <div class="section">
+  <div class="section page-break">
     <h2>Period Comparison</h2>
     <div class="comparison-section">
       <div class="comparison-column">
-        <h3>Current Period</h3>
+        <h3>Current Period (${formatDate(config.dateRangeStart)} - ${formatDate(config.dateRangeEnd)})</h3>
         <div class="stats-grid">
           <div class="stat-card">
             <div class="stat-label">Average</div>
@@ -491,10 +499,32 @@ export class ReportGenerator {
             <div class="stat-label">GMI</div>
             <div class="stat-value">${stats.gmi}<span class="stat-unit">%</span></div>
           </div>
+          <div class="stat-card">
+            <div class="stat-label">Max / Min</div>
+            <div class="stat-value">${stats.max} / ${stats.min}<span class="stat-unit">mg/dL</span></div>
+          </div>
+          <div class="stat-card">
+            <div class="stat-label">Std Dev</div>
+            <div class="stat-value">${stats.stdDev}<span class="stat-unit">mg/dL</span></div>
+          </div>
+          <div class="stat-card">
+            <div class="stat-label">CV</div>
+            <div class="stat-value">${stats.cv}<span class="stat-unit">%</span></div>
+          </div>
+          ${stats.overnightAvg ? `
+          <div class="stat-card">
+            <div class="stat-label">Overnight Avg</div>
+            <div class="stat-value">${stats.overnightAvg}<span class="stat-unit">mg/dL</span></div>
+          </div>
+          ` : ''}
+          <div class="stat-card">
+            <div class="stat-label">Total Readings</div>
+            <div class="stat-value">${stats.totalReadings}</div>
+          </div>
         </div>
       </div>
       <div class="comparison-column">
-        <h3>Comparison Period</h3>
+        <h3>Comparison Period (${formatDate(config.comparisonRangeStart!)} - ${formatDate(config.comparisonRangeEnd!)})</h3>
         <div class="stats-grid">
           <div class="stat-card">
             <div class="stat-label">Average</div>
@@ -508,6 +538,28 @@ export class ReportGenerator {
             <div class="stat-label">GMI</div>
             <div class="stat-value">${comparisonStats.gmi}<span class="stat-unit">%</span></div>
           </div>
+          <div class="stat-card">
+            <div class="stat-label">Max / Min</div>
+            <div class="stat-value">${comparisonStats.max} / ${comparisonStats.min}<span class="stat-unit">mg/dL</span></div>
+          </div>
+          <div class="stat-card">
+            <div class="stat-label">Std Dev</div>
+            <div class="stat-value">${comparisonStats.stdDev}<span class="stat-unit">mg/dL</span></div>
+          </div>
+          <div class="stat-card">
+            <div class="stat-label">CV</div>
+            <div class="stat-value">${comparisonStats.cv}<span class="stat-unit">%</span></div>
+          </div>
+          ${comparisonStats.overnightAvg ? `
+          <div class="stat-card">
+            <div class="stat-label">Overnight Avg</div>
+            <div class="stat-value">${comparisonStats.overnightAvg}<span class="stat-unit">mg/dL</span></div>
+          </div>
+          ` : ''}
+          <div class="stat-card">
+            <div class="stat-label">Total Readings</div>
+            <div class="stat-value">${comparisonStats.totalReadings}</div>
+          </div>
         </div>
       </div>
     </div>
@@ -520,54 +572,63 @@ export class ReportGenerator {
     ${chartImages.agp ? `
     <div class="chart-container">
       <img src="data:image/png;base64,${chartImages.agp}" alt="Ambulatory Glucose Profile" />
+      <div class="chart-description">Shows glucose patterns overlaid by time of day across all days. Bands represent 10th, 25th, 50th (median), 75th, and 90th percentiles.</div>
     </div>
     ` : ''}
 
     ${chartImages.trend ? `
     <div class="chart-container">
       <img src="data:image/png;base64,${chartImages.trend}" alt="Glucose Trend" />
-    </div>
-    ` : ''}
-
-    ${chartImages.dailyPattern ? `
-    <div class="chart-container">
-      <img src="data:image/png;base64,${chartImages.dailyPattern}" alt="Daily Pattern" />
-    </div>
-    ` : ''}
-
-    ${chartImages.timeInRange ? `
-    <div class="chart-container">
-      <img src="data:image/png;base64,${chartImages.timeInRange}" alt="Time in Range" />
-    </div>
-    ` : ''}
-
-    ${chartImages.distribution ? `
-    <div class="chart-container">
-      <img src="data:image/png;base64,${chartImages.distribution}" alt="Glucose Distribution" />
+      <div class="chart-description">Continuous glucose readings over time with target range shaded (70-140 mg/dL).</div>
     </div>
     ` : ''}
 
     ${chartImages.dailyTrends ? `
     <div class="chart-container">
       <img src="data:image/png;base64,${chartImages.dailyTrends}" alt="Daily Trends (Avg/Min/Max)" />
+      <div class="chart-description">Shows average, minimum, and maximum glucose values for each day. Helps identify day-to-day patterns and variability.</div>
+    </div>
+    ` : ''}
+
+    ${chartImages.timeInRange ? `
+    <div class="chart-container">
+      <img src="data:image/png;base64,${chartImages.timeInRange}" alt="Time in Range" />
+      <div class="chart-description">Percentage of readings in each glucose range. Target is >70% in range (70-140 mg/dL).</div>
+    </div>
+    ` : ''}
+
+    ${chartImages.distribution ? `
+    <div class="chart-container">
+      <img src="data:image/png;base64,${chartImages.distribution}" alt="Glucose Distribution" />
+      <div class="chart-description">Histogram showing frequency of glucose values. Calculated by grouping all readings into 20 mg/dL bins.</div>
     </div>
     ` : ''}
 
     ${chartImages.weeklyOverview ? `
     <div class="chart-container">
       <img src="data:image/png;base64,${chartImages.weeklyOverview}" alt="Weekly Overview (Avg/Min/Max)" />
+      <div class="chart-description">Average, minimum, and maximum glucose values grouped by week.</div>
     </div>
     ` : ''}
 
     ${chartImages.spikeAnalysis ? `
     <div class="chart-container">
       <img src="data:image/png;base64,${chartImages.spikeAnalysis}" alt="Spike Analysis" />
+      <div class="chart-description">Number of glucose spikes per day. A spike is glucose above 180 mg/dL.</div>
+    </div>
+    ` : ''}
+
+    ${chartImages.overnightGlucose ? `
+    <div class="chart-container">
+      <img src="data:image/png;base64,${chartImages.overnightGlucose}" alt="Overnight Glucose (10 PM - 7 AM)" />
+      <div class="chart-description">Shows glucose levels during sleep hours (10 PM - 7 AM), with daily averages and min/max ranges.</div>
     </div>
     ` : ''}
 
     ${chartImages.bedtimeGlucose ? `
     <div class="chart-container">
       <img src="data:image/png;base64,${chartImages.bedtimeGlucose}" alt="Bedtime Glucose (9-11 PM)" />
+      <div class="chart-description">Average glucose at bedtime (9-11 PM) for each day. Helps assess if basal insulin adjustments are needed.</div>
     </div>
     ` : ''}
   </div>
@@ -673,10 +734,6 @@ export class ReportGenerator {
         await this.chartGenerator.generateTimeInRangeChart(readings)
       ).toString('base64');
 
-      chartImages.dailyPattern = (
-        await this.chartGenerator.generateDailyPatternChart(readings)
-      ).toString('base64');
-
       chartImages.distribution = (
         await this.chartGenerator.generateDistributionChart(readings)
       ).toString('base64');
@@ -692,6 +749,10 @@ export class ReportGenerator {
 
       chartImages.bedtimeGlucose = (
         await this.chartGenerator.generateBedtimeGlucoseChart(readings)
+      ).toString('base64');
+
+      chartImages.overnightGlucose = (
+        await this.chartGenerator.generateOvernightGlucoseChart(readings)
       ).toString('base64');
 
       chartImages.dailyTrends = (
