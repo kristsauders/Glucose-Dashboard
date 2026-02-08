@@ -5,7 +5,7 @@
   "main": "dist/index.js",
   "type": "module",
   "scripts": {
-    "dev": "tsx watch src/index.ts",
+    "dev": "NODE_OPTIONS='--no-deprecation' tsx watch src/index.ts",
     "build": "echo 'Build not needed - server runs directly from TypeScript'",
     "start": "node dist/index.js",
     "test": "tsx tests/run-tests.ts",

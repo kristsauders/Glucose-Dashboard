@@ -67,14 +67,20 @@ export function AIChat() {
   // Handle scrolling: scroll to top when PROCESSING starts, don't scroll when it ends
   useEffect(() => {
     if (isLoading && !wasStreamingRef.current) {
-      // Processing just started (thinking/using tools) - scroll to show message at top
+      // Processing just started (thinking/using tools) - scroll to show message near top with padding
       // Use a slight delay to ensure the element has rendered
       setTimeout(() => {
-        streamingMessageRef.current?.scrollIntoView({
-          behavior: 'smooth',
-          block: 'start',    // Align top of element with top of viewport
-          inline: 'nearest'  // Don't scroll horizontally
-        });
+        const element = streamingMessageRef.current;
+        if (element) {
+          const elementTop = element.getBoundingClientRect().top;
+          const offset = window.pageYOffset || document.documentElement.scrollTop;
+          const padding = 80; // Leave 80px of space above the message
+
+          window.scrollTo({
+            top: elementTop + offset - padding,
+            behavior: 'smooth'
+          });
+        }
       }, 50);
     } else if (!isLoading && !wasStreamingRef.current) {
       // Not loading and wasn't loading - normal message added, scroll to bottom

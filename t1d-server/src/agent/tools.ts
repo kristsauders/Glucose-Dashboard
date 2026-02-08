@@ -1382,7 +1382,7 @@ const analyzeIndividualMealTool = new DynamicStructuredTool({
         const hoursSinceMeal = (now.getTime() - mealTime.getTime()) / (1000 * 60 * 60);
 
         const glucoseResult = await query(
-          `SELECT glucose_value, timestamp
+          `SELECT glucose, timestamp
            FROM glucose_readings
            WHERE user_id = $1
              AND timestamp >= $2
@@ -1398,11 +1398,11 @@ const analyzeIndividualMealTool = new DynamicStructuredTool({
 
         if (readings.length > 0) {
           // First reading after meal is baseline
-          baseline = readings[0].glucose_value;
+          baseline = readings[0].glucose;
           // Find peak
-          peakGlucose = Math.max(...readings.map(r => r.glucose_value));
+          peakGlucose = Math.max(...readings.map(r => r.glucose));
           // Last reading is current
-          currentGlucose = readings[readings.length - 1].glucose_value;
+          currentGlucose = readings[readings.length - 1].glucose;
         }
 
         return JSON.stringify({
