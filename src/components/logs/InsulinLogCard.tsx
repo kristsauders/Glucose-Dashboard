@@ -1,16 +1,27 @@
 import { motion } from 'framer-motion';
 import { Card } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
-import { Syringe, Clock } from 'lucide-react';
+import { Button } from '@/components/ui/button';
+import { Syringe, Clock, Trash2 } from 'lucide-react';
 import type { InsulinLog } from '@/types/logs';
 import { format, isToday, isYesterday } from 'date-fns';
+import { useState } from 'react';
 
 interface InsulinLogCardProps {
   log: InsulinLog;
   index: number;
+  onDelete?: (id: string) => void;
 }
 
-export function InsulinLogCard({ log, index }: InsulinLogCardProps) {
+export function InsulinLogCard({ log, index, onDelete }: InsulinLogCardProps) {
+  const [isDeleting, setIsDeleting] = useState(false);
+
+  const handleDelete = () => {
+    if (confirm('Delete this insulin log? This cannot be undone.')) {
+      setIsDeleting(true);
+      onDelete?.(log.id);
+    }
+  };
   // Format timestamp
   const formatTime = (date: Date) => {
     if (isToday(date)) {
@@ -76,7 +87,20 @@ export function InsulinLogCard({ log, index }: InsulinLogCardProps) {
               <Clock className="h-4 w-4" />
               <span>{formatTime(log.timestamp)}</span>
             </div>
-            {getSourceBadge(log.source)}
+            <div className="flex items-center gap-2">
+              {getSourceBadge(log.source)}
+              {onDelete && (
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  className="h-7 w-7 p-0 text-muted-foreground hover:text-destructive"
+                  onClick={handleDelete}
+                  disabled={isDeleting}
+                >
+                  <Trash2 className="h-4 w-4" />
+                </Button>
+              )}
+            </div>
           </div>
 
           {/* Units (prominent) */}

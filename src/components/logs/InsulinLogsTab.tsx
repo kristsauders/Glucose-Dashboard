@@ -7,9 +7,10 @@ import type { InsulinLog } from '@/types/logs';
 interface InsulinLogsTabProps {
   logs: InsulinLog[];
   loading: boolean;
+  onDelete?: (id: string) => void;
 }
 
-export function InsulinLogsTab({ logs, loading }: InsulinLogsTabProps) {
+export function InsulinLogsTab({ logs, loading, onDelete }: InsulinLogsTabProps) {
   if (loading) {
     return (
       <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
@@ -33,7 +34,7 @@ export function InsulinLogsTab({ logs, loading }: InsulinLogsTabProps) {
   return (
     <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
       {logs.map((log, index) => (
-        <InsulinLogCard key={log.id} log={log} index={index} />
+        <InsulinLogCard key={log.id} log={log} index={index} onDelete={onDelete} />
       ))}
     </div>
   );

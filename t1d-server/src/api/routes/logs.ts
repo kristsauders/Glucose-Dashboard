@@ -136,4 +136,70 @@ router.get('/insulin', async (req, res, next) => {
   }
 });
 
+// DELETE /api/logs/meals/:id - Delete a meal
+router.delete('/meals/:id', async (req, res, next) => {
+  try {
+    const authReq = req as AuthRequest;
+    const { id } = req.params;
+
+    // Verify ownership before deleting
+    const result = await query(
+      'DELETE FROM meals WHERE id = $1 AND user_id = $2 RETURNING id',
+      [id, authReq.user!.id]
+    );
+
+    if (result.rows.length === 0) {
+      return res.status(404).json({ error: 'Meal not found or unauthorized' });
+    }
+
+    res.json({ success: true, id: result.rows[0].id });
+  } catch (error) {
+    next(error);
+  }
+});
+
+// DELETE /api/logs/exercise/:id - Delete an exercise log
+router.delete('/exercise/:id', async (req, res, next) => {
+  try {
+    const authReq = req as AuthRequest;
+    const { id } = req.params;
+
+    // Verify ownership before deleting
+    const result = await query(
+      'DELETE FROM exercise_logs WHERE id = $1 AND user_id = $2 RETURNING id',
+      [id, authReq.user!.id]
+    );
+
+    if (result.rows.length === 0) {
+      return res.status(404).json({ error: 'Exercise log not found or unauthorized' });
+    }
+
+    res.json({ success: true, id: result.rows[0].id });
+  } catch (error) {
+    next(error);
+  }
+});
+
+// DELETE /api/logs/insulin/:id - Delete an insulin dose
+router.delete('/insulin/:id', async (req, res, next) => {
+  try {
+    const authReq = req as AuthRequest;
+    const { id } = req.params;
+
+    // Verify ownership before deleting
+    const result = await query(
+      'DELETE FROM insulin_doses WHERE id = $1 AND user_id = $2 RETURNING id',
+      [id, authReq.user!.id]
+    );
+
+    if (result.rows.length === 0) {
+      return res.status(404).json({ error: 'Insulin dose not found or unauthorized' });
+    }
+
+    res.json({ success: true, id: result.rows[0].id });
+  } catch (error) {
+    next(error);
+  }
+});
+
 export default router;

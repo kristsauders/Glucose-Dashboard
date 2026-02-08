@@ -7,9 +7,10 @@ import type { MealLog } from '@/types/logs';
 interface MealLogsTabProps {
   logs: MealLog[];
   loading: boolean;
+  onDelete?: (id: string) => void;
 }
 
-export function MealLogsTab({ logs, loading }: MealLogsTabProps) {
+export function MealLogsTab({ logs, loading, onDelete }: MealLogsTabProps) {
   if (loading) {
     return (
       <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
@@ -33,7 +34,7 @@ export function MealLogsTab({ logs, loading }: MealLogsTabProps) {
   return (
     <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
       {logs.map((log, index) => (
-        <MealLogCard key={log.id} log={log} index={index} />
+        <MealLogCard key={log.id} log={log} index={index} onDelete={onDelete} />
       ))}
     </div>
   );

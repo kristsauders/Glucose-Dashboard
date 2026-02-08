@@ -7,9 +7,10 @@ import type { ExerciseLog } from '@/types/logs';
 interface ExerciseLogsTabProps {
   logs: ExerciseLog[];
   loading: boolean;
+  onDelete?: (id: string) => void;
 }
 
-export function ExerciseLogsTab({ logs, loading }: ExerciseLogsTabProps) {
+export function ExerciseLogsTab({ logs, loading, onDelete }: ExerciseLogsTabProps) {
   if (loading) {
     return (
       <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
@@ -33,7 +34,7 @@ export function ExerciseLogsTab({ logs, loading }: ExerciseLogsTabProps) {
   return (
     <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
       {logs.map((log, index) => (
-        <ExerciseLogCard key={log.id} log={log} index={index} />
+        <ExerciseLogCard key={log.id} log={log} index={index} onDelete={onDelete} />
       ))}
     </div>
   );

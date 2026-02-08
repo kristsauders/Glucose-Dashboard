@@ -49,6 +49,39 @@ export function LogsModal({ onClose, dateRange, startDate, endDate }: LogsModalP
     }
   };
 
+  const handleDeleteMeal = async (id: string) => {
+    try {
+      await apiService.deleteMealLog(id);
+      // Remove from local state immediately for better UX
+      setMealLogs((prev) => prev.filter((log) => log.id !== id));
+    } catch (error) {
+      console.error('Error deleting meal:', error);
+      alert('Failed to delete meal log. Please try again.');
+    }
+  };
+
+  const handleDeleteExercise = async (id: string) => {
+    try {
+      await apiService.deleteExerciseLog(id);
+      // Remove from local state immediately for better UX
+      setExerciseLogs((prev) => prev.filter((log) => log.id !== id));
+    } catch (error) {
+      console.error('Error deleting exercise:', error);
+      alert('Failed to delete exercise log. Please try again.');
+    }
+  };
+
+  const handleDeleteInsulin = async (id: string) => {
+    try {
+      await apiService.deleteInsulinLog(id);
+      // Remove from local state immediately for better UX
+      setInsulinLogs((prev) => prev.filter((log) => log.id !== id));
+    } catch (error) {
+      console.error('Error deleting insulin:', error);
+      alert('Failed to delete insulin log. Please try again.');
+    }
+  };
+
   return (
     <AnimatePresence>
       <motion.div
@@ -119,15 +152,15 @@ export function LogsModal({ onClose, dateRange, startDate, endDate }: LogsModalP
 
             <div className="flex-1 overflow-y-auto p-4 md:p-6">
               <TabsContent value="meals" className="mt-0">
-                <MealLogsTab logs={mealLogs} loading={loading.meals} />
+                <MealLogsTab logs={mealLogs} loading={loading.meals} onDelete={handleDeleteMeal} />
               </TabsContent>
 
               <TabsContent value="exercise" className="mt-0">
-                <ExerciseLogsTab logs={exerciseLogs} loading={loading.exercise} />
+                <ExerciseLogsTab logs={exerciseLogs} loading={loading.exercise} onDelete={handleDeleteExercise} />
               </TabsContent>
 
               <TabsContent value="insulin" className="mt-0">
-                <InsulinLogsTab logs={insulinLogs} loading={loading.insulin} />
+                <InsulinLogsTab logs={insulinLogs} loading={loading.insulin} onDelete={handleDeleteInsulin} />
               </TabsContent>
             </div>
           </Tabs>

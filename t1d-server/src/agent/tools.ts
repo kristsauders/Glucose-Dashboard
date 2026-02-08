@@ -2628,12 +2628,12 @@ export const logMealTool = new DynamicStructuredTool({
 
       const result = await query(
         `INSERT INTO meals (
-          user_id, timestamp, description, carbs, notes, source
+          user_id, timestamp, description, carbs, meal_type, notes, source
         )
-        VALUES ($1, $2, $3, $4, $5, 'agent')
-        RETURNING id, timestamp, description, carbs`,
+        VALUES ($1, $2, $3, $4, $5, $6, 'agent')
+        RETURNING id, timestamp, description, carbs, meal_type`,
         [
-          userId, mealTimestamp, description, estimatedCarbs, notes,
+          userId, mealTimestamp, description, estimatedCarbs, mealType, notes,
         ]
       );
 

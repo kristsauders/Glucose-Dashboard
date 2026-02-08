@@ -1,16 +1,21 @@
 import { motion } from 'framer-motion';
 import { Card } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
-import { Utensils, Clock } from 'lucide-react';
+import { Button } from '@/components/ui/button';
+import { Utensils, Clock, Trash2 } from 'lucide-react';
 import type { MealLog } from '@/types/logs';
 import { format, isToday, isYesterday } from 'date-fns';
+import { useState } from 'react';
 
 interface MealLogCardProps {
   log: MealLog;
   index: number;
+  onDelete?: (id: string) => void;
 }
 
-export function MealLogCard({ log, index }: MealLogCardProps) {
+export function MealLogCard({ log, index, onDelete }: MealLogCardProps) {
+  const [isDeleting, setIsDeleting] = useState(false);
+
   // Format timestamp
   const formatTime = (date: Date) => {
     if (isToday(date)) {
@@ -19,6 +24,13 @@ export function MealLogCard({ log, index }: MealLogCardProps) {
       return `Yesterday ${format(date, 'h:mm a')}`;
     } else {
       return format(date, 'MMM d, h:mm a');
+    }
+  };
+
+  const handleDelete = () => {
+    if (confirm('Delete this meal log? This cannot be undone.')) {
+      setIsDeleting(true);
+      onDelete?.(log.id);
     }
   };
 
@@ -70,7 +82,20 @@ export function MealLogCard({ log, index }: MealLogCardProps) {
               <Clock className="h-4 w-4" />
               <span>{formatTime(log.timestamp)}</span>
             </div>
-            {getSourceBadge(log.source)}
+            <div className="flex items-center gap-2">
+              {getSourceBadge(log.source)}
+              {onDelete && (
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  className="h-7 w-7 p-0 text-muted-foreground hover:text-destructive"
+                  onClick={handleDelete}
+                  disabled={isDeleting}
+                >
+                  <Trash2 className="h-4 w-4" />
+                </Button>
+              )}
+            </div>
           </div>
 
           {/* Description */}

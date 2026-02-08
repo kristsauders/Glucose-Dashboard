@@ -1,16 +1,27 @@
 import { motion } from 'framer-motion';
 import { Card } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
-import { Activity, Clock, Timer } from 'lucide-react';
+import { Button } from '@/components/ui/button';
+import { Activity, Clock, Timer, Trash2 } from 'lucide-react';
 import type { ExerciseLog } from '@/types/logs';
 import { format, isToday, isYesterday } from 'date-fns';
+import { useState } from 'react';
 
 interface ExerciseLogCardProps {
   log: ExerciseLog;
   index: number;
+  onDelete?: (id: string) => void;
 }
 
-export function ExerciseLogCard({ log, index }: ExerciseLogCardProps) {
+export function ExerciseLogCard({ log, index, onDelete }: ExerciseLogCardProps) {
+  const [isDeleting, setIsDeleting] = useState(false);
+
+  const handleDelete = () => {
+    if (confirm('Delete this exercise log? This cannot be undone.')) {
+      setIsDeleting(true);
+      onDelete?.(log.id);
+    }
+  };
   // Format timestamp
   const formatTime = (date: Date) => {
     if (isToday(date)) {
@@ -97,7 +108,20 @@ export function ExerciseLogCard({ log, index }: ExerciseLogCardProps) {
               <Clock className="h-4 w-4" />
               <span>{formatTime(log.timestamp)}</span>
             </div>
-            {getSourceBadge(log.source)}
+            <div className="flex items-center gap-2">
+              {getSourceBadge(log.source)}
+              {onDelete && (
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  className="h-7 w-7 p-0 text-muted-foreground hover:text-destructive"
+                  onClick={handleDelete}
+                  disabled={isDeleting}
+                >
+                  <Trash2 className="h-4 w-4" />
+                </Button>
+              )}
+            </div>
           </div>
 
           {/* Description */}

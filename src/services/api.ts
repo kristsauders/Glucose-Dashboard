@@ -290,6 +290,25 @@ class APIService {
     }));
   }
 
+  // Delete log methods
+  async deleteMealLog(id: string): Promise<void> {
+    await this.request(`/logs/meals/${id}`, {
+      method: 'DELETE',
+    });
+  }
+
+  async deleteExerciseLog(id: string): Promise<void> {
+    await this.request(`/logs/exercise/${id}`, {
+      method: 'DELETE',
+    });
+  }
+
+  async deleteInsulinLog(id: string): Promise<void> {
+    await this.request(`/logs/insulin/${id}`, {
+      method: 'DELETE',
+    });
+  }
+
   // Chat methods
   async sendChatMessage(message: string): Promise<ChatResponse> {
     return this.request<ChatResponse>('/chat', {
