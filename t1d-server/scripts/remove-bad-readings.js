@@ -20,8 +20,8 @@ dotenv.config({ path: join(__dirname, '../.env') });
 const { Pool } = pg;
 
 // Time range for bad readings (user's local time in America/New_York)
-const START_TIME = '2025-01-16 22:55:00'; // 10:55 PM on Jan 16
-const END_TIME = '2025-01-17 12:41:00';   // 12:41 PM on Jan 17
+const START_TIME = '2026-01-16 22:55:00'; // 10:55 PM on Jan 16
+const END_TIME = '2026-01-17 12:41:00';   // 12:41 PM on Jan 17
 const TIMEZONE = 'America/New_York';
 
 const rl = readline.createInterface({
