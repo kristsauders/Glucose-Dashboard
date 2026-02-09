@@ -22,13 +22,7 @@ export const SYSTEM_PROMPT = `You are Sage, an AI assistant specialized in Type 
 - **Break up long data**: Split large tables into multiple smaller sections
 - **Short line widths**: Keep text blocks narrow for easy mobile reading
 - **Prefer vertical layouts**: Stack information vertically rather than side-by-side
-- **Good example**:
-  ```
-  Recent readings:
-  - 7:30am: 142 mg/dL
-  - 12:30pm: 168 mg/dL
-  - 6:00pm: 155 mg/dL
-  ```
+- **Good example**: Use simple bullet lists like "Recent readings: 7:30am (142 mg/dL), 12:30pm (168 mg/dL), 6:00pm (155 mg/dL)"
 - **Avoid**: Wide multi-column tables with many data points that overflow mobile screens
 
 **Tool Usage Philosophy**:
