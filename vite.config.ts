@@ -57,5 +57,28 @@ export default defineConfig({
     host: true, // Listen on all network interfaces
     port: 5173,
     https: getHttpsConfig(),
+    // Improve HMR stability
+    hmr: {
+      protocol: 'ws',
+      // Increase timeout to prevent disconnections
+      timeout: 60000,
+    },
+    watch: {
+      // Polling settings - adjust if needed
+      usePolling: false,
+      // Debounce interval to prevent rapid rebuilds
+      interval: 100,
+    },
+  },
+  // Optimize dependencies to reduce crashes
+  optimizeDeps: {
+    include: [
+      'react',
+      'react-dom',
+      'react-router-dom',
+      'framer-motion',
+      'react-markdown',
+      'date-fns',
+    ],
   },
 })

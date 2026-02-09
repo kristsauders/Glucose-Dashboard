@@ -64,32 +64,32 @@ export function AIChat() {
     }
   };
 
-  // Handle scrolling: scroll to top when PROCESSING starts, don't scroll when it ends
+  // Handle scrolling: scroll to top when PROCESSING starts
   useEffect(() => {
-    if (isLoading && !wasStreamingRef.current) {
-      // Processing just started (thinking/using tools) - scroll to show message near top with padding
-      // Use a slight delay to ensure the element has rendered
-      setTimeout(() => {
-        const element = streamingMessageRef.current;
-        if (element) {
-          const elementTop = element.getBoundingClientRect().top;
-          const offset = window.pageYOffset || document.documentElement.scrollTop;
-          const padding = 80; // Leave 80px of space above the message
+    if (isLoading) {
+      // Scroll when a new message starts loading (includes follow-ups)
+      // Check if this is actually a NEW load (not just state update during streaming)
+      if (!wasStreamingRef.current || streamingMessage === '') {
+        // Use a slight delay to ensure the element has rendered
+        setTimeout(() => {
+          const element = streamingMessageRef.current;
+          if (element) {
+            const elementTop = element.getBoundingClientRect().top;
+            const offset = window.pageYOffset || document.documentElement.scrollTop;
+            const padding = 80; // Leave 80px of space above the message
 
-          window.scrollTo({
-            top: elementTop + offset - padding,
-            behavior: 'smooth'
-          });
-        }
-      }, 50);
-    } else if (!isLoading && !wasStreamingRef.current) {
-      // Not loading and wasn't loading - normal message added, scroll to bottom
-      messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
+            window.scrollTo({
+              top: elementTop + offset - padding,
+              behavior: 'smooth'
+            });
+          }
+        }, 50);
+      }
+      wasStreamingRef.current = true;
+    } else {
+      wasStreamingRef.current = false;
     }
-    // When processing ends (wasStreaming=true, isLoading=false), don't scroll - user is reading
-
-    wasStreamingRef.current = isLoading;
-  }, [isLoading, messages]);
+  }, [isLoading, streamingMessage]);
 
   // Auto-focus input after messages load
   useEffect(() => {
@@ -103,8 +103,8 @@ export function AIChat() {
   // Handle deep-link from push notification (URL parameter)
   useEffect(() => {
     const conversationId = searchParams.get('conversation');
-    if (conversationId && conversations.length > 0) {
-      // Find and load the conversation
+    if (conversationId && conversations.length > 0 && conversationId !== activeConversationId) {
+      // Find and load the conversation (only if not already active)
       const conversation = conversations.find(c => c.id === conversationId);
       if (conversation) {
         loadConversation(conversationId);
@@ -112,14 +112,16 @@ export function AIChat() {
         setSearchParams({});
       }
     }
-  }, [searchParams, conversations]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [searchParams.get('conversation'), conversations.length, activeConversationId]);
 
   // Listen for messages from service worker
   useEffect(() => {
     const handleMessage = (event: MessageEvent) => {
       if (event.data.type === 'OPEN_CONVERSATION') {
         const conversationId = event.data.conversationId;
-        if (conversationId && conversations.find(c => c.id === conversationId)) {
+        // Only load if conversation exists and isn't already active
+        if (conversationId && conversationId !== activeConversationId && conversations.find(c => c.id === conversationId)) {
           loadConversation(conversationId);
         }
       }
@@ -131,7 +133,9 @@ export function AIChat() {
         navigator.serviceWorker.removeEventListener('message', handleMessage);
       };
     }
-  }, [conversations]);
+    // Only re-run when conversations list length changes, not the full array
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [conversations.length, activeConversationId]);
 
   const loadConversation = async (conversationId: string) => {
     try {
@@ -145,10 +149,19 @@ export function AIChat() {
         setShowSidebar(false);
       }
 
-      // Focus input after sidebar closes (especially helpful on mobile to bring up keyboard)
+      // Focus input and scroll to bottom after sidebar closes
       setTimeout(() => {
         inputRef.current?.focus();
+        // Scroll to bottom to ensure input is visible
+        messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
       }, isMobile ? 250 : 100);
+
+      // Additional scroll after keyboard appears (iOS keyboard animation delay)
+      if (isMobile) {
+        setTimeout(() => {
+          messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
+        }, 600);
+      }
     } catch (err) {
       console.error('Failed to load conversation:', err);
       setError('Failed to load conversation');
@@ -169,10 +182,19 @@ export function AIChat() {
         setShowSidebar(false);
       }
 
-      // Focus input after sidebar closes
+      // Focus input and scroll to bottom after sidebar closes
       setTimeout(() => {
         inputRef.current?.focus();
+        // Scroll to bottom to ensure input is visible (especially on mobile with keyboard)
+        window.scrollTo({ top: document.body.scrollHeight, behavior: 'smooth' });
       }, 250);
+
+      // Additional scroll after keyboard appears (iOS keyboard animation delay)
+      if (isMobile) {
+        setTimeout(() => {
+          window.scrollTo({ top: document.body.scrollHeight, behavior: 'smooth' });
+        }, 600);
+      }
     } catch (err) {
       console.error('Failed to create conversation:', err);
       setError('Failed to create new conversation');

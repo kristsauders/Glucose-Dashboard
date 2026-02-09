@@ -2613,9 +2613,10 @@ export const logMealTool = new DynamicStructuredTool({
             // Create date in user's timezone
             const localTimeStr = `${year}-${String(month).padStart(2, '0')}-${String(day).padStart(2, '0')}T${String(hour).padStart(2, '0')}:${String(minute).padStart(2, '0')}:00`;
 
-            // Convert to UTC using PostgreSQL's timezone function
+            // Convert to UTC using PostgreSQL's AT TIME ZONE
+            // This interprets the timestamp AS being in the user's timezone and returns UTC
             const tzResult = await query(
-              `SELECT timezone('UTC', timezone($1, $2::timestamp)) as utc_time`,
+              `SELECT ($2::timestamp AT TIME ZONE $1) as utc_time`,
               [userTimezone, localTimeStr]
             );
 
