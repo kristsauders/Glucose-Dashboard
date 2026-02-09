@@ -611,11 +611,12 @@ export function AIChat() {
                     }`}
                   >
                     <div
-                      className={`inline-block rounded-lg p-3 max-w-full ${
+                      className={`block rounded-lg p-3 w-full ${
                         message.role === 'user'
                           ? 'bg-primary text-primary-foreground'
                           : 'bg-muted'
                       }`}
+                      style={{ maxWidth: '100%', overflowX: 'auto' }}
                     >
                       {message.role === 'user' ? (
                         <p className="text-[13px] md:text-sm whitespace-pre-wrap break-words">{message.content}</p>
@@ -681,7 +682,7 @@ export function AIChat() {
                   </div>
                 )}
                 {streamingMessage ? (
-                  <div className="bg-muted rounded-lg p-3 max-w-full">
+                  <div className="bg-muted rounded-lg p-3 w-full" style={{ maxWidth: '100%', overflowX: 'auto' }}>
                     <div className="text-[13px] md:text-sm prose prose-sm dark:prose-invert max-w-none overflow-x-auto">
                       <ReactMarkdown remarkPlugins={[remarkGfm]}>
                         {streamingMessage}
