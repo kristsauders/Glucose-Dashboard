@@ -513,13 +513,39 @@ export class ChartGenerator {
     readings: GlucoseReading[],
     title: string = 'Weekly Overview (Avg/Min/Max)'
   ): Promise<Buffer> {
-    // Group readings by week
+    if (readings.length === 0) {
+      // Return empty chart if no readings
+      const config: ChartConfiguration = {
+        type: 'line',
+        data: { labels: [], datasets: [] },
+      };
+      return await this.renderChart(config);
+    }
+
+    // Find the latest reading date (end of the period)
+    const latestDate = new Date(Math.max(...readings.map(r => r.timestamp.getTime())));
+    latestDate.setHours(23, 59, 59, 999); // End of day
+
+    // Calculate week boundaries working backwards from the end date
+    // Each week is 7 complete days ending on the latest date's day of week
     const weeklyData = new Map<string, GlucoseReading[]>();
 
+    // Group readings into 7-day periods working backwards from end date
     readings.forEach(r => {
-      const weekStart = new Date(r.timestamp);
-      weekStart.setDate(weekStart.getDate() - weekStart.getDay()); // Start of week (Sunday)
+      // Calculate which week this reading belongs to
+      const daysDiff = Math.floor((latestDate.getTime() - r.timestamp.getTime()) / (1000 * 60 * 60 * 24));
+      const weekNumber = Math.floor(daysDiff / 7);
+
+      // Calculate the end date of this week (same day of week as latestDate)
+      const weekEnd = new Date(latestDate);
+      weekEnd.setDate(weekEnd.getDate() - (weekNumber * 7));
+
+      // Calculate the start date of this week (7 days before week end)
+      const weekStart = new Date(weekEnd);
+      weekStart.setDate(weekStart.getDate() - 6);
       weekStart.setHours(0, 0, 0, 0);
+
+      // Use week start as the key
       const weekKey = weekStart.toISOString().split('T')[0];
 
       if (!weeklyData.has(weekKey)) {
@@ -533,11 +559,18 @@ export class ChartGenerator {
     const minValues: number[] = [];
     const maxValues: number[] = [];
 
+    // Sort weeks chronologically and calculate metrics
     Array.from(weeklyData.entries())
       .sort(([a], [b]) => a.localeCompare(b))
-      .forEach(([week, weekReadings]) => {
+      .forEach(([weekStartKey, weekReadings]) => {
         const values = weekReadings.map(r => r.value);
-        weeks.push(new Date(week).toLocaleDateString());
+
+        // Format week label as "MMM DD" for the week start
+        const weekStartDate = new Date(weekStartKey);
+        const weekEndDate = new Date(weekStartDate);
+        weekEndDate.setDate(weekEndDate.getDate() + 6);
+
+        weeks.push(weekStartDate.toLocaleDateString('en-US', { month: 'short', day: 'numeric' }));
         avgValues.push(values.reduce((sum, v) => sum + v, 0) / values.length);
         minValues.push(Math.min(...values));
         maxValues.push(Math.max(...values));
