@@ -107,26 +107,82 @@ export function AIChat() {
   // Handle deep-link from push notification (URL parameter)
   useEffect(() => {
     const conversationId = searchParams.get('conversation');
-    if (conversationId && conversations.length > 0 && conversationId !== activeConversationId) {
-      // Find and load the conversation (only if not already active)
-      const conversation = conversations.find(c => c.id === conversationId);
-      if (conversation) {
-        loadConversation(conversationId);
-        // Clear URL parameter after loading
+
+    // Skip if no conversation ID in URL or still fetching conversations
+    if (!conversationId || isFetchingConversations) {
+      return;
+    }
+
+    console.log('[Deep-Link] Attempting to open conversation:', conversationId);
+    console.log('[Deep-Link] Available conversations:', conversations.map(c => c.id));
+    console.log('[Deep-Link] Currently active:', activeConversationId);
+
+    // Skip if already viewing this conversation
+    if (conversationId === activeConversationId) {
+      console.log('[Deep-Link] Already viewing this conversation, clearing URL param');
+      setSearchParams({});
+      return;
+    }
+
+    // Try to load the conversation
+    const conversation = conversations.find(c => c.id === conversationId);
+    if (conversation) {
+      console.log('[Deep-Link] Found conversation, loading:', conversation.title);
+      loadConversation(conversationId);
+      // Clear URL parameter after loading
+      setSearchParams({});
+    } else if (conversations.length > 0) {
+      // Conversations are loaded but conversation not found
+      console.warn('[Deep-Link] Conversation not found in list:', conversationId);
+      console.warn('[Deep-Link] This might be a timing issue. Attempting direct load...');
+
+      // Try loading directly by ID (in case it's a new conversation not in the list yet)
+      loadConversation(conversationId).then(() => {
+        console.log('[Deep-Link] Direct load successful');
         setSearchParams({});
-      }
+        // Refresh conversation list to include the new one
+        fetchConversations();
+      }).catch((error) => {
+        console.error('[Deep-Link] Direct load failed:', error);
+        setSearchParams({});
+      });
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [searchParams.get('conversation'), conversations.length, activeConversationId]);
+  }, [searchParams.get('conversation'), conversations.length, activeConversationId, isFetchingConversations]);
 
   // Listen for messages from service worker
   useEffect(() => {
     const handleMessage = (event: MessageEvent) => {
       if (event.data.type === 'OPEN_CONVERSATION') {
         const conversationId = event.data.conversationId;
-        // Only load if conversation exists and isn't already active
-        if (conversationId && conversationId !== activeConversationId && conversations.find(c => c.id === conversationId)) {
+        console.log('[Service Worker Message] Request to open conversation:', conversationId);
+        console.log('[Service Worker Message] Currently active:', activeConversationId);
+
+        if (!conversationId) {
+          console.warn('[Service Worker Message] No conversation ID provided');
+          return;
+        }
+
+        // Skip if already viewing this conversation
+        if (conversationId === activeConversationId) {
+          console.log('[Service Worker Message] Already viewing this conversation');
+          return;
+        }
+
+        // Try to load the conversation (will refresh list if needed)
+        const conversation = conversations.find(c => c.id === conversationId);
+        if (conversation) {
+          console.log('[Service Worker Message] Found conversation, loading:', conversation.title);
           loadConversation(conversationId);
+        } else {
+          console.warn('[Service Worker Message] Conversation not in list, attempting direct load...');
+          loadConversation(conversationId).then(() => {
+            console.log('[Service Worker Message] Direct load successful');
+            // Refresh conversation list to include the new one
+            fetchConversations();
+          }).catch((error) => {
+            console.error('[Service Worker Message] Direct load failed:', error);
+          });
         }
       }
     };

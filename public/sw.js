@@ -51,13 +51,18 @@ self.addEventListener('push', (event) => {
 
 // Handle notification click
 self.addEventListener('notificationclick', async (event) => {
-  console.log('[Service Worker] Notification clicked:', event);
+  console.log('[Service Worker] Notification clicked');
+  console.log('[Service Worker] Event action:', event.action);
+  console.log('[Service Worker] Notification data:', event.notification.data);
 
   event.notification.close();
 
   const conversationId = event.notification.data?.conversationId;
   const messageId = event.notification.data?.messageId;
   const actions = event.notification.data?.actions || [];
+
+  console.log('[Service Worker] Extracted conversationId:', conversationId);
+  console.log('[Service Worker] Extracted messageId:', messageId);
 
   // Check if user clicked an action button
   if (event.action && event.action !== 'open') {
@@ -102,28 +107,36 @@ self.addEventListener('notificationclick', async (event) => {
     ? `/chat?conversation=${conversationId}`
     : '/chat';
 
+  console.log('[Service Worker] URL to open:', urlToOpen);
+
   event.waitUntil(
     clients
       .matchAll({ type: 'window', includeUncontrolled: true })
       .then((clientList) => {
+        console.log('[Service Worker] Found', clientList.length, 'client windows');
+
         // Check if there's already a window open to the chat app
         for (const client of clientList) {
           const clientUrl = new URL(client.url);
+          console.log('[Service Worker] Checking client:', clientUrl.pathname);
 
           // If chat window is already open
           if (clientUrl.pathname === '/chat' && 'focus' in client) {
+            console.log('[Service Worker] Found existing /chat window, sending postMessage');
             // Send message to client to load the conversation
             if (conversationId) {
               client.postMessage({
                 type: 'OPEN_CONVERSATION',
                 conversationId: conversationId,
               });
+              console.log('[Service Worker] Sent OPEN_CONVERSATION message with ID:', conversationId);
             }
             return client.focus();
           }
         }
 
         // No chat window open, open a new one
+        console.log('[Service Worker] No /chat window found, opening new window');
         if (clients.openWindow) {
           return clients.openWindow(urlToOpen);
         }
