@@ -11,12 +11,13 @@ export function ChatOnly() {
   const { requestPermission, permission } = usePushNotifications();
 
   // Auto-request notification permission on mount (if not already granted/denied)
+  // Deferred to avoid blocking initial render
   useEffect(() => {
     if ('Notification' in window && permission === 'default') {
-      // Delay slightly to avoid overwhelming user immediately on page load
+      // Delay to allow UI to render first before making network requests
       const timer = setTimeout(() => {
         requestPermission();
-      }, 2000);
+      }, 5000); // Increased delay to let app fully load first
       return () => clearTimeout(timer);
     }
   }, [requestPermission, permission]);

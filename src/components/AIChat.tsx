@@ -1,10 +1,8 @@
-import { useState, useEffect, useRef } from 'react';
+import { useState, useEffect, useRef, useMemo } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import { motion, AnimatePresence } from 'framer-motion';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
-import rehypeHighlight from 'rehype-highlight';
-import 'highlight.js/styles/github-dark.css';
 import { Button } from './ui/button';
 import { Input } from './ui/input';
 import { Card, CardContent, CardHeader, CardTitle } from './ui/card';
@@ -13,6 +11,8 @@ import { Bot, Send, Trash2, Loader2, User, MessageSquare, Menu, Plus, X, Edit2, 
 import { apiService } from '@/services/api';
 import { format } from 'date-fns';
 import type { Conversation, Message } from '@/types/chat';
+
+const MESSAGE_PAGE_SIZE = 50; // Only render this many recent messages at once
 
 export function AIChat() {
   const [searchParams, setSearchParams] = useSearchParams();
@@ -35,6 +35,12 @@ export function AIChat() {
   const inputRef = useRef<HTMLInputElement>(null);
   const wasStreamingRef = useRef(false);
 
+  // Only render recent messages for performance (paginated)
+  const visibleMessages = useMemo(() => {
+    if (messages.length <= MESSAGE_PAGE_SIZE) return messages;
+    return messages.slice(-MESSAGE_PAGE_SIZE);
+  }, [messages]);
+
   // Auto-hide sidebar on mobile
   useEffect(() => {
     const isMobile = window.innerWidth < 768;
@@ -52,10 +58,8 @@ export function AIChat() {
       const convos = await apiService.getConversations();
       setConversations(convos);
 
-      // Auto-select most recent conversation if any exist
-      if (convos.length > 0 && !activeConversationId) {
-        await loadConversation(convos[0].id);
-      }
+      // Don't auto-load conversation - let user select to improve initial load time
+      // If there's a URL parameter, that will be handled by the deep-link useEffect
     } catch (err: any) {
       console.error('Failed to fetch conversations:', err);
       setConversationsError(err.message || 'Failed to load conversations. Please check your connection.');
@@ -593,14 +597,10 @@ export function AIChat() {
               </div>
             </div>
           ) : (
-            <AnimatePresence initial={false}>
-              {messages.map((message) => (
-                <motion.div
+            <>
+              {visibleMessages.map((message) => (
+                <div
                   key={message.id}
-                  initial={{ opacity: 0, y: 10 }}
-                  animate={{ opacity: 1, y: 0 }}
-                  exit={{ opacity: 0, y: -10 }}
-                  transition={{ duration: 0.2 }}
                   className={`flex gap-3 ${
                     message.role === 'user' ? 'justify-end' : 'justify-start'
                   }`}
@@ -621,10 +621,7 @@ export function AIChat() {
                         <p className="text-[13px] md:text-sm whitespace-pre-wrap break-words">{message.content}</p>
                       ) : (
                         <div className="text-[13px] md:text-sm prose prose-sm dark:prose-invert max-w-none overflow-x-auto">
-                          <ReactMarkdown
-                            remarkPlugins={[remarkGfm]}
-                            rehypePlugins={[rehypeHighlight]}
-                          >
+                          <ReactMarkdown remarkPlugins={[remarkGfm]}>
                             {message.content}
                           </ReactMarkdown>
                         </div>
@@ -666,15 +663,13 @@ export function AIChat() {
                       </div>
                     </div>
                   )}
-                </motion.div>
+                </div>
               ))}
-            </AnimatePresence>
+            </>
           )}
           {isLoading && (
-            <motion.div
+            <div
               ref={streamingMessageRef}
-              initial={{ opacity: 0, y: 10 }}
-              animate={{ opacity: 1, y: 0 }}
               className="w-full"
               style={{ minHeight: '70vh' }} // Extra space below so message can scroll to top with room to fill
             >
@@ -688,10 +683,7 @@ export function AIChat() {
                 {streamingMessage ? (
                   <div className="bg-muted rounded-lg p-3 max-w-full">
                     <div className="text-[13px] md:text-sm prose prose-sm dark:prose-invert max-w-none overflow-x-auto">
-                      <ReactMarkdown
-                        remarkPlugins={[remarkGfm]}
-                        rehypePlugins={[rehypeHighlight]}
-                      >
+                      <ReactMarkdown remarkPlugins={[remarkGfm]}>
                         {streamingMessage}
                       </ReactMarkdown>
                     </div>
@@ -702,7 +694,7 @@ export function AIChat() {
                   </div>
                 )}
               </div>
-            </motion.div>
+            </div>
           )}
           <div ref={messagesEndRef} />
         </div>

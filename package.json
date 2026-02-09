@@ -7,7 +7,7 @@
     "dev": "vite",
     "build": "tsc -b && vite build",
     "lint": "eslint .",
-    "preview": "vite preview --host",
+    "preview": "vite preview --host --port 5173",
     "server": "cd t1d-server && npm run dev",
     "start": "concurrently \"npm run server\" \"npm run dev\" --names \"server,app\" --prefix-colors \"magenta,green\"",
     "start:prod": "npm run build && concurrently \"npm run server\" \"npm run preview\" --names \"server,app\" --prefix-colors \"magenta,green\"",
