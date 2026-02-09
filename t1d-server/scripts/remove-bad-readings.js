@@ -2,11 +2,22 @@
 
 /**
  * Remove bad glucose readings from a malfunctioning sensor
- * Usage: node scripts/remove-bad-readings.js [--confirm]
+ * Usage: node scripts/remove-bad-readings.js
  */
 
-import { pool } from '../dist/config/database.js';
+import pg from 'pg';
 import * as readline from 'readline';
+import * as dotenv from 'dotenv';
+import { fileURLToPath } from 'url';
+import { dirname, join } from 'path';
+
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = dirname(__filename);
+
+// Load environment variables
+dotenv.config({ path: join(__dirname, '../.env') });
+
+const { Pool } = pg;
 
 // Time range for bad readings (user's local time in America/New_York)
 const START_TIME = '2025-01-16 22:55:00'; // 10:55 PM on Jan 16
@@ -25,6 +36,11 @@ function question(prompt) {
 }
 
 async function main() {
+  // Create database connection
+  const pool = new Pool({
+    connectionString: process.env.DATABASE_URL,
+  });
+
   try {
     console.log('=== Remove Bad Sensor Readings ===\n');
     console.log(`Time range (${TIMEZONE}):`);
@@ -32,8 +48,9 @@ async function main() {
     console.log(`  To:   ${END_TIME}`);
     console.log('');
 
-    // Convert local times to UTC for database query
-    console.log('Converting to UTC for database query...\n');
+    // Test database connection
+    await pool.query('SELECT NOW()');
+    console.log('✓ Connected to database\n');
 
     // First, show what will be deleted
     const previewResult = await pool.query(
@@ -113,7 +130,7 @@ async function main() {
     rl.close();
     await pool.end();
   } catch (error) {
-    console.error('Error:', error);
+    console.error('Error:', error.message);
     rl.close();
     await pool.end();
     process.exit(1);
