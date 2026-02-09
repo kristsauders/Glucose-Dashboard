@@ -1,332 +1,329 @@
 # T1D AI Assistant - Cost Analysis (Updated Feb 2026)
 
-## Executive Summary
+## Current Configuration
 
-**Your Current Setup** (with proactive optimization):
-- **Models**: gpt-oss-120b (small) + Claude Sonnet 4.5 (large)
-- **Proactive Frequency**: Every 90 minutes (16x/day)
-- **Proactive Optimization**: ✅ Only calls Sonnet 4.5 when sending message (20% of analyses)
-- **Monthly Cost**: **$31.87/month** ⬇️ 55% reduction from old cost!
-  - Small model (gpt-oss-120b): $1.38
-  - Large model (Sonnet 4.5): $30.49
-- **Context**: 128K (small) + 200K (large)
+**Models**:
+- Small (analysis): gpt-oss-120b ($0.039/$0.195 per 1M tokens, 128K context)
+- Large (synthesis): GLM-4.7 ($0.40/$1.50 per 1M tokens, 203K context)
 
-**🎯 30-Minute Interval Analysis**:
-- **Monthly Cost**: **$53.52/month**
-- **Increase**: +$21.65/month vs current 90-minute
-- **Still 25% cheaper than old 90-minute setup!**
-- **Recommendation**: ✅ **Switch to 30-minute intervals** - Cost is very reasonable!
+**Proactive Frequency**: Every 90 minutes (16 checks/day)
+
+**Usage Assumptions**:
+- Proactive checks: 16/day × 30 days = 480 analyses/month
+- Send rate: 20% (96 proactive messages sent/month)
+- Chat usage: 10/day × 30 days = 300 chats/month
 
 ---
 
-## Key Optimization: Proactive Message Flow
+## Single User Costs (90-Minute Intervals)
 
-Your proactive system now has a smart two-phase approach:
+### Proactive Monitoring (480 analyses, 96 messages sent)
 
-### Phase 1: Analysis + Decision (Always runs)
-- **Model**: gpt-oss-120b (cheap!)
-- **Purpose**: Gather data, analyze patterns, decide if message is worth sending
-- **Token usage**: ~52k input, ~600 output per analysis
-- **Cost per analysis**: ~$0.002
+**Analysis Phase** (all 480 checks):
+| Component | Input Tokens | Output Tokens | Cost |
+|-----------|--------------|---------------|------|
+| gpt-oss-120b | 24.96M | 288k | $1.03 |
 
-### Phase 2: Final Synthesis (Only if sending message)
-- **Model**: Claude Sonnet 4.5 (premium)
-- **Purpose**: Create the actual proactive message for the user
-- **Frequency**: ~20% of analyses result in sending (estimated)
-- **Token usage**: ~30k input, ~800 output per message
-- **Cost per message**: ~$0.10
+**Synthesis Phase** (96 messages sent):
+| Component | Input Tokens | Output Tokens | Cost |
+|-----------|--------------|---------------|------|
+| GLM-4.7 | 8.64M | 76.8k | $3.57 |
 
-**This is brilliant because**:
-- 80% of proactive checks use ONLY the cheap model
-- Only pay for Sonnet 4.5 when you actually get value (a message)
-- Massive cost reduction while maintaining quality
+**Proactive Subtotal**: $4.60/month
 
----
-
-## Updated Cost Breakdown
-
-### Option 1: Current Setup - 90-Minute Intervals ⭐ CURRENT
-**Monthly Cost**: **$31.87/month**
-
-#### Proactive Monitoring (16x/day × 30 days = 480 analyses)
-Assuming 20% send rate = 96 messages sent
-
-| Component | Purpose | Input Tokens | Output Tokens | Cost |
-|-----------|---------|--------------|---------------|------|
-| gpt-oss-120b | Analysis (all 480) | 24.96M | 288k | $1.02 |
-| Sonnet 4.5 | Synthesis (96 sent) | 2.88M | 76.8k | $9.79 |
-
-#### Chat Usage (10/day × 30 days = 300 chats)
+### Chat Usage (300 conversations)
 
 | Component | Input Tokens | Output Tokens | Cost |
 |-----------|--------------|---------------|------|
 | gpt-oss-120b | 9M | 60k | $0.36 |
-| Sonnet 4.5 | 6M | 180k | $20.70 |
+| GLM-4.7 | 6M | 180k | $2.67 |
 
-#### Total Monthly Cost
-| Model | Proactive | Chat | **Total** |
-|-------|-----------|------|-----------|
-| gpt-oss-120b | $1.02 | $0.36 | **$1.38** |
-| Sonnet 4.5 | $9.79 | $20.70 | **$30.49** |
-| **TOTAL** | | | **$31.87/month** |
+**Chat Subtotal**: $3.03/month
 
-**Savings vs old setup**: $39.17/month (55% reduction!)
+### Single User Total
 
----
-
-### Option 2: 30-Minute Intervals ⭐ RECOMMENDED
-**Monthly Cost**: **$53.52/month**
-
-#### Proactive Monitoring (48x/day × 30 days = 1,440 analyses)
-Assuming 20% send rate = 288 messages sent
-
-| Component | Purpose | Input Tokens | Output Tokens | Cost |
-|-----------|---------|--------------|---------------|------|
-| gpt-oss-120b | Analysis (all 1,440) | 74.88M | 864k | $3.08 |
-| Sonnet 4.5 | Synthesis (288 sent) | 8.64M | 230.4k | $29.38 |
-
-#### Chat Usage (same as above)
-
-| Component | Input Tokens | Output Tokens | Cost |
-|-----------|--------------|---------------|------|
-| gpt-oss-120b | 9M | 60k | $0.36 |
-| Sonnet 4.5 | 6M | 180k | $20.70 |
-
-#### Total Monthly Cost
-| Model | Proactive | Chat | **Total** |
-|-------|-----------|------|-----------|
-| gpt-oss-120b | $3.08 | $0.36 | **$3.44** |
-| Sonnet 4.5 | $29.38 | $20.70 | **$50.08** |
-| **TOTAL** | | | **$53.52/month** |
-
-**Impact of 30-minute intervals**:
-- +$21.65/month vs 90-minute (+68% increase)
-- Still 25% cheaper than old 90-minute setup ($71.04)
-- 3x more frequent checks for only 68% more cost
-- **Cost per additional check**: ~$0.02 (very affordable!)
-
-**✅ Recommendation**: Switch to 30-minute intervals - the cost is very reasonable given the value of more frequent monitoring.
+| Category | Monthly Cost |
+|----------|--------------|
+| Proactive Monitoring | $4.60 |
+| Chat | $3.03 |
+| **Total per User** | **$7.63** |
 
 ---
 
-### Option 3: 60-Minute Intervals (Middle Ground)
-**Monthly Cost**: **$41.87/month**
+## Multi-User Deployment Costs
 
-#### Proactive Monitoring (24x/day × 30 days = 720 analyses)
-Assuming 20% send rate = 144 messages sent
+### Infrastructure (Shared)
 
-| Component | Purpose | Input Tokens | Output Tokens | Cost |
-|-----------|---------|--------------|---------------|------|
-| gpt-oss-120b | Analysis (all 720) | 37.44M | 432k | $1.54 |
-| Sonnet 4.5 | Synthesis (144 sent) | 4.32M | 115.2k | $14.70 |
+**Platform**: DigitalOcean
 
-#### Chat Usage (same as above)
+**Components**:
+- App Platform (frontend + backend): $12/month
+- PostgreSQL Database (1GB): $15/month
+- Spaces Storage (optional): $5/month
+- **Infrastructure Subtotal**: $32/month
 
-| Component | Input Tokens | Output Tokens | Cost |
-|-----------|--------------|---------------|------|
-| gpt-oss-120b | 9M | 60k | $0.36 |
-| Sonnet 4.5 | 6M | 180k | $20.70 |
+Scales to 50-75 users before needing upgrades.
 
-#### Total Monthly Cost
-| Model | Proactive | Chat | **Total** |
-|-------|-----------|------|-----------|
-| gpt-oss-120b | $1.54 | $0.36 | **$1.90** |
-| Sonnet 4.5 | $14.70 | $20.70 | **$35.40** |
-| **TOTAL** | | | **$41.87/month** |
+### Total Monthly Costs by User Count
 
-**Good balance**: More frequent than 90-min, cheaper than 30-min.
+| Users | AI Costs | Infrastructure | **Total** | **Cost/User** | **Savings/User** |
+|-------|----------|----------------|-----------|---------------|------------------|
+| 1 | $7.63 | $32 | **$39.63** | $39.63 | - |
+| 5 | $38.15 | $32 | **$70.15** | $14.03 | 65% |
+| 10 | $76.30 | $32 | **$108.30** | $10.83 | 73% |
+| 25 | $190.75 | $32 | **$222.75** | $8.91 | 78% |
+| 50 | $381.50 | $32 | **$413.50** | $8.27 | 79% |
+| 75 | $572.25 | $32 | **$604.25** | $8.06 | 80% |
+| 100 | $763.00 | $64* | **$827.00** | $8.27 | 79% |
 
----
-
-## Frequency Comparison Table
-
-| Interval | Checks/Day | Analyses/Month | Messages Sent/Month* | Monthly Cost | vs 90-min | Cost per Check |
-|----------|------------|----------------|----------------------|--------------|-----------|----------------|
-| **30 min** | 48 | 1,440 | 288 | **$53.52** | +$21.65 | $0.037 |
-| **60 min** | 24 | 720 | 144 | **$41.87** | +$10.00 | $0.058 |
-| **90 min** ⬅️ | 16 | 480 | 96 | **$31.87** | - | $0.066 |
-| **120 min** | 12 | 360 | 72 | **$26.88** | -$4.99 | $0.075 |
-
-*Assuming 20% send rate (1 out of 5 analyses results in a sent message)
-
-**Key Insight**: The cost per additional check decreases as frequency increases because:
-- Chat costs stay constant
-- gpt-oss-120b is very cheap ($0.039/M input)
-- Only pay full Sonnet cost when messages are actually sent
+*Need infrastructure upgrade at ~75-100 users
 
 ---
 
-## Impact of Send Rate on Costs (30-minute interval)
+## Infrastructure Scaling
 
-The send rate (what % of analyses result in sending a message) significantly impacts costs:
+### Phase 1: Starter (1-50 users)
+**Cost**: $32/month
 
-| Send Rate | Messages/Month | Sonnet Proactive Cost | Total Monthly Cost |
-|-----------|----------------|----------------------|-------------------|
-| 10% (low) | 144 | $14.69 | **$39.19** |
-| **20% (assumed)** | **288** | **$29.38** | **$53.52** |
-| 30% (high) | 432 | $44.07 | $67.85 |
-| 50% (very high) | 720 | $73.45 | $97.23 |
+- App Platform Basic: $12/month
+- PostgreSQL 1GB: $15/month
+- Spaces Storage: $5/month
+- **Capacity**: ~50 users comfortably
 
-**Conservative estimate**: Using 20% send rate is reasonable. As your system matures and learns what's valuable, the send rate might drop to 10-15%, reducing costs further.
+### Phase 2: Growth (50-150 users)
+**Cost**: $64/month
 
----
+- App Platform Professional: $24/month
+- PostgreSQL 2GB: $30/month
+- Spaces Storage: $5/month
+- Redis cache: $5/month
+- **Capacity**: ~150 users
 
-## Alternative Model Options (30-minute intervals)
+### Phase 3: Scale (150-500 users)
+**Cost**: $140/month
 
-### Budget Option: GPT-5 Nano + DeepSeek V3.2
-**Monthly Cost**: **$18.47/month** (65% savings!)
-
-| Model | Proactive | Chat | **Total** |
-|-------|-----------|------|-----------|
-| GPT-5 Nano ($0.050/$0.400) | $4.10 | $0.43 | **$4.53** |
-| DeepSeek V3.2 ($0.25/$0.38) | $9.36 | $4.58 | **$13.94** |
-| **TOTAL** | | | **$18.47/month** |
-
-**Tradeoffs**:
-- ✅ 400K context on small model (vs 128K)
-- ✅ Huge cost savings
-- ⚠️ DeepSeek may not match Sonnet quality for medical insights
-- 🧪 Worth testing!
-
-### Premium Option: GPT-5 Nano + Sonnet 4.5
-**Monthly Cost**: **$54.95/month**
-
-| Model | Proactive | Chat | **Total** |
-|-------|-----------|------|-----------|
-| GPT-5 Nano ($0.050/$0.400) | $4.10 | $0.43 | **$4.53** |
-| Sonnet 4.5 ($3/$15) | $29.38 | $20.70 | **$50.08** |
-| **TOTAL** | | | **$54.95/month** |
-
-**Benefits**:
-- ✅ 400K context on small model (8x improvement!)
-- ✅ Better tool calling with GPT-5 Nano
-- ✅ Same synthesis quality (Sonnet 4.5)
-- ✅ Only $1.43 more than current gpt-oss setup
+- App Platform (2 containers): $48/month
+- PostgreSQL 4GB: $60/month
+- Redis 1GB: $15/month
+- Spaces: $5/month
+- Load Balancer: $12/month
+- **Capacity**: ~500 users
 
 ---
 
-## My Recommendation
+## Cost Breakdown by Component
 
-### ✅ Switch to 30-Minute Intervals with Current Models
-**New monthly cost**: $53.52/month (+$21.65)
+### Per User Monthly Costs
 
-**Why this is the right move**:
+| Component | Cost | % of Total |
+|-----------|------|------------|
+| GLM-4.7 (synthesis) | $3.57 | 47% |
+| GLM-4.7 (chat) | $2.67 | 35% |
+| gpt-oss-120b (analysis) | $1.03 | 13% |
+| gpt-oss-120b (chat) | $0.36 | 5% |
+| **Total AI** | **$7.63** | **100%** |
 
-1. **Value is clear**: More frequent checks catch patterns earlier
-2. **Cost is reasonable**: Only $0.74/day more than 90-minute
-3. **Still well-optimized**: 25% cheaper than old 90-minute setup
-4. **Scalable**: If send rate drops to 15%, cost drops to $46/month
-5. **Quality maintained**: Still using Sonnet 4.5 for final messages
-
-**To implement**:
-```typescript
-// In src/services/proactive-monitor.ts
-private checkInterval: number = 30 * 60 * 1000; // 30 minutes
-```
-
-### 🧪 Optional: Test GPT-5 Nano + DeepSeek V3.2
-**Monthly cost**: $18.47/month (save $35)
-
-If you want to experiment with 65% cost savings:
-```env
-HYBRID_SMALL_PROVIDER=openrouter
-HYBRID_SMALL_MODEL=openai/gpt-5-nano
-HYBRID_LARGE_MODEL=deepseek/deepseek-v3.2
-```
-
-Run for a week and compare message quality. If acceptable, you save $420/year!
+**Key Insight**: 82% of cost is the large model (GLM-4.7), mostly for chat interactions.
 
 ---
 
-## Monitoring Actual Costs
+## Cost Optimization Opportunities
 
-Track your usage at: https://openrouter.ai/activity
+### 1. Reduce Chat Frequency
+**Impact**: -$2.67/user/month (-35%)
 
-**What to watch**:
-- Actual send rate (may be lower than 20%)
-- Token usage per analysis (may optimize over time)
-- Message quality at different intervals
+If users chat 5x/day instead of 10x/day:
+- New cost: $4.96/user/month
+- Savings: $2.67/user/month
 
-**Adjust if needed**:
-- Send rate < 15%? Consider 15-minute intervals (still only ~$70/month)
-- Costs higher than expected? Check send rate and token usage
-- Quality concerns? Stick with Sonnet 4.5 for synthesis
+### 2. Lower Proactive Send Rate
+**Impact**: -$1.79/user/month (-23%)
+
+If send rate drops to 10% (smarter filtering):
+- New cost: $5.84/user/month
+- Savings: $1.79/user/month
+
+### 3. Increase Proactive Interval
+**Impact**: -$1.54/user/month (-20%)
+
+If checking every 2 hours instead of 90 minutes:
+- New cost: $6.09/user/month
+- Savings: $1.54/user/month
+
+### Combined Optimizations
+All three optimizations together:
+- New cost: $2.56/user/month
+- Savings: $5.07/user/month (66% reduction!)
 
 ---
 
-## Cost History
+## Alternative Proactive Intervals
 
-| Date | Setup | Frequency | Monthly Cost | Notes |
-|------|-------|-----------|--------------|-------|
-| Feb 6, 2026 | gpt-oss + Sonnet | 90 min | **$31.87** | Optimized proactive flow ✅ |
-| Feb 6, 2026 (proposed) | gpt-oss + Sonnet | 30 min | **$53.52** | 3x more checks, 68% more cost |
-| Feb 4, 2026 | gpt-oss + Sonnet | 90 min | $71.04 | Before optimization |
-| Jan 2026 | gpt-oss + Sonnet | 30 min | $170.35 | Before optimization |
+Cost per user at different check frequencies:
 
-**Progress**: Your optimization reduced 30-minute costs from $170.35 → $53.52 (69% savings!)
+| Interval | Checks/Day | Analyses/Month | Messages/Month | AI Cost/User | vs 90-min |
+|----------|------------|----------------|----------------|--------------|-----------|
+| **90 min** | 16 | 480 | 96 | **$7.63** | baseline |
+| 120 min (2h) | 12 | 360 | 72 | **$6.09** | -$1.54 |
+| 180 min (3h) | 8 | 240 | 48 | **$4.55** | -$3.08 |
+
+**Note**: Chat costs ($3.03) remain constant across intervals.
 
 ---
 
-## Technical Details
+## Model Comparison (90-Minute Intervals)
 
-### Proactive Flow Architecture
+If you want to try different large models:
+
+| Large Model | Input $/1M | Output $/1M | Cost/User | vs GLM-4.7 |
+|-------------|------------|-------------|-----------|------------|
+| **GLM-4.7** | $0.40 | $1.50 | **$7.63** | baseline |
+| Gemini 3 Flash | $0.50 | $3.00 | **$9.48** | +$1.85 |
+| Kimi K2.5 | $0.60 | $2.50 | **$9.20** | +$1.57 |
+| GPT-5.2 | $1.75 | $14.00 | **$18.30** | +$10.67 |
+| Sonnet 4.5 | $3.00 | $15.00 | **$21.21** | +$13.58 |
+
+All use gpt-oss-120b for analysis phase.
+
+**Why GLM-4.7 wins**: Cheapest while maintaining quality and large context (203K).
+
+---
+
+## Real-World Cost Examples
+
+### Scenario 1: Just You
+- Users: 1
+- Monthly cost: $39.63
+- What you get: Full AI assistant with proactive monitoring
+
+### Scenario 2: Close Friends/Family (5 users)
+- Users: 5
+- Monthly cost: $70.15 ($14.03/user)
+- What you get: Help 5 people manage their T1D
+
+### Scenario 3: Small Community (25 users)
+- Users: 25
+- Monthly cost: $222.75 ($8.91/user)
+- What you get: Meaningful impact, sustainable costs
+
+### Scenario 4: Growing Community (100 users)
+- Users: 100
+- Monthly cost: $827 ($8.27/user)
+- What you get: Real community platform, costs scale well
+
+---
+
+## Cost vs User Count (Visual Reference)
 
 ```
-Every 30 minutes:
-  ↓
-[Phase 1: Analysis + Decision] ← gpt-oss-120b ($0.002/check)
-  - Gather glucose data
-  - Analyze patterns
-  - Decide: SEND or DON'T_SEND
-  ↓
-IF decision = SEND (20% of time):
-  ↓
-[Phase 2: Final Synthesis] ← Sonnet 4.5 ($0.10/message)
-  - Create polished message
-  - Medical insights
-  - Actionable recommendations
-  ↓
-[Send to user]
+Cost per User (with infrastructure):
+$40 |●
+$30 |
+$20 |
+$15 |  ●
+$10 |    ●        ● ● ●
+ $8 |
+    |________________________
+      1  5  10    25 50 100
+               Users
+
+Total Monthly Cost:
+$827|                      ●
+$600|
+$400|                  ●
+$200|              ●
+$100|        ●
+    |  ●  ●
+    |________________________
+      1  5  10  25 50 100
+               Users
 ```
 
-**Key optimization**: 80% of checks cost only $0.002, not $0.10!
-
-### Token Usage Details
-
-**Per Analysis (gpt-oss-120b)**:
-- System prompt: 4k tokens
-- Tool iteration 1: +6k tokens (input), 100 output
-- Tool iteration 2: +6k tokens (input), 100 output
-- Tool iteration 3: +6k tokens (input), 100 output
-- Tool iteration 4: +6k tokens (input), 100 output
-- Decision synthesis: 24k accumulated input, 200 output
-- **Average: 52k input, 600 output**
-
-**Per Message (Sonnet 4.5, only if sending)**:
-- Context summary: 20k tokens
-- Tool results: 10k tokens
-- Synthesis output: 800 tokens
-- **Average: 30k input, 800 output**
-
-**Chat (per conversation)**:
-- Small model: 30k input, 200 output
-- Large model: 20k input, 600 output
+**Key Insight**: Per-user cost drops rapidly from 1→10 users due to shared infrastructure, then stabilizes around $8/user.
 
 ---
 
-## Conclusion
+## Deployment Checklist
 
-**Current Recommendation**: Switch to 30-minute intervals at $53.52/month
+### Initial Setup
+- [ ] Create DigitalOcean account
+- [ ] Set up App Platform (connect GitHub repo)
+- [ ] Provision PostgreSQL database
+- [ ] Configure environment variables
+- [ ] Set up custom domain + SSL
+- [ ] Enable automated backups
 
-**Why**:
-✅ 3x more responsive monitoring
-✅ Still 25% cheaper than old setup
-✅ Cost per check is very low ($0.037)
-✅ Quality maintained with Sonnet 4.5
-✅ Can always dial back to 60 or 90 min if needed
+### Multi-User Features
+- [ ] Update database schema for multi-tenancy
+- [ ] Per-user usage tracking
+- [ ] User authentication hardening
+- [ ] Admin dashboard for monitoring
+- [ ] Data export functionality
+- [ ] User onboarding flow
 
-**Future optimization**: Test GPT-5 Nano + DeepSeek V3.2 to potentially save 65% more while maintaining large context windows.
+### Monitoring
+- [ ] Set up cost alerts (OpenRouter)
+- [ ] Database performance monitoring
+- [ ] Error tracking (Sentry or similar)
+- [ ] Uptime monitoring
+- [ ] Weekly cost reports
 
 ---
 
-*Last updated: February 6, 2026*
+## Cost Tracking
+
+**Monitor these metrics**:
+1. **Actual send rate**: May be lower than 20%
+2. **Chats per user per day**: May vary by user
+3. **Token usage**: May decrease as system optimizes
+4. **Infrastructure load**: Plan upgrades before limits
+
+**Where to track**:
+- AI costs: https://openrouter.ai/activity
+- Infrastructure: DigitalOcean dashboard
+- Per-user metrics: Build admin dashboard
+
+---
+
+## Summary
+
+### Current Setup (1 User)
+- **Monthly cost**: $39.63
+- **Models**: gpt-oss-120b + GLM-4.7
+- **Interval**: 90 minutes
+- **Cost breakdown**: $7.63 AI + $32 infrastructure
+
+### At Scale (25 Users)
+- **Monthly cost**: $222.75
+- **Cost per user**: $8.91
+- **Savings vs solo**: 78% per user
+- **Infrastructure**: Same $32 shared cost
+
+### At Scale (100 Users)
+- **Monthly cost**: $827
+- **Cost per user**: $8.27
+- **Infrastructure**: $64 (upgraded)
+- **Sustainable**: Yes, costs scale linearly
+
+### Bottom Line
+- **Solo use**: ~$40/month (very affordable)
+- **Community use**: ~$8-9/user/month at scale
+- **Best model choice**: GLM-4.7 (proven in your testing)
+- **Proactive interval**: 90 minutes (balanced)
+
+---
+
+## Sources
+
+**Model Pricing**:
+- [GLM-4.7 Pricing](https://pricepertoken.com/pricing-page/model/z-ai-glm-4.7)
+- [gpt-oss-120b on OpenRouter](https://openrouter.ai/models/gpt-oss-120b)
+
+**Hosting**:
+- [DigitalOcean Pricing](https://www.digitalocean.com/pricing)
+- [DigitalOcean vs AWS Comparison](https://www.digitalocean.com/resources/articles/digitalocean-vs-awslightsail)
+
+---
+
+*Last updated: February 9, 2026*
+*Current configuration: gpt-oss-120b + GLM-4.7 @ 90-minute intervals*

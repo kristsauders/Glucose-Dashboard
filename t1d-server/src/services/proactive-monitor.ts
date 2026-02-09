@@ -14,7 +14,7 @@ export class ProactiveMonitor {
   private smallModel: any;
   private toolOnlyAgent: any;
   private isRunning: boolean = false;
-  private checkInterval: number = 30 * 60 * 1000; // 30 minutes for responsive monitoring
+  private checkInterval: number = 90 * 60 * 1000; // 90 minutes for responsive monitoring
   private intervalId: NodeJS.Timeout | null = null;
 
   constructor() {
@@ -270,6 +270,72 @@ export class ProactiveMonitor {
   }
 
   /**
+   * Get recent conversation history from proactive check-ins
+   */
+  private async getRecentProactiveHistory(userId: string): Promise<string> {
+    try {
+      // Get the most recent proactive conversation
+      const conversationResult = await query(
+        `SELECT id FROM conversations
+         WHERE user_id = $1 AND title = 'Proactive Check-ins'
+         ORDER BY updated_at DESC
+         LIMIT 1`,
+        [userId]
+      );
+
+      if (conversationResult.rows.length === 0) {
+        return ''; // No proactive conversation history yet
+      }
+
+      const conversationId = conversationResult.rows[0].id;
+
+      // Get last 8 messages (4 exchanges) from this conversation
+      const messagesResult = await query(
+        `SELECT role, content, created_at
+         FROM chat_messages
+         WHERE conversation_id = $1
+           AND role IN ('assistant', 'user')
+         ORDER BY created_at DESC
+         LIMIT 8`,
+        [conversationId]
+      );
+
+      if (messagesResult.rows.length === 0) {
+        return ''; // No messages yet
+      }
+
+      // Format history (reverse to show chronological order)
+      const messages = messagesResult.rows.reverse();
+      let historyText = '\n\n## Recent Proactive Conversation History\n\n';
+      historyText += 'Here are the last few messages from your proactive check-ins with this user:\n\n';
+
+      for (const msg of messages) {
+        const timestamp = new Date(msg.created_at).toLocaleString('en-US', {
+          month: 'short',
+          day: 'numeric',
+          hour: 'numeric',
+          minute: '2-digit',
+          hour12: true,
+        });
+        const role = msg.role === 'assistant' ? 'Sage' : 'User';
+        const preview = msg.content.substring(0, 200);
+        historyText += `**${role}** (${timestamp}):\n${preview}${msg.content.length > 200 ? '...' : ''}\n\n`;
+      }
+
+      historyText += '**IMPORTANT**: Use this history to:\n';
+      historyText += '- Avoid repeating topics/insights from the last few messages\n';
+      historyText += '- Build on previous conversations and follow up on user responses\n';
+      historyText += '- Focus on new patterns or different aspects not recently covered\n';
+      historyText += '- Reference earlier discussions when relevant\n\n';
+
+      return historyText;
+    } catch (error) {
+      console.error('Error fetching proactive history:', error);
+      return ''; // Fail gracefully
+    }
+  }
+
+  /**
    * Run proactive analysis using the agent - TWO PHASE APPROACH
    * Phase 1: Analyze and generate message
    * Phase 2: Decide whether to send
@@ -390,12 +456,20 @@ The synthesis model will write the user-facing message - your job is just to gat
         return;
       }
 
+      // Get recent conversation history to check for redundancy
+      const conversationHistory = await this.getRecentProactiveHistory(user.id);
+      if (conversationHistory) {
+        console.log(`  Including conversation history (found previous messages)`);
+      } else {
+        console.log(`  No conversation history (first proactive message or error)`);
+      }
+
       // PHASE 2: Decide whether to send (using small model for simple decision)
       const decisionPrompt = `I wrote this proactive message for the user. Should I send it?
 
 **The message:**
 ${generatedMessage}
-
+${conversationHistory}
 **Send if ANY of these are true:**
 - Contains specific data analysis (trends, patterns, statistics, comparisons)
 - Explains physiological mechanisms or LADA progression
@@ -412,9 +486,10 @@ ${generatedMessage}
 - The message is completely generic with no specific observations
 - Contains NO actual data from analysis tools
 - Is just a greeting with no glucose insights
-- Duplicates a very recent message (within last 90 minutes)
+- Covers the same topic/pattern as the most recent message in conversation history
+- Repeats very similar insights to what was already discussed in the last 2-3 messages
 
-**Philosophy**: The user wants regular analytical insights and education, not just alerts. Share interesting findings proactively.
+**Philosophy**: The user wants regular analytical insights and education, not just alerts. Share interesting findings proactively, but avoid being repetitive. Build on previous conversations rather than repeating them.
 
 Respond with ONLY "SEND" or "DONT_SEND" (no explanation needed).`;
 
@@ -555,6 +630,19 @@ CRITICAL INSTRUCTION: The data above is the ONLY data you have access to.
 ## Your Role
 You synthesize glucose data analysis into comprehensive, actionable insights. The analysis phase used advanced statistical and pattern detection tools to gather data - your job is to present these findings clearly, completely, and ACCURATELY.
 
+## Conversation Continuity
+
+**If recent conversation history is provided:**
+- Review what topics were covered in the last few messages
+- Avoid repeating the same insights or patterns you recently discussed
+- Build on previous conversations (e.g., "Following up on yesterday's breakfast spike discussion...")
+- Focus on NEW patterns or DIFFERENT aspects not recently covered
+- If the user responded to a previous question, acknowledge their response
+- If no new significant findings emerge, it's okay not to send a message
+
+**If no conversation history:**
+- This is likely the first proactive message, proceed with standard analysis
+
 ## Communication Style for Proactive Messages
 
 **CRITICAL: Significance Filtering - Only share findings that meet these thresholds:**
@@ -676,9 +764,14 @@ This user has LADA (Latent Autoimmune Diabetes in Adults):
           messagesToSend.push(new SystemMessage(toolResultsContext));
         }
 
+        // Add conversation history context to help avoid redundancy
+        if (conversationHistory) {
+          messagesToSend.push(new SystemMessage(conversationHistory));
+        }
+
         // Add synthesis task prompt
         messagesToSend.push(new HumanMessage(
-          'Based on the analysis data provided above, create a comprehensive proactive message that shares significant findings and actionable insights with the user. Follow the message structure guidelines in the system prompt.'
+          'Based on the analysis data provided above, create a comprehensive proactive message that shares significant findings and actionable insights with the user. Follow the message structure guidelines in the system prompt. If conversation history was provided, make sure to avoid repeating recently covered topics and build on previous discussions where relevant.'
         ));
 
         // Log context size for Phase 3
