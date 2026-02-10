@@ -252,18 +252,27 @@ export class ResearchMonitor {
 
       const message = this.formatResearchMessage(paper, summary);
 
-      // Send via push notification if enabled
-      if (notificationPrefs.proactive_enabled) {
-        await pushNotificationService.sendToUser(userId, {
-          title: '🔬 New Research Finding',
-          body: `New study: ${paper.title.substring(0, 80)}...`,
-          icon: '/sage-icon.png',
-          data: {
-            conversationId: '', // Will be created by tool
-            url: '/chat'
+      // Send via sendProactiveMessageTool to create proper conversation
+      const { sendProactiveMessageTool } = await import('../agent/tools.js');
+
+      await sendProactiveMessageTool.invoke({
+        userId,
+        type: 'insight',
+        title: '🔬 New Research Finding',
+        content: message,
+        actions: [
+          {
+            id: 'tell_more',
+            label: 'Tell me more',
+            message: 'Can you tell me more about this research and how it applies to me?'
+          },
+          {
+            id: 'discuss',
+            label: 'Let\'s discuss',
+            message: 'I\'d like to discuss this study'
           }
-        });
-      }
+        ]
+      });
 
       // Mark as shared
       await researchService.markPaperAsShared(userId, paper.id);
