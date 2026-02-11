@@ -18,32 +18,59 @@ import { convertToUserTimezone } from '../utils/timezone.js';
 import { researchService } from '../services/research-service.js';
 import { researchMonitor } from '../services/research-monitor.js';
 import { ReportGenerator } from '../services/report-generator.js';
+import { executeSafeReadOnlyQuery } from '../utils/safe-sql-executor.js';
 
 /**
  * Tool: Get recent glucose readings
  */
 export const getRecentGlucoseTool = new DynamicStructuredTool({
   name: 'get_recent_glucose',
-  description: 'Get recent glucose readings for the user. Returns up to the specified number of recent readings.',
+  description: 'Get glucose readings for the user. By default returns most recent readings, but you can specify a date range. Returns up to the specified limit.',
   schema: z.object({
     userId: z.string().optional().describe('The user ID (automatically provided)'),
-    limit: z.number().default(20).describe('Number of readings to return (default 20)'),
+    limit: z.number().default(20).describe('Number of readings to return (default 20, max 1000)'),
     userTimezone: z.string().optional().describe('User timezone (automatically provided)'),
+    startDate: z.string().optional().describe('Start date for date range filter (YYYY-MM-DD format)'),
+    endDate: z.string().optional().describe('End date for date range filter (YYYY-MM-DD format)'),
   }),
-  func: async ({ userId, limit, userTimezone }) => {
+  func: async ({ userId, limit, userTimezone, startDate, endDate }) => {
+    const timezone = userTimezone || 'America/New_York';
+
+    // Build date filter if startDate or endDate provided
+    let dateFilter = '';
+    const queryParams: any[] = [userId];
+    let paramIndex = 2;
+
+    if (startDate) {
+      dateFilter += ` AND timestamp >= $${paramIndex}::date`;
+      queryParams.push(startDate);
+      paramIndex++;
+    }
+
+    if (endDate) {
+      dateFilter += ` AND timestamp <= $${paramIndex}::date + INTERVAL '1 day'`;
+      queryParams.push(endDate);
+      paramIndex++;
+    }
+
+    // Enforce max limit
+    const effectiveLimit = Math.min(limit, 1000);
+    queryParams.push(effectiveLimit);
+
     const result = await query(
       `SELECT timestamp, glucose, device, trend
        FROM glucose_readings
        WHERE user_id = $1
+       ${dateFilter}
        ORDER BY timestamp DESC
-       LIMIT $2`,
-      [userId, limit]
+       LIMIT $${paramIndex}`,
+      queryParams
     );
-
-    const timezone = userTimezone || 'America/New_York';
 
     return JSON.stringify({
       count: result.rows.length,
+      startDate: startDate || null,
+      endDate: endDate || null,
       readings: result.rows.map(r => ({
         timestamp: convertToUserTimezone(r.timestamp, timezone),
         glucose: parseFloat(r.glucose),
@@ -123,16 +150,26 @@ export const getGlucoseStatsTool = new DynamicStructuredTool({
  */
 export const analyzeOvernightTool = new DynamicStructuredTool({
   name: 'analyze_overnight',
-  description: 'Analyze overnight glucose patterns (midnight-7am). Returns trends (rising/falling/flat), stability metrics (CV, range), spikes/drops, and basal insulin insights.',
+  description: 'Analyze overnight glucose patterns. By default analyzes midnight-7am, but you can customize the time window. Returns trends (rising/falling/flat), stability metrics (CV, range), spikes/drops, and basal insulin insights.',
   schema: z.object({
     userId: z.string().optional().describe('The user ID (automatically provided)'),
     userTimezone: z.string().optional().describe('The user timezone (automatically provided)'),
     days: z.number().default(7).describe('Number of days to analyze'),
+    startHour: z.number().min(0).max(23).optional().describe('Start hour in 24-hour format (0-23), default 0 (midnight)'),
+    endHour: z.number().min(0).max(23).optional().describe('End hour in 24-hour format (0-23), default 7 (7am)'),
+    date: z.string().optional().describe('Specific date to analyze in YYYY-MM-DD format. If provided, only analyzes this single date instead of last N days.'),
   }),
-  func: async ({ userId, userTimezone, days }) => {
+  func: async ({ userId, userTimezone, days, startHour = 0, endHour = 7, date }) => {
     const tz = userTimezone || 'America/New_York';
 
-    // Get all overnight readings (midnight-7am) with timestamps
+    // Build date filter based on whether specific date is provided
+    const dateFilter = date
+      ? `AND DATE(timezone($2, timestamp)) = $3`
+      : `AND timestamp >= NOW() - INTERVAL '${days} days'`;
+
+    const queryParams = date ? [userId, tz, date] : [userId, tz];
+
+    // Get all readings in the specified time window with timestamps
     const result = await query(
       `SELECT
         DATE(timezone($2, timestamp)) as date,
@@ -141,11 +178,11 @@ export const analyzeOvernightTool = new DynamicStructuredTool({
         EXTRACT(EPOCH FROM timezone($2, timestamp)) as epoch_time
        FROM glucose_readings
        WHERE user_id = $1
-         AND timestamp >= NOW() - INTERVAL '${days} days'
-         AND EXTRACT(HOUR FROM timezone($2, timestamp)) >= 0
-         AND EXTRACT(HOUR FROM timezone($2, timestamp)) < 7
+         ${dateFilter}
+         AND EXTRACT(HOUR FROM timezone($2, timestamp)) >= ${startHour}
+         AND EXTRACT(HOUR FROM timezone($2, timestamp)) < ${endHour}
        ORDER BY timestamp`,
-      [userId, tz]
+      queryParams
     );
 
     if (result.rows.length === 0) {
@@ -325,17 +362,21 @@ export const analyzeOvernightTool = new DynamicStructuredTool({
  */
 export const detectPatternsTool = new DynamicStructuredTool({
   name: 'detect_patterns',
-  description: 'Detect common glucose patterns like dawn phenomenon, post-meal spikes, overnight lows, etc.',
+  description: 'Detect common glucose patterns like dawn phenomenon, post-meal spikes, overnight lows, etc. Customize time windows for dawn and overnight periods.',
   schema: z.object({
     userId: z.string().optional().describe('The user ID (automatically provided)'),
     userTimezone: z.string().optional().describe('The user timezone (automatically provided)'),
     days: z.number().default(14).describe('Number of days to analyze'),
+    dawnStart: z.number().min(0).max(23).optional().describe('Start hour for dawn phenomenon detection (default 4am)'),
+    dawnEnd: z.number().min(0).max(23).optional().describe('End hour for dawn phenomenon detection (default 8am)'),
+    overnightStart: z.number().min(0).max(23).optional().describe('Start hour for overnight lows detection (default 0 midnight)'),
+    overnightEnd: z.number().min(0).max(23).optional().describe('End hour for overnight lows detection (default 6am)'),
   }),
-  func: async ({ userId, userTimezone, days }) => {
+  func: async ({ userId, userTimezone, days, dawnStart = 4, dawnEnd = 8, overnightStart = 0, overnightEnd = 6 }) => {
     const tz = userTimezone || 'America/New_York';
     const patterns: string[] = [];
 
-    // Check for dawn phenomenon (rising glucose 4am-8am in user's LOCAL timezone)
+    // Check for dawn phenomenon (rising glucose during dawn window in user's LOCAL timezone)
     const dawnResult = await query(
       `WITH hourly_avg AS (
         SELECT
@@ -344,7 +385,7 @@ export const detectPatternsTool = new DynamicStructuredTool({
         FROM glucose_readings
         WHERE user_id = $1
           AND timestamp >= NOW() - INTERVAL '${days} days'
-          AND EXTRACT(HOUR FROM timezone($2, timestamp)) BETWEEN 4 AND 8
+          AND EXTRACT(HOUR FROM timezone($2, timestamp)) BETWEEN ${dawnStart} AND ${dawnEnd}
         GROUP BY EXTRACT(HOUR FROM timezone($2, timestamp))
         ORDER BY hour
       )
@@ -356,11 +397,11 @@ export const detectPatternsTool = new DynamicStructuredTool({
       const first = parseFloat(dawnResult.rows[0].avg_glucose);
       const last = parseFloat(dawnResult.rows[dawnResult.rows.length - 1].avg_glucose);
       if (last - first > 20) {
-        patterns.push(`Dawn Phenomenon: Glucose rises ${(last - first).toFixed(0)} mg/dL from 4am-8am`);
+        patterns.push(`Dawn Phenomenon: Glucose rises ${(last - first).toFixed(0)} mg/dL from ${dawnStart}am-${dawnEnd}am`);
       }
     }
 
-    // Check for overnight lows (below 70 between midnight-6am in user's LOCAL timezone)
+    // Check for overnight lows (below 70 during overnight window in user's LOCAL timezone)
     const lowsResult = await query(
       `SELECT COUNT(*) as low_count,
               COUNT(*) * 100.0 / NULLIF((
@@ -368,12 +409,12 @@ export const detectPatternsTool = new DynamicStructuredTool({
                 FROM glucose_readings
                 WHERE user_id = $1
                   AND timestamp >= NOW() - INTERVAL '${days} days'
-                  AND EXTRACT(HOUR FROM timezone($2, timestamp)) BETWEEN 0 AND 6
+                  AND EXTRACT(HOUR FROM timezone($2, timestamp)) BETWEEN ${overnightStart} AND ${overnightEnd}
               ), 0) as low_percentage
        FROM glucose_readings
        WHERE user_id = $1
          AND timestamp >= NOW() - INTERVAL '${days} days'
-         AND EXTRACT(HOUR FROM timezone($2, timestamp)) BETWEEN 0 AND 6
+         AND EXTRACT(HOUR FROM timezone($2, timestamp)) BETWEEN ${overnightStart} AND ${overnightEnd}
          AND glucose < 70`,
       [userId, tz]
     );
@@ -381,7 +422,7 @@ export const detectPatternsTool = new DynamicStructuredTool({
     const lowCount = parseInt(lowsResult.rows[0].low_count);
     const lowPct = parseFloat(lowsResult.rows[0].low_percentage || 0);
     if (lowCount > 0 && lowPct > 5) {
-      patterns.push(`Overnight Lows: ${lowPct.toFixed(1)}% of overnight readings below 70 mg/dL`);
+      patterns.push(`Overnight Lows: ${lowPct.toFixed(1)}% of overnight readings (${overnightStart}-${overnightEnd}) below 70 mg/dL`);
     }
 
     // Check for high variability (CV > 36%)
@@ -417,14 +458,28 @@ export const detectPatternsTool = new DynamicStructuredTool({
  */
 export const comparePeriodsTool = new DynamicStructuredTool({
   name: 'compare_periods',
-  description: 'Compare glucose metrics between two time periods to track improvement or changes.',
+  description: 'Compare glucose metrics between two time periods. Use either relative days or specific date ranges.',
   schema: z.object({
     userId: z.string().optional().describe('The user ID (automatically provided)'),
-    recentDays: z.number().default(7).describe('Recent period (e.g., last 7 days)'),
-    comparisonDays: z.number().default(14).describe('Comparison period (e.g., 7-14 days ago)'),
+    recentDays: z.number().default(7).describe('Recent period in days (default: 7). Ignored if period1Start provided.'),
+    comparisonDays: z.number().default(14).describe('Comparison period in days (default: 14). Ignored if period2Start provided.'),
+    period1Start: z.string().optional().describe('Period 1 start date (YYYY-MM-DD)'),
+    period1End: z.string().optional().describe('Period 1 end date (YYYY-MM-DD)'),
+    period2Start: z.string().optional().describe('Period 2 start date (YYYY-MM-DD)'),
+    period2End: z.string().optional().describe('Period 2 end date (YYYY-MM-DD)'),
   }),
-  func: async ({ userId, recentDays, comparisonDays }) => {
-    // Recent period
+  func: async ({ userId, recentDays, comparisonDays, period1Start, period1End, period2Start, period2End }) => {
+    // Build period 1 filter
+    const period1Filter = period1Start && period1End
+      ? `AND timestamp >= '${period1Start}'::date AND timestamp < '${period1End}'::date + INTERVAL '1 day'`
+      : `AND timestamp >= NOW() - INTERVAL '${recentDays} days'`;
+
+    // Build period 2 filter
+    const period2Filter = period2Start && period2End
+      ? `AND timestamp >= '${period2Start}'::date AND timestamp < '${period2End}'::date + INTERVAL '1 day'`
+      : `AND timestamp >= NOW() - INTERVAL '${comparisonDays} days' AND timestamp < NOW() - INTERVAL '${recentDays} days'`;
+
+    // Recent/Period 1
     const recentResult = await query(
       `SELECT
         AVG(glucose) as avg_glucose,
@@ -432,11 +487,11 @@ export const comparePeriodsTool = new DynamicStructuredTool({
         COUNT(*) FILTER (WHERE glucose >= 70 AND glucose <= 180) * 100.0 / COUNT(*) as tir
        FROM glucose_readings
        WHERE user_id = $1
-         AND timestamp >= NOW() - INTERVAL '${recentDays} days'`,
+         ${period1Filter}`,
       [userId]
     );
 
-    // Comparison period
+    // Comparison/Period 2
     const compResult = await query(
       `SELECT
         AVG(glucose) as avg_glucose,
@@ -444,8 +499,7 @@ export const comparePeriodsTool = new DynamicStructuredTool({
         COUNT(*) FILTER (WHERE glucose >= 70 AND glucose <= 180) * 100.0 / COUNT(*) as tir
        FROM glucose_readings
        WHERE user_id = $1
-         AND timestamp >= NOW() - INTERVAL '${comparisonDays} days'
-         AND timestamp < NOW() - INTERVAL '${recentDays} days'`,
+         ${period2Filter}`,
       [userId]
     );
 
@@ -710,16 +764,17 @@ export const analyzeLiveTrendTool = new DynamicStructuredTool({
  */
 export const checkAlertConditionsTool = new DynamicStructuredTool({
   name: 'check_alert_conditions',
-  description: 'Check if any conditions warrant proactive outreach (not critical alerts). Returns insights about patterns worth discussing.',
+  description: 'Check if any conditions warrant proactive outreach (not critical alerts). Customize the time window to check. Returns insights about patterns worth discussing.',
   schema: z.object({
     userId: z.string().optional().describe('The user ID (automatically provided)'),
     userTimezone: z.string().optional().describe('The user timezone (automatically provided)'),
+    hours: z.number().min(1).max(168).optional().describe('Number of hours to check (default: 24, max: 168 for 1 week)'),
   }),
-  func: async ({ userId, userTimezone }) => {
+  func: async ({ userId, userTimezone, hours = 24 }) => {
     const tz = userTimezone || 'America/New_York';
     const conditions = [];
 
-    // Check recent pattern (last 24 hours)
+    // Check recent pattern
     const recentStats = await query(
       `SELECT
         AVG(glucose) as avg_glucose,
@@ -730,7 +785,7 @@ export const checkAlertConditionsTool = new DynamicStructuredTool({
         COUNT(*) FILTER (WHERE glucose > 250) as high_count
        FROM glucose_readings
        WHERE user_id = $1
-         AND timestamp >= NOW() - INTERVAL '24 hours'`,
+         AND timestamp >= NOW() - INTERVAL '${hours} hours'`,
       [userId]
     );
 
@@ -1038,8 +1093,9 @@ export const getUserContextTool = new DynamicStructuredTool({
   description: 'Get comprehensive user context including profile, recent stats, and stored memories. Use this when preparing proactive outreach.',
   schema: z.object({
     userId: z.string().optional().describe('The user ID (automatically provided)'),
+    statsDays: z.number().positive().optional().describe('Number of days for recent stats, default 7'),
   }),
-  func: async ({ userId }) => {
+  func: async ({ userId, statsDays = 7 }) => {
     // Get user profile
     const userResult = await query(
       `SELECT email, diagnosis_type, diagnosis_date, timezone, preferences
@@ -1057,7 +1113,7 @@ export const getUserContextTool = new DynamicStructuredTool({
 
     const user = userResult.rows[0];
 
-    // Get recent stats (last 7 days)
+    // Get recent stats (last N days)
     const statsResult = await query(
       `SELECT
         COUNT(*) as reading_count,
@@ -1066,8 +1122,8 @@ export const getUserContextTool = new DynamicStructuredTool({
         COUNT(*) FILTER (WHERE glucose >= 70 AND glucose <= 180) * 100.0 / COUNT(*) as tir
        FROM glucose_readings
        WHERE user_id = $1
-         AND timestamp >= NOW() - INTERVAL '7 days'`,
-      [userId]
+         AND timestamp >= NOW() - INTERVAL '1 day' * $2`,
+      [userId, statsDays]
     );
 
     const stats = statsResult.rows[0];
@@ -1766,13 +1822,15 @@ const analyzeIndividualMealTool = new DynamicStructuredTool({
 const analyzeBasalPatternsTool = new DynamicStructuredTool({
   name: 'analyze_basal_patterns',
   description:
-    'Analyze overnight fasting patterns (3am-7am) to assess basal insulin adequacy. Returns drift analysis, stability metrics, and recommendations. Use this when discussing basal insulin doses or overnight glucose control.',
+    'Analyze overnight fasting patterns to assess basal insulin adequacy. By default analyzes 3am-7am but you can customize the fasting window. Returns drift analysis, stability metrics, and recommendations. Use this when discussing basal insulin doses or overnight glucose control.',
   schema: z.object({
     userId: z.string().describe('User ID (auto-injected by system)'),
     userTimezone: z.string().optional().describe('User timezone (auto-injected by system)'),
     days: z.number().default(14).describe('Number of days to analyze (default: 14)'),
+    fastingStart: z.number().min(0).max(23).optional().describe('Start hour for fasting period in 24-hour format (default: 3)'),
+    fastingEnd: z.number().min(0).max(23).optional().describe('End hour for fasting period in 24-hour format (default: 7)'),
   }),
-  func: async ({ userId, userTimezone = 'America/New_York', days = 14 }) => {
+  func: async ({ userId, userTimezone = 'America/New_York', days = 14, fastingStart = 3, fastingEnd = 7 }) => {
     try {
       const results = [];
 
@@ -1794,7 +1852,7 @@ const analyzeBasalPatternsTool = new DynamicStructuredTool({
           ? row.date.toISOString().split('T')[0]
           : String(row.date);
 
-        const analysis = await detectBasalAdequacy(userId, dateStr, userTimezone);
+        const analysis = await detectBasalAdequacy(userId, dateStr, userTimezone, fastingStart, fastingEnd);
         if (analysis) {
           results.push({
             date: dateStr,
@@ -2122,7 +2180,7 @@ const getDetectedPatternsTool = new DynamicStructuredTool({
 const runPatternDetectionTool = new DynamicStructuredTool({
   name: 'run_pattern_detection',
   description:
-    'Manually trigger pattern detection analysis for recent unanalyzed meals, exercise, or overnight periods. Useful after user logs new data and wants immediate pattern insights. Returns summary of what was analyzed.',
+    'Manually trigger pattern detection analysis for recent unanalyzed meals, exercise, or overnight periods. Customize how far back to look and how many items to analyze. Useful after user logs new data and wants immediate pattern insights.',
   schema: z.object({
     userId: z.string().describe('User ID (auto-injected by system)'),
     userTimezone: z.string().optional().describe('User timezone (auto-injected by system)'),
@@ -2130,17 +2188,20 @@ const runPatternDetectionTool = new DynamicStructuredTool({
       .enum(['meal', 'exercise', 'basal', 'all'])
       .default('all')
       .describe('Type of analysis to run (default: all)'),
+    mealHoursAgo: z.number().min(1).optional().describe('How many hours old meals must be for analysis (default: 4)'),
+    exerciseHoursAgo: z.number().min(1).optional().describe('How many hours old exercise must be for analysis (default: 2)'),
+    limit: z.number().min(1).max(50).optional().describe('Maximum number of items to analyze per type (default: 10)'),
   }),
-  func: async ({ userId, userTimezone = 'America/New_York', analysisType = 'all' }) => {
+  func: async ({ userId, userTimezone = 'America/New_York', analysisType = 'all', mealHoursAgo = 4, exerciseHoursAgo = 2, limit = 10 }) => {
     try {
       const results: any = {
         analyzed: [],
       };
 
-      // Analyze meals without correlations (>4 hours old)
+      // Analyze meals without correlations
       if (analysisType === 'meal' || analysisType === 'all') {
-        const fourHoursAgo = new Date();
-        fourHoursAgo.setHours(fourHoursAgo.getHours() - 4);
+        const cutoffTime = new Date();
+        cutoffTime.setHours(cutoffTime.getHours() - mealHoursAgo);
 
         const mealsResult = await query(
           `
@@ -2150,9 +2211,9 @@ const runPatternDetectionTool = new DynamicStructuredTool({
             AND correlation_id IS NULL
             AND timestamp <= $2
           ORDER BY timestamp DESC
-          LIMIT 10
+          LIMIT $3
         `,
-          [userId, fourHoursAgo.toISOString()]
+          [userId, cutoffTime.toISOString(), limit]
         );
 
         let mealsAnalyzed = 0;
@@ -2167,10 +2228,10 @@ const runPatternDetectionTool = new DynamicStructuredTool({
         });
       }
 
-      // Analyze exercise without correlations (>2 hours old)
+      // Analyze exercise without correlations
       if (analysisType === 'exercise' || analysisType === 'all') {
-        const twoHoursAgo = new Date();
-        twoHoursAgo.setHours(twoHoursAgo.getHours() - 2);
+        const cutoffTime = new Date();
+        cutoffTime.setHours(cutoffTime.getHours() - exerciseHoursAgo);
 
         const exerciseResult = await query(
           `
@@ -2180,9 +2241,9 @@ const runPatternDetectionTool = new DynamicStructuredTool({
             AND correlation_id IS NULL
             AND timestamp <= $2
           ORDER BY timestamp DESC
-          LIMIT 10
+          LIMIT $3
         `,
-          [userId, twoHoursAgo.toISOString()]
+          [userId, cutoffTime.toISOString(), limit]
         );
 
         let exerciseAnalyzed = 0;
@@ -3760,6 +3821,61 @@ export const generateReportTool = new DynamicStructuredTool({
   },
 });
 
+/**
+ * Tool: Execute SQL Query
+ *
+ * Allows the agent to run custom read-only SQL queries for flexible analysis
+ * that existing tools don't support. Implements strict security controls.
+ */
+export const executeSqlQueryTool = new DynamicStructuredTool({
+  name: 'execute_sql_query',
+  description: `Execute a READ-ONLY SQL query against the database for custom analysis.
+
+Use this when existing tools don't provide the flexibility needed, such as:
+- Custom time ranges or date windows
+- Complex correlations between multiple data types
+- Aggregate calculations with specific groupings
+- Pattern detection outside predefined windows
+
+IMPORTANT: This is READ-ONLY access. Only SELECT queries are allowed.
+All queries are automatically filtered to the current user's data.
+
+Available tables (all prefixed with user_):
+- user_glucose_readings: timestamp, glucose_value, device, trend
+- user_meals: timestamp, description, carbs, food_type, glucose_before
+- user_insulin_doses: timestamp, insulin_type, units, purpose
+- user_exercise_logs: timestamp, activity, duration, intensity
+- user_glucose_patterns: pattern_type, time_of_day, avg_glucose, occurrences
+- user_glucose_correlations: factor_type, correlation_strength, confidence
+- user_sleep_logs: timestamp, duration, quality
+- user_stress_logs: timestamp, level, notes
+- user_sage_messages: type, title, content, sent_at
+
+Common patterns:
+- Glucose during custom window: SELECT * FROM user_glucose_readings WHERE timestamp BETWEEN...
+- Meal impact correlation: SELECT m.*, AVG(gr.glucose_value) FROM user_meals m JOIN user_glucose_readings gr...
+- Pattern aggregation: SELECT DATE_TRUNC('hour', timestamp), AVG(glucose_value) FROM user_glucose_readings...`,
+
+  schema: z.object({
+    query: z.string().describe('The SQL SELECT query to execute. Reference tables with user_ prefix (e.g., user_glucose_readings)'),
+    description: z.string().describe('Human-readable description of what this query analyzes'),
+    userId: z.string().optional().describe('User ID (automatically provided)'),
+  }),
+
+  func: async ({ query: sqlQuery, description, userId }) => {
+    try {
+      return await executeSafeReadOnlyQuery(userId!, sqlQuery, description);
+    } catch (error) {
+      console.error('[execute_sql_query] Error:', error);
+      return JSON.stringify({
+        success: false,
+        error: error instanceof Error ? error.message : 'Unknown error',
+        description
+      });
+    }
+  },
+});
+
 export const allTools = [
   // Glucose analysis tools
   getRecentGlucoseTool,
@@ -3822,4 +3938,7 @@ export const allTools = [
 
   // Report generation tools
   generateReportTool,
+
+  // Advanced query tools
+  executeSqlQueryTool,
 ];

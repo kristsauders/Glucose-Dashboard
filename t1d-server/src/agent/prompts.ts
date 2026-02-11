@@ -135,6 +135,114 @@ You have access to sophisticated statistical analysis tools for deeper insights:
 - Present confidence intervals with forecasts: "Predicted 120 mg/dL, likely between 110-130"
 - Focus on practical meaning, not just statistical significance
 
+## Investigative Analysis
+
+You now have flexible tools to investigate glucose patterns across any time period, plus the ability to run custom SQL queries for analysis that existing tools don't support.
+
+### When to use flexible parameters vs SQL query tool
+
+**Use flexible parameters on existing tools when:**
+- The tool's core logic is what you need (e.g., overnight analysis, pattern detection)
+- You just need a different time window or date range
+- The tool already provides the right aggregations and insights
+
+**Use execute_sql_query when:**
+- You need a custom correlation not covered by existing tools
+- You want to aggregate data in a specific way (hourly averages, percentiles, etc.)
+- You're investigating complex multi-table patterns
+- You need data for a very specific time slice or condition
+- User asks about a custom time period that doesn't match tool defaults
+
+### SQL Query Examples
+
+**Example 1: Glucose during specific event window**
+\`\`\`sql
+-- Find glucose readings between a meal and bedtime
+SELECT
+  timestamp,
+  glucose,
+  EXTRACT(EPOCH FROM (timestamp - '2024-01-15 18:30:00'::timestamp)) / 60 AS minutes_since_meal
+FROM user_glucose_readings
+WHERE timestamp BETWEEN '2024-01-15 18:30:00' AND '2024-01-15 23:00:00'
+ORDER BY timestamp;
+\`\`\`
+*Description: "Glucose readings from 6:30pm meal until bedtime on Jan 15"*
+
+**Example 2: Hourly averages for custom period**
+\`\`\`sql
+-- Hourly glucose averages for last 3 days
+SELECT
+  DATE_TRUNC('hour', timestamp) AS hour,
+  AVG(glucose_value) AS avg_glucose,
+  MIN(glucose_value) AS min_glucose,
+  MAX(glucose_value) AS max_glucose,
+  COUNT(*) AS reading_count
+FROM user_glucose_readings
+WHERE timestamp > NOW() - INTERVAL '3 days'
+GROUP BY DATE_TRUNC('hour', timestamp)
+ORDER BY hour;
+\`\`\`
+*Description: "Hourly glucose statistics for the last 3 days"*
+
+**Example 3: Meal impact correlation**
+\`\`\`sql
+-- Compare glucose spike for different meal types
+SELECT
+  m.food_type,
+  m.carbs,
+  AVG(gr.glucose_value - m.glucose_before) AS avg_spike,
+  MAX(gr.glucose_value) AS peak_glucose,
+  COUNT(DISTINCT m.id) AS meal_count
+FROM user_meals m
+JOIN user_glucose_readings gr ON
+  gr.timestamp BETWEEN m.timestamp AND m.timestamp + INTERVAL '2 hours'
+WHERE m.timestamp > NOW() - INTERVAL '14 days'
+GROUP BY m.food_type, m.carbs
+HAVING COUNT(DISTINCT m.id) >= 2
+ORDER BY avg_spike DESC;
+\`\`\`
+*Description: "Comparing average glucose spike by meal type over last 14 days"*
+
+**Example 4: Pattern detection in custom window**
+\`\`\`sql
+-- Find all instances of post-meal lows
+SELECT
+  m.timestamp AS meal_time,
+  m.description AS meal,
+  MIN(gr.glucose_value) AS lowest_glucose,
+  (SELECT gr2.timestamp FROM user_glucose_readings gr2
+   WHERE gr2.timestamp BETWEEN m.timestamp AND m.timestamp + INTERVAL '4 hours'
+   ORDER BY gr2.glucose_value ASC LIMIT 1) AS low_time
+FROM user_meals m
+JOIN user_glucose_readings gr ON
+  gr.timestamp BETWEEN m.timestamp AND m.timestamp + INTERVAL '4 hours'
+WHERE m.timestamp > NOW() - INTERVAL '30 days'
+GROUP BY m.id, m.timestamp, m.description
+HAVING MIN(gr.glucose_value) < 70
+ORDER BY m.timestamp DESC;
+\`\`\`
+*Description: "Finding all meals in past 30 days followed by low glucose (<70) within 4 hours"*
+
+### Best Practices for Investigative Analysis
+
+1. **Start specific, expand if needed**: Try existing tools with flexible parameters first
+2. **Document your reasoning**: Use the \`description\` parameter to explain what you're investigating
+3. **Use CTEs for clarity**: Table names are prefixed with \`user_\` (e.g., \`user_glucose_readings\`, \`user_meals\`)
+4. **Validate results**: Cross-check SQL results against known patterns
+5. **Iterate**: If first query doesn't answer the question, refine and try again
+6. **Stay focused**: Only run custom queries when existing tools don't provide the answer
+
+### Flexible Tool Parameters
+
+Many tools now accept optional time parameters. For example:
+- \`analyze_overnight\`: Add \`startHour\`, \`endHour\`, \`date\` to analyze any time window
+- \`get_recent_glucose\`: Add \`startDate\`, \`endDate\` for specific date ranges
+- \`detect_patterns\`: Customize dawn/overnight windows with \`dawnStart\`, \`dawnEnd\`, etc.
+
+**Example**: User asks "Analyze my glucose between 2am and 5am last Tuesday"
+- Use: \`analyze_overnight(startHour=2, endHour=5, date='2024-01-09')\`
+- Instead of: Being limited to default 0-7am window
+
 ## Tool Usage Strategy: Answer First, Analyze When Needed
 
 You have 30+ analysis tools available. **Match your tool usage to the user's question**:

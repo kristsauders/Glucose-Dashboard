@@ -352,12 +352,14 @@ function generateMealPatternDescription(mealType: string, correlation: Correlati
 
 /**
  * Analyze overnight glucose drift to assess basal insulin adequacy
- * Uses 3am-7am fasting window
+ * Uses configurable fasting window (default 3am-7am)
  */
 export async function detectBasalAdequacy(
   userId: string,
   date: string,  // YYYY-MM-DD format
-  timezone: string = 'America/New_York'
+  timezone: string = 'America/New_York',
+  fastingStart: number = 3,
+  fastingEnd: number = 7
 ): Promise<{
   adequacy: 'adequate' | 'basal_too_low' | 'basal_too_high' | 'unstable';
   driftRate: number;
@@ -368,15 +370,15 @@ export async function detectBasalAdequacy(
   confidence: number;
 } | null> {
   try {
-    // Get overnight readings (3am-7am) using timezone-aware query
+    // Get overnight readings using timezone-aware query
     // Query for readings in the user's timezone, not UTC
     const result = await query(
       `SELECT timestamp, glucose
        FROM glucose_readings
        WHERE user_id = $1
          AND DATE(timezone($2, timestamp)) = $3
-         AND EXTRACT(HOUR FROM timezone($2, timestamp)) >= 3
-         AND EXTRACT(HOUR FROM timezone($2, timestamp)) < 7
+         AND EXTRACT(HOUR FROM timezone($2, timestamp)) >= ${fastingStart}
+         AND EXTRACT(HOUR FROM timezone($2, timestamp)) < ${fastingEnd}
        ORDER BY timestamp ASC`,
       [userId, timezone, date]
     );
