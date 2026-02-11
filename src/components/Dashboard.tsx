@@ -145,6 +145,9 @@ export function Dashboard({ readings, onDataUpdated }: DashboardProps) {
             startDate = today7am;
             break;
           }
+          case '1d':
+            startDate = subDays(dataEnd, 1);
+            break;
           case '7d':
             startDate = subDays(dataEnd, 7);
             break;
@@ -205,6 +208,9 @@ export function Dashboard({ readings, onDataUpdated }: DashboardProps) {
         rangeStart = today7am;
         break;
       }
+      case '1d':
+        rangeStart = subDays(rangeEnd, 1);
+        break;
       case '7d':
         rangeStart = subDays(rangeEnd, 7);
         break;
@@ -399,15 +405,15 @@ export function Dashboard({ readings, onDataUpdated }: DashboardProps) {
 
           {/* Charts Grid */}
           <div className="space-y-4 md:space-y-8">
-            {/* Live Mode: Today-focused charts */}
-            {dateRange === 'live' ? (
+            {/* Live/Single-Day Mode: Focused charts */}
+            {(dateRange === 'live' || dateRange === '1d') ? (
               <>
-                {/* Today's Continuous Glucose Monitor View */}
+                {/* Continuous Glucose Monitor View */}
                 <div id="continuous-glucose-chart">
                   <ContinuousGlucoseChart
                     data={filteredReadings}
-                    title="Today's Glucose Levels"
-                    description="Real-time glucose readings from 7am through now"
+                    title={dateRange === 'live' ? "Today's Glucose Levels" : "Glucose Levels"}
+                    description={dateRange === 'live' ? "Real-time glucose readings from 7am through now" : "Glucose readings for the selected day"}
                     insulin={insulinLogs}
                     meals={mealLogs}
                     exercise={exerciseLogs}
@@ -415,8 +421,8 @@ export function Dashboard({ readings, onDataUpdated }: DashboardProps) {
                   />
                 </div>
 
-                {/* Overnight Fasting (Last Night) */}
-                {overnightMetrics.length > 0 && (
+                {/* Overnight Fasting (Last Night - Live mode only) */}
+                {dateRange === 'live' && overnightMetrics.length > 0 && (
                   <div id="overnight-fasting-chart">
                     <OvernightFastingChart data={overnightMetrics} />
                   </div>
@@ -519,8 +525,8 @@ export function Dashboard({ readings, onDataUpdated }: DashboardProps) {
                   />
                 )}
 
-                {/* Other log analytics charts - Only show in historical mode */}
-                {dateRange !== 'live' && (
+                {/* Other log analytics charts - Only show in multi-day historical mode */}
+                {dateRange !== 'live' && dateRange !== '1d' && (
                   <>
                     {mealLogs.length > 0 && (
                       <DailyCarbChart meals={mealLogs} />

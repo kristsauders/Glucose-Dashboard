@@ -63,8 +63,9 @@ export function MealImpactAnalysis({ meals, glucoseReadings, insulin = [], exerc
     return null;
   }
 
-  // If we have meals but no impacts, show meals without impact data in live mode
-  if (impacts.length === 0 && dateRange === 'live') {
+  // If we have meals but no impacts, show meals without impact data in single-day views
+  const isSingleDayView = dateRange === 'live' || dateRange === '1d';
+  if (impacts.length === 0 && isSingleDayView) {
     return (
       <motion.div
         initial={{ opacity: 0, y: 20 }}
@@ -143,15 +144,15 @@ export function MealImpactAnalysis({ meals, glucoseReadings, insulin = [], exerc
         <CardHeader>
           <CardTitle>Meal Impact Analysis</CardTitle>
           <CardDescription>
-            {dateRange === 'live'
-              ? `Today's meals and their glucose impact (${impacts.length} meal${impacts.length !== 1 ? 's' : ''})`
+            {isSingleDayView
+              ? `${dateRange === 'live' ? "Today's" : "Day's"} meals and their glucose impact (${impacts.length} meal${impacts.length !== 1 ? 's' : ''})`
               : `Average meal impact across ${impacts.length} meal${impacts.length !== 1 ? 's' : ''}`
             }
           </CardDescription>
         </CardHeader>
         <CardContent>
-          {dateRange === 'live' ? (
-            // Live mode: Show individual meals
+          {isSingleDayView ? (
+            // Single-day view: Show individual meals
             <div className="space-y-4">
               {impacts.map((impact, index) => (
                 <div

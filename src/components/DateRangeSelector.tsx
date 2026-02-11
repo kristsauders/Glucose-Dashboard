@@ -3,7 +3,7 @@ import { Card, CardContent } from '@/components/ui/card';
 import { Calendar, Radio } from 'lucide-react';
 import { subDays, subWeeks, format, startOfDay, endOfDay } from 'date-fns';
 
-export type DateRangePreset = 'live' | '7d' | '14d' | '30d' | '90d' | 'all';
+export type DateRangePreset = 'live' | '1d' | '7d' | '14d' | '30d' | '90d' | 'all';
 
 interface DateRangeSelectorProps {
   selectedRange: DateRangePreset;
@@ -20,6 +20,7 @@ export function DateRangeSelector({
 }: DateRangeSelectorProps) {
   const presets: { value: DateRangePreset; label: string; icon?: typeof Radio }[] = [
     { value: 'live', label: 'Live', icon: Radio },
+    { value: '1d', label: '1 Day' },
     { value: '7d', label: 'Last 7 Days' },
     { value: '14d', label: 'Last 2 Weeks' },
     { value: '30d', label: 'Last 30 Days' },
@@ -36,6 +37,9 @@ export function DateRangeSelector({
     let start: Date;
 
     switch (selectedRange) {
+      case '1d':
+        start = startOfDay(subDays(end, 1));
+        break;
       case '7d':
         start = startOfDay(subDays(end, 7));
         break;
