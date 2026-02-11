@@ -164,32 +164,11 @@ export function Dashboard({ readings, onDataUpdated }: DashboardProps) {
         // Use NOW as end date for logs since logs can be entered after last glucose reading
         const logsEndDate = new Date();
 
-        console.log('[Dashboard] Fetching logs with date range:', {
-          startDate: startDate.toISOString(),
-          logsEndDate: logsEndDate.toISOString(),
-          dateRangeMode: dateRange,
-        });
-
         const [insulin, meals, exercise] = await Promise.all([
           apiService.getInsulinLogs(startDate, logsEndDate, 500),
           apiService.getMealLogs(startDate, logsEndDate, 500),
           apiService.getExerciseLogs(startDate, logsEndDate, 500),
         ]);
-
-        console.log('[Dashboard] Received log data:', {
-          insulinCount: insulin.length,
-          mealsCount: meals.length,
-          exerciseCount: exercise.length,
-          insulinSample: insulin.slice(0, 3).map(i => ({
-            timestamp: i.timestamp,
-            type: i.insulin_type,
-            units: i.units,
-          })),
-          mealsSample: meals.slice(0, 3).map(m => ({
-            timestamp: m.timestamp,
-            carbs: m.carbs,
-          })),
-        });
 
         setInsulinLogs(insulin);
         setMealLogs(meals);

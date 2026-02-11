@@ -54,7 +54,6 @@ function patchPerformanceMeasure(): void {
       }
     };
 
-    console.log('[Sage] Performance.measure patched to prevent profiler crashes');
   }
 }
 
@@ -110,7 +109,6 @@ export function initGlobalErrorHandlers(): void {
     }
   });
 
-  console.log('[Sage] Global error handlers initialized');
 }
 
 /**

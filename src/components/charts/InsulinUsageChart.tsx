@@ -24,17 +24,6 @@ export function InsulinUsageChart({ insulin }: InsulinUsageChartProps) {
   const chartHeight = useResponsiveChartHeight(250, 350);
 
   const chartData = useMemo(() => {
-    console.log('[InsulinUsageChart] Processing insulin:', {
-      totalDoses: insulin.length,
-      sampleDoses: insulin.slice(0, 5).map(i => ({
-        timestamp: i.timestamp,
-        date: new Date(i.timestamp).toISOString().split('T')[0],
-        type: i.insulin_type,
-        units: i.units,
-        unitsType: typeof i.units,
-      })),
-    });
-
     // Group insulin by date and type
     const dailyInsulin = new Map<string, { basal: number; rapid: number }>();
 
@@ -69,7 +58,7 @@ export function InsulinUsageChart({ insulin }: InsulinUsageChartProps) {
     });
 
     // Convert to array and sort by date
-    const result = Array.from(dailyInsulin.entries())
+    return Array.from(dailyInsulin.entries())
       .map(([date, { basal, rapid }]) => {
         // Parse date string in local time (not UTC) by adding 'T12:00:00'
         const localDate = new Date(date + 'T12:00:00');
@@ -82,10 +71,6 @@ export function InsulinUsageChart({ insulin }: InsulinUsageChartProps) {
         };
       })
       .sort((a, b) => a.date.localeCompare(b.date));
-
-    console.log('[InsulinUsageChart] Chart data:', result);
-
-    return result;
   }, [insulin]);
 
   if (chartData.length === 0) {

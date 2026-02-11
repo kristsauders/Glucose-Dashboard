@@ -23,16 +23,6 @@ export function DailyCarbChart({ meals }: DailyCarbChartProps) {
   const chartHeight = useResponsiveChartHeight(250, 350);
 
   const chartData = useMemo(() => {
-    console.log('[DailyCarbChart] Processing meals:', {
-      totalMeals: meals.length,
-      sampleMeals: meals.slice(0, 5).map(m => ({
-        timestamp: m.timestamp,
-        date: new Date(m.timestamp).toISOString().split('T')[0],
-        carbs: m.carbs,
-        carbsType: typeof m.carbs,
-      })),
-    });
-
     // Group meals by date
     const dailyCarbs = new Map<string, number>();
 
@@ -45,7 +35,7 @@ export function DailyCarbChart({ meals }: DailyCarbChartProps) {
     });
 
     // Convert to array and sort by date
-    const result = Array.from(dailyCarbs.entries())
+    return Array.from(dailyCarbs.entries())
       .map(([date, carbs]) => {
         // Parse date string in local time (not UTC) by adding 'T12:00:00'
         const localDate = new Date(date + 'T12:00:00');
@@ -56,10 +46,6 @@ export function DailyCarbChart({ meals }: DailyCarbChartProps) {
         };
       })
       .sort((a, b) => a.date.localeCompare(b.date));
-
-    console.log('[DailyCarbChart] Chart data:', result);
-
-    return result;
   }, [meals]);
 
   if (chartData.length === 0) {
