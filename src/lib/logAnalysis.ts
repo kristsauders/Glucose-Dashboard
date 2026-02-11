@@ -1,6 +1,21 @@
 import type { GlucoseReading } from '@/types/glucose';
 import type { InsulinLog, MealLog, ExerciseLog } from '@/types/logs';
 
+/**
+ * Check if an insulin type is a basal (long-acting) insulin
+ */
+function isBasalInsulin(insulinType: string): boolean {
+  const type = insulinType.toLowerCase();
+  return type.includes('lantus') ||
+         type.includes('basal') ||
+         type.includes('tresiba') ||
+         type.includes('levemir') ||
+         type.includes('toujeo') ||
+         type.includes('degludec') ||
+         type.includes('glargine') ||
+         type.includes('detemir');
+}
+
 export interface DailyLogMetrics {
   date: string;
   totalCarbs: number;
@@ -72,8 +87,7 @@ export function calculateDailyLogMetrics(
       console.warn('[logAnalysis] Invalid insulin units:', dose.units, 'for dose:', dose);
     } else {
       metrics.totalInsulin += units;
-      if (dose.insulin_type.toLowerCase().includes('lantus') ||
-          dose.insulin_type.toLowerCase().includes('basal')) {
+      if (isBasalInsulin(dose.insulin_type)) {
         metrics.basalInsulin += units;
       } else {
         metrics.rapidInsulin += units;
@@ -164,8 +178,8 @@ export function calculateCarbRatios(
     const matchingDoses = insulin.filter(dose => {
       const doseTime = new Date(dose.timestamp).getTime();
       const timeDiff = Math.abs(doseTime - mealTime);
-      const isRapid = !dose.insulin_type.toLowerCase().includes('lantus') &&
-                      !dose.insulin_type.toLowerCase().includes('basal');
+      // Exclude basal insulin types from carb ratio calculations
+      const isRapid = !isBasalInsulin(dose.insulin_type);
       return isRapid && timeDiff <= WINDOW_MINUTES * 60 * 1000;
     });
 
@@ -191,8 +205,7 @@ export function calculateInsulinBreakdown(insulin: InsulinLog[]): InsulinBreakdo
   let rapid = 0;
 
   insulin.forEach(dose => {
-    if (dose.insulin_type.toLowerCase().includes('lantus') ||
-        dose.insulin_type.toLowerCase().includes('basal')) {
+    if (isBasalInsulin(dose.insulin_type)) {
       basal += dose.units;
     } else {
       rapid += dose.units;
@@ -282,8 +295,7 @@ export function getTodayLogMetrics(
   let basalInsulin = 0;
   let rapidInsulin = 0;
   todayInsulin.forEach(dose => {
-    if (dose.insulin_type.toLowerCase().includes('lantus') ||
-        dose.insulin_type.toLowerCase().includes('basal')) {
+    if (isBasalInsulin(dose.insulin_type)) {
       basalInsulin += dose.units;
     } else {
       rapidInsulin += dose.units;
