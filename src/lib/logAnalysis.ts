@@ -13,7 +13,9 @@ function isBasalInsulin(insulinType: string): boolean {
          type.includes('toujeo') ||
          type.includes('degludec') ||
          type.includes('glargine') ||
-         type.includes('detemir');
+         type.includes('detemir') ||
+         type.includes('long-acting') ||
+         type.includes('long');
 }
 
 export interface DailyLogMetrics {

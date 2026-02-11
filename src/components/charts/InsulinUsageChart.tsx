@@ -40,7 +40,9 @@ export function InsulinUsageChart({ insulin }: InsulinUsageChartProps) {
                       type.includes('toujeo') ||
                       type.includes('degludec') ||
                       type.includes('glargine') ||
-                      type.includes('detemir');
+                      type.includes('detemir') ||
+                      type.includes('long-acting') ||
+                      type.includes('long');
 
       // Convert to number to prevent string concatenation
       const units = Number(dose.units);
