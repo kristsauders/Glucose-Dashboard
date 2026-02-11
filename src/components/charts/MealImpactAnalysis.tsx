@@ -191,10 +191,10 @@ export function MealImpactAnalysis({ meals, glucoseReadings, insulin = [], exerc
                               strokeDasharray="2 2"
                               strokeWidth={1}
                               label={{
-                                value: `Baseline: ${impact.baselineGlucose.toFixed(0)}`,
-                                position: 'right',
+                                value: impact.baselineGlucose.toFixed(0),
+                                position: 'left',
                                 fill: 'hsl(var(--muted-foreground))',
-                                fontSize: 10,
+                                fontSize: 11,
                               }}
                             />
                             {/* Peak glucose line */}
@@ -204,10 +204,11 @@ export function MealImpactAnalysis({ meals, glucoseReadings, insulin = [], exerc
                               strokeDasharray="2 2"
                               strokeWidth={1}
                               label={{
-                                value: `Peak: ${impact.peakGlucose.toFixed(0)}`,
-                                position: 'right',
+                                value: impact.peakGlucose.toFixed(0),
+                                position: 'top',
                                 fill: 'hsl(var(--chart-1))',
-                                fontSize: 10,
+                                fontSize: 11,
+                                offset: 5,
                               }}
                             />
                             {/* Ending glucose (at 3 hours) line */}
@@ -218,10 +219,10 @@ export function MealImpactAnalysis({ meals, glucoseReadings, insulin = [], exerc
                                 strokeDasharray="2 2"
                                 strokeWidth={1}
                                 label={{
-                                  value: `End: ${impact.glucoseAt3Hours.toFixed(0)}`,
+                                  value: impact.glucoseAt3Hours.toFixed(0),
                                   position: 'right',
                                   fill: 'hsl(var(--chart-2))',
-                                  fontSize: 10,
+                                  fontSize: 11,
                                 }}
                               />
                             )}
