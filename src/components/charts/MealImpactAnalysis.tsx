@@ -4,8 +4,9 @@ import type { MealLog } from '@/types/logs';
 import type { GlucoseReading } from '@/types/glucose';
 import { analyzeMealsImpact } from '@/lib/logAnalysis';
 import { format } from 'date-fns';
-import { TrendingUp, Clock, Target, Activity } from 'lucide-react';
+import { TrendingUp, Clock, Target, Activity, ArrowDownToLine } from 'lucide-react';
 import { useMemo } from 'react';
+import { LineChart, Line, ResponsiveContainer, YAxis } from 'recharts';
 
 interface MealImpactAnalysisProps {
   meals: MealLog[];
@@ -130,8 +131,29 @@ export function MealImpactAnalysis({ meals, glucoseReadings, dateRange = 'live' 
                     </p>
                   </div>
 
+                  {/* Glucose curve sparkline */}
+                  <div className="mb-4 p-3 rounded-lg bg-muted/30">
+                    <div className="text-xs text-muted-foreground mb-2">3-Hour Glucose Response</div>
+                    <ResponsiveContainer width="100%" height={60}>
+                      <LineChart data={impact.glucoseCurve}>
+                        <YAxis domain={[60, 200]} hide />
+                        <Line
+                          type="monotone"
+                          dataKey="glucose"
+                          stroke="hsl(var(--primary))"
+                          strokeWidth={2}
+                          dot={false}
+                        />
+                      </LineChart>
+                    </ResponsiveContainer>
+                    <div className="flex justify-between text-xs text-muted-foreground mt-1">
+                      <span>Meal</span>
+                      <span>+3h</span>
+                    </div>
+                  </div>
+
                   {/* Metrics grid */}
-                  <div className="grid grid-cols-2 md:grid-cols-5 gap-3">
+                  <div className="grid grid-cols-2 md:grid-cols-4 gap-3 mb-3">
                     <div className={`p-3 rounded-lg ${getSpikeBgColor(impact.totalRise)}`}>
                       <div className="flex items-center gap-2 mb-1">
                         <TrendingUp className={`h-4 w-4 ${getSpikeColor(impact.totalRise)}`} />
@@ -175,7 +197,10 @@ export function MealImpactAnalysis({ meals, glucoseReadings, dateRange = 'live' 
                       </div>
                       <div className="text-xs text-muted-foreground">minutes</div>
                     </div>
+                  </div>
 
+                  {/* Additional metrics row */}
+                  <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
                     <div className="p-3 rounded-lg bg-muted">
                       <div className="flex items-center gap-2 mb-1">
                         <Target className="h-4 w-4 text-muted-foreground" />
@@ -184,7 +209,40 @@ export function MealImpactAnalysis({ meals, glucoseReadings, dateRange = 'live' 
                       <div className="text-xl font-bold">
                         {impact.timeInRangePct.toFixed(0)}%
                       </div>
-                      <div className="text-xs text-muted-foreground">post-meal</div>
+                      <div className="text-xs text-muted-foreground">70-180 mg/dL</div>
+                    </div>
+
+                    <div className="p-3 rounded-lg bg-muted">
+                      <div className="flex items-center gap-2 mb-1">
+                        <Target className="h-4 w-4 text-muted-foreground" />
+                        <span className="text-xs text-muted-foreground">In Target</span>
+                      </div>
+                      <div className="text-xl font-bold">
+                        {impact.timeInTargetPct.toFixed(0)}%
+                      </div>
+                      <div className="text-xs text-muted-foreground">70-140 mg/dL</div>
+                    </div>
+
+                    <div className="p-3 rounded-lg bg-muted">
+                      <div className="flex items-center gap-2 mb-1">
+                        <Activity className="h-4 w-4 text-muted-foreground" />
+                        <span className="text-xs text-muted-foreground">At 3 Hours</span>
+                      </div>
+                      <div className="text-xl font-bold">
+                        {impact.glucoseAt3Hours !== null ? impact.glucoseAt3Hours.toFixed(0) : 'N/A'}
+                      </div>
+                      <div className="text-xs text-muted-foreground">mg/dL</div>
+                    </div>
+
+                    <div className="p-3 rounded-lg bg-muted">
+                      <div className="flex items-center gap-2 mb-1">
+                        <ArrowDownToLine className="h-4 w-4 text-muted-foreground" />
+                        <span className="text-xs text-muted-foreground">Return Time</span>
+                      </div>
+                      <div className="text-xl font-bold">
+                        {impact.timeToBaselineMinutes !== null ? impact.timeToBaselineMinutes : '>180'}
+                      </div>
+                      <div className="text-xs text-muted-foreground">minutes</div>
                     </div>
                   </div>
                 </div>

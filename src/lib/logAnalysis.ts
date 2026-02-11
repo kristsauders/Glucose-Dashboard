@@ -339,7 +339,11 @@ export interface MealImpact {
   peakGlucose: number;
   timeToPeakMinutes: number;
   totalRise: number;
-  timeInRangePct: number;
+  timeInRangePct: number; // 70-180 mg/dL
+  timeInTargetPct: number; // 70-140 mg/dL
+  glucoseAt3Hours: number | null; // Glucose value at 3 hours post-meal
+  timeToBaselineMinutes: number | null; // Minutes to return within 20 mg/dL of baseline
+  glucoseCurve: Array<{ minutes: number; glucose: number }>; // For sparkline visualization
   readingsCount: number;
 }
 
@@ -387,8 +391,51 @@ export function analyzeMealImpact(
 
   // 4. Calculate metrics
   const totalRise = peakGlucose - baselineGlucose;
+
+  // Time in range (70-180 mg/dL)
   const inRangeCount = responseReadings.filter(r => r.glucose >= 70 && r.glucose <= 180).length;
   const timeInRangePct = (inRangeCount / responseReadings.length) * 100;
+
+  // Time in target (70-140 mg/dL)
+  const inTargetCount = responseReadings.filter(r => r.glucose >= 70 && r.glucose <= 140).length;
+  const timeInTargetPct = (inTargetCount / responseReadings.length) * 100;
+
+  // Glucose at 3 hours post-meal (find reading closest to 3 hours)
+  const threeHoursTime = mealTime + 3 * 60 * 60 * 1000;
+  let glucoseAt3Hours: number | null = null;
+  let closestTimeDiff = Infinity;
+
+  responseReadings.forEach(r => {
+    const readingTime = new Date(r.timestamp).getTime();
+    const timeDiff = Math.abs(readingTime - threeHoursTime);
+    if (timeDiff < closestTimeDiff) {
+      closestTimeDiff = timeDiff;
+      glucoseAt3Hours = r.glucose;
+    }
+  });
+
+  // Time to return to baseline (within 20 mg/dL of baseline)
+  let timeToBaselineMinutes: number | null = null;
+  const baselineThreshold = 20; // mg/dL
+
+  for (const reading of responseReadings) {
+    const readingTime = new Date(reading.timestamp).getTime();
+    const minutesSinceMeal = (readingTime - mealTime) / (60 * 1000);
+
+    // Only check after peak
+    if (minutesSinceMeal > timeToPeakMinutes) {
+      if (Math.abs(reading.glucose - baselineGlucose) <= baselineThreshold) {
+        timeToBaselineMinutes = Math.round(minutesSinceMeal);
+        break;
+      }
+    }
+  }
+
+  // Create glucose curve for sparkline (sample every ~10 minutes for cleaner display)
+  const glucoseCurve = responseReadings.map(r => ({
+    minutes: Math.round((new Date(r.timestamp).getTime() - mealTime) / (60 * 1000)),
+    glucose: r.glucose
+  }));
 
   return {
     meal,
@@ -397,6 +444,10 @@ export function analyzeMealImpact(
     timeToPeakMinutes,
     totalRise,
     timeInRangePct,
+    timeInTargetPct,
+    glucoseAt3Hours,
+    timeToBaselineMinutes,
+    glucoseCurve,
     readingsCount: responseReadings.length,
   };
 }

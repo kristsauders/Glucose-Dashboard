@@ -1621,6 +1621,7 @@ const analyzeIndividualMealTool = new DynamicStructuredTool({
       let doseAssessment = '';
       const thisPeak = parseFloat(targetMeal.peak_glucose);
       const thisChange = parseFloat(targetMeal.total_change);
+      const thisTimeInRange = parseFloat(targetMeal.time_in_range_pct);
       const insulinDose = totalInsulin;
 
       if (!insulinDose || insulinDose === 0) {
@@ -3841,20 +3842,18 @@ IMPORTANT: This is READ-ONLY access. Only SELECT queries are allowed.
 All queries are automatically filtered to the current user's data.
 
 Available tables (all prefixed with user_):
-- user_glucose_readings: timestamp, glucose_value, device, trend
-- user_meals: timestamp, description, carbs, food_type, glucose_before
-- user_insulin_doses: timestamp, insulin_type, units, purpose
-- user_exercise_logs: timestamp, activity, duration, intensity
-- user_glucose_patterns: pattern_type, time_of_day, avg_glucose, occurrences
-- user_glucose_correlations: factor_type, correlation_strength, confidence
-- user_sleep_logs: timestamp, duration, quality
-- user_stress_logs: timestamp, level, notes
-- user_sage_messages: type, title, content, sent_at
+- user_glucose_readings: id, timestamp, glucose, device, record_type, trend, source, created_at
+- user_meals: id, timestamp, description, carbs, notes, source, created_at
+- user_insulin_doses: id, timestamp, type, units, insulin_type, notes, source, created_at
+- user_exercise_logs: id, timestamp, duration_minutes, type, intensity, notes, source, created_at
+- user_glucose_patterns: id, pattern_type, time_of_day, avg_glucose, occurrences, last_seen
+- user_glucose_correlations: id, factor_type, correlation_strength, confidence, last_updated
+- user_sage_messages: id, type, title, content, sent_at
 
-Common patterns:
-- Glucose during custom window: SELECT * FROM user_glucose_readings WHERE timestamp BETWEEN...
-- Meal impact correlation: SELECT m.*, AVG(gr.glucose_value) FROM user_meals m JOIN user_glucose_readings gr...
-- Pattern aggregation: SELECT DATE_TRUNC('hour', timestamp), AVG(glucose_value) FROM user_glucose_readings...`,
+Common query patterns:
+- Glucose during custom window: SELECT * FROM user_glucose_readings WHERE timestamp BETWEEN '2026-02-10' AND '2026-02-11'
+- Meal impact correlation: SELECT m.*, AVG(gr.glucose) FROM user_meals m JOIN user_glucose_readings gr ON gr.timestamp BETWEEN m.timestamp AND m.timestamp + INTERVAL '2 hours' GROUP BY m.id
+- Hourly averages: SELECT DATE_TRUNC('hour', timestamp) AS hour, AVG(glucose) AS avg_glucose FROM user_glucose_readings GROUP BY hour ORDER BY hour`,
 
   schema: z.object({
     query: z.string().describe('The SQL SELECT query to execute. Reference tables with user_ prefix (e.g., user_glucose_readings)'),
