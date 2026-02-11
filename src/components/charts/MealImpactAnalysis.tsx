@@ -352,7 +352,7 @@ export function MealImpactAnalysis({ meals, glucoseReadings, insulin = [], exerc
                       <div className="text-xs text-muted-foreground">70-140 mg/dL</div>
                     </div>
 
-                    {impact.carbRatio !== null && (
+                    {impact.carbRatio !== null && impact.insulinDose !== null && (
                       <div className="p-3 rounded-lg bg-muted">
                         <div className="flex items-center gap-2 mb-1">
                           <Activity className="h-4 w-4 text-muted-foreground" />
@@ -361,7 +361,7 @@ export function MealImpactAnalysis({ meals, glucoseReadings, insulin = [], exerc
                         <div className="text-xl font-bold">
                           {impact.carbRatio.toFixed(1)}
                         </div>
-                        <div className="text-xs text-muted-foreground">g/u ({impact.insulinDose?.toFixed(1)}u)</div>
+                        <div className="text-xs text-muted-foreground">g/u ({impact.insulinDose.toFixed(1)}u)</div>
                       </div>
                     )}
                   </div>
