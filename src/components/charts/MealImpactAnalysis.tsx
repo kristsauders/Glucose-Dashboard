@@ -19,8 +19,8 @@ interface MealImpactAnalysisProps {
 
 export function MealImpactAnalysis({ meals, glucoseReadings, insulin = [], exercise = [], dateRange = 'live' }: MealImpactAnalysisProps) {
   const impacts = useMemo(() =>
-    analyzeMealsImpact(meals, glucoseReadings),
-    [meals, glucoseReadings]
+    analyzeMealsImpact(meals, glucoseReadings, insulin),
+    [meals, glucoseReadings, insulin]
   );
 
   // Helper to find events during a meal's 3-hour window
@@ -351,6 +351,19 @@ export function MealImpactAnalysis({ meals, glucoseReadings, insulin = [], exerc
                       </div>
                       <div className="text-xs text-muted-foreground">70-140 mg/dL</div>
                     </div>
+
+                    {impact.carbRatio !== null && (
+                      <div className="p-3 rounded-lg bg-muted">
+                        <div className="flex items-center gap-2 mb-1">
+                          <Activity className="h-4 w-4 text-muted-foreground" />
+                          <span className="text-xs text-muted-foreground">Carb Ratio</span>
+                        </div>
+                        <div className="text-xl font-bold">
+                          {impact.carbRatio.toFixed(1)}
+                        </div>
+                        <div className="text-xs text-muted-foreground">g/u ({impact.insulinDose?.toFixed(1)}u)</div>
+                      </div>
+                    )}
                   </div>
                 </div>
               ))}

@@ -345,6 +345,8 @@ export interface MealImpact {
   timeToBaselineMinutes: number | null; // Minutes to return within 20 mg/dL of baseline
   glucoseCurve: Array<{ minutes: number; glucose: number }>; // For sparkline visualization
   readingsCount: number;
+  insulinDose: number | null; // Rapid insulin dose around meal time
+  carbRatio: number | null; // Carbs-to-insulin ratio (carbs / insulin units)
 }
 
 /**
@@ -353,7 +355,8 @@ export interface MealImpact {
  */
 export function analyzeMealImpact(
   meal: MealLog,
-  glucoseReadings: GlucoseReading[]
+  glucoseReadings: GlucoseReading[],
+  insulin: InsulinLog[] = []
 ): MealImpact | null {
   const mealTime = new Date(meal.timestamp).getTime();
 
@@ -437,6 +440,27 @@ export function analyzeMealImpact(
     glucose: r.glucose
   }));
 
+  // Find rapid insulin doses around meal time (within 30 minutes)
+  const INSULIN_WINDOW_MINUTES = 30;
+  let insulinDose: number | null = null;
+  let carbRatio: number | null = null;
+
+  const matchingInsulin = insulin.filter(dose => {
+    const doseTime = new Date(dose.timestamp).getTime();
+    const timeDiff = Math.abs(doseTime - mealTime);
+    // Only count rapid-acting insulin (exclude basal)
+    const isRapid = !isBasalInsulin(dose.insulin_type);
+    return isRapid && timeDiff <= INSULIN_WINDOW_MINUTES * 60 * 1000;
+  });
+
+  if (matchingInsulin.length > 0) {
+    insulinDose = matchingInsulin.reduce((sum, dose) => sum + dose.units, 0);
+    // Calculate carb-to-insulin ratio
+    if (insulinDose > 0 && meal.carbs > 0) {
+      carbRatio = meal.carbs / insulinDose;
+    }
+  }
+
   return {
     meal,
     baselineGlucose,
@@ -449,6 +473,8 @@ export function analyzeMealImpact(
     timeToBaselineMinutes,
     glucoseCurve,
     readingsCount: responseReadings.length,
+    insulinDose,
+    carbRatio,
   };
 }
 
@@ -457,10 +483,11 @@ export function analyzeMealImpact(
  */
 export function analyzeMealsImpact(
   meals: MealLog[],
-  glucoseReadings: GlucoseReading[]
+  glucoseReadings: GlucoseReading[],
+  insulin: InsulinLog[] = []
 ): MealImpact[] {
   return meals
-    .map(meal => analyzeMealImpact(meal, glucoseReadings))
+    .map(meal => analyzeMealImpact(meal, glucoseReadings, insulin))
     .filter((impact): impact is MealImpact => impact !== null)
     .sort((a, b) => new Date(b.meal.timestamp).getTime() - new Date(a.meal.timestamp).getTime());
 }
