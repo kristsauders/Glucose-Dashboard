@@ -454,7 +454,8 @@ export function analyzeMealImpact(
   });
 
   if (matchingInsulin.length > 0) {
-    insulinDose = matchingInsulin.reduce((sum, dose) => sum + dose.units, 0);
+    // Convert to number to prevent string concatenation bug
+    insulinDose = matchingInsulin.reduce((sum, dose) => sum + Number(dose.units), 0);
     // Calculate carb-to-insulin ratio
     if (insulinDose > 0 && meal.carbs > 0) {
       carbRatio = meal.carbs / insulinDose;
