@@ -33,7 +33,7 @@ export function AIChat() {
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const streamingMessageRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLInputElement>(null);
-  const wasStreamingRef = useRef(false);
+  const messagesContainerRef = useRef<HTMLDivElement>(null);
 
   // Only render recent messages for performance (paginated)
   const visibleMessages = useMemo(() => {
@@ -68,41 +68,10 @@ export function AIChat() {
     }
   };
 
-  // Handle scrolling: scroll to top when PROCESSING starts
-  useEffect(() => {
-    if (isLoading) {
-      // Scroll when a new message starts loading (includes follow-ups)
-      // Check if this is actually a NEW load (not just state update during streaming)
-      if (!wasStreamingRef.current || streamingMessage === '') {
-        // Use a slight delay to ensure the element has rendered
-        setTimeout(() => {
-          const element = streamingMessageRef.current;
-          if (element) {
-            const elementTop = element.getBoundingClientRect().top;
-            const offset = window.pageYOffset || document.documentElement.scrollTop;
-            const padding = 80; // Leave 80px of space above the message
+  // Scroll handling is now done directly in handleSend() for better reliability
 
-            window.scrollTo({
-              top: elementTop + offset - padding,
-              behavior: 'smooth'
-            });
-          }
-        }, 50);
-      }
-      wasStreamingRef.current = true;
-    } else {
-      wasStreamingRef.current = false;
-    }
-  }, [isLoading, streamingMessage]);
-
-  // Auto-focus input after messages load
-  useEffect(() => {
-    if (messages.length > 0 || activeConversationId) {
-      setTimeout(() => {
-        inputRef.current?.focus();
-      }, 300);
-    }
-  }, [messages.length, activeConversationId]);
+  // Note: Input auto-focus is handled specifically in loadConversation() and handleNewChat()
+  // Don't auto-focus on every message change as it interferes with scroll behavior
 
   // Handle deep-link from push notification (URL parameter)
   useEffect(() => {
@@ -209,17 +178,35 @@ export function AIChat() {
         setShowSidebar(false);
       }
 
-      // Focus input and scroll to bottom after sidebar closes
-      setTimeout(() => {
-        inputRef.current?.focus();
-        // Scroll to bottom to ensure input is visible
-        messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
-      }, isMobile ? 250 : 100);
+      // Wait for React to finish rendering, then focus and scroll
+      requestAnimationFrame(() => {
+        requestAnimationFrame(() => {
+          setTimeout(() => {
+            console.log('[Load Conversation] Attempting to focus input');
+            if (inputRef.current) {
+              inputRef.current.focus();
+            }
+            // Scroll container to bottom to ensure input is visible
+            if (messagesContainerRef.current) {
+              messagesContainerRef.current.scrollTo({
+                top: messagesContainerRef.current.scrollHeight,
+                behavior: 'smooth'
+              });
+            }
+          }, isMobile ? 100 : 50);
+        });
+      });
 
       // Additional scroll after keyboard appears (iOS keyboard animation delay)
       if (isMobile) {
         setTimeout(() => {
-          messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
+          console.log('[Load Conversation] Additional scroll for keyboard');
+          if (messagesContainerRef.current) {
+            messagesContainerRef.current.scrollTo({
+              top: messagesContainerRef.current.scrollHeight,
+              behavior: 'smooth'
+            });
+          }
         }, 600);
       }
     } catch (err) {
@@ -242,17 +229,41 @@ export function AIChat() {
         setShowSidebar(false);
       }
 
-      // Focus input and scroll to bottom after sidebar closes
-      setTimeout(() => {
-        inputRef.current?.focus();
-        // Scroll to bottom to ensure input is visible (especially on mobile with keyboard)
-        window.scrollTo({ top: document.body.scrollHeight, behavior: 'smooth' });
-      }, 250);
+      // Wait for React to finish rendering, then focus and scroll
+      // Use requestAnimationFrame to ensure browser has painted
+      requestAnimationFrame(() => {
+        requestAnimationFrame(() => {
+          setTimeout(() => {
+            console.log('[New Chat] Attempting to focus input');
+            console.log('[New Chat] Input ref exists:', !!inputRef.current);
+            console.log('[New Chat] Input disabled:', inputRef.current?.disabled);
+
+            if (inputRef.current) {
+              inputRef.current.focus();
+              console.log('[New Chat] Focus called, document.activeElement:', document.activeElement?.tagName);
+            }
+
+            // Scroll container to bottom to ensure input is visible
+            if (messagesContainerRef.current) {
+              messagesContainerRef.current.scrollTo({
+                top: messagesContainerRef.current.scrollHeight,
+                behavior: 'smooth'
+              });
+            }
+          }, isMobile ? 100 : 50); // Small delay after animation frames
+        });
+      });
 
       // Additional scroll after keyboard appears (iOS keyboard animation delay)
       if (isMobile) {
         setTimeout(() => {
-          window.scrollTo({ top: document.body.scrollHeight, behavior: 'smooth' });
+          console.log('[New Chat] Additional scroll for keyboard');
+          if (messagesContainerRef.current) {
+            messagesContainerRef.current.scrollTo({
+              top: messagesContainerRef.current.scrollHeight,
+              behavior: 'smooth'
+            });
+          }
         }, 600);
       }
     } catch (err) {
@@ -322,6 +333,49 @@ export function AIChat() {
       created_at: new Date().toISOString(),
     };
     setMessages((prev) => [...prev, tempUserMessage]);
+
+    // Scroll to show the streaming message area at the top of the viewport
+    // Use multiple attempts to work around keyboard closing timing
+    console.log('[Send] Scrolling to show response area');
+
+    const attemptScroll = (attemptNumber: number) => {
+      const element = streamingMessageRef.current;
+      const container = messagesContainerRef.current;
+
+      console.log(`[Send] Scroll attempt ${attemptNumber}, element:`, !!element, 'container:', !!container);
+
+      if (element && container) {
+        // Scroll the messages container to show streaming message at top with padding
+        const elementTop = element.offsetTop;
+        const targetScroll = elementTop - 80; // 80px padding from top
+
+        console.log(`[Send] Scrolling container to ${targetScroll}, current: ${container.scrollTop}`);
+        container.scrollTo({
+          top: targetScroll,
+          behavior: 'smooth'
+        });
+      } else if (container) {
+        // Fallback: scroll container to bottom
+        console.log('[Send] Element not found, scrolling container to bottom');
+        container.scrollTo({
+          top: container.scrollHeight,
+          behavior: 'smooth'
+        });
+      }
+    };
+
+    // Multiple attempts with increasing delays to handle:
+    // 1. React rendering delay
+    // 2. Keyboard closing animation
+    requestAnimationFrame(() => {
+      requestAnimationFrame(() => {
+        attemptScroll(1);
+        setTimeout(() => attemptScroll(2), 100);
+        setTimeout(() => attemptScroll(3), 300);
+        setTimeout(() => attemptScroll(4), 600);
+        setTimeout(() => attemptScroll(5), 900);
+      });
+    });
 
     try {
       const token = localStorage.getItem('t1d_auth_token');
@@ -434,7 +488,8 @@ export function AIChat() {
       setStatus('');
     } finally {
       setIsLoading(false);
-      inputRef.current?.focus();
+      // Don't auto-focus input after sending - let user read the response
+      // They can tap/click input when ready to type next message
     }
   };
 
@@ -634,7 +689,7 @@ export function AIChat() {
 
       <CardContent className="flex-1 flex flex-col p-0 min-h-0">
         {/* Messages */}
-        <div className="flex-1 overflow-x-auto overflow-y-auto px-2 py-4 md:p-4 space-y-4">
+        <div ref={messagesContainerRef} className="flex-1 overflow-x-auto overflow-y-auto px-2 py-4 md:p-4 space-y-4">
           {messages.length === 0 ? (
             <div className="h-full flex flex-col items-center justify-center text-center p-8">
               <MessageSquare className="h-12 w-12 text-muted-foreground mb-4" />
@@ -770,16 +825,28 @@ export function AIChat() {
               onChange={(e) => setInput(e.target.value)}
               onKeyPress={handleKeyPress}
               onFocus={() => {
-                // Scroll to bottom when input is focused, with retries to handle keyboard animation on mobile
-                const scrollToBottom = () => {
-                  messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
-                };
+                // Only scroll to bottom if NOT currently streaming a message
+                // (streaming messages should stay at top of viewport)
+                if (!isLoading && messagesContainerRef.current) {
+                  console.log('[Input Focus] Scrolling container to bottom for keyboard');
+                  const scrollToBottom = () => {
+                    const container = messagesContainerRef.current;
+                    if (container) {
+                      container.scrollTo({
+                        top: container.scrollHeight,
+                        behavior: 'smooth'
+                      });
+                    }
+                  };
 
-                // Try multiple times with increasing delays to handle keyboard animation
-                scrollToBottom(); // Immediate
-                setTimeout(scrollToBottom, 100);  // After 100ms
-                setTimeout(scrollToBottom, 300);  // After 300ms
-                setTimeout(scrollToBottom, 500);  // After 500ms (keyboard should be fully up)
+                  // Try multiple times with increasing delays to handle keyboard animation on mobile
+                  scrollToBottom(); // Immediate
+                  setTimeout(scrollToBottom, 100);  // After 100ms
+                  setTimeout(scrollToBottom, 300);  // After 300ms
+                  setTimeout(scrollToBottom, 500);  // After 500ms (keyboard should be fully up)
+                } else {
+                  console.log('[Input Focus] Skipping scroll (message is streaming)');
+                }
               }}
               placeholder="Ask about your glucose data..."
               disabled={isLoading}
