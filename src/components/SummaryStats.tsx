@@ -90,6 +90,14 @@ export function SummaryStats({ readings, dailyMetrics, bedtimeMetrics = [], date
     } else {
       // For historical modes, show averages
       const dailyLogs = calculateDailyLogMetrics(insulin, meals, exercise);
+      console.log('[SummaryStats] Historical mode debug:', {
+        dateRange,
+        totalInsulinLogs: insulin.length,
+        totalMealLogs: meals.length,
+        totalExerciseLogs: exercise.length,
+        dailyLogsCount: dailyLogs.length,
+        dailyLogsSample: dailyLogs.slice(0, 3)
+      });
       if (dailyLogs.length > 0) {
         // Only sum valid numbers
         const totalCarbs = dailyLogs.reduce((sum, d) => {
@@ -118,6 +126,17 @@ export function SummaryStats({ readings, dailyMetrics, bedtimeMetrics = [], date
         const daysWithInsulin = dailyLogs.filter(d => Number(d.totalInsulin) > 0).length;
         const daysWithExercise = dailyLogs.filter(d => Number(d.exerciseMinutes) > 0).length;
 
+        console.log('[SummaryStats] Totals and days:', {
+          totalCarbs,
+          totalInsulin,
+          totalBasal,
+          totalRapid,
+          daysWithCarbs,
+          daysWithInsulin,
+          avgCarbs: daysWithCarbs > 0 ? totalCarbs / daysWithCarbs : 0,
+          avgInsulin: daysWithInsulin > 0 ? totalInsulin / daysWithInsulin : 0,
+        });
+
         const ratios = calculateCarbRatios(meals, insulin);
         const avgRatio = ratios.length > 0
           ? ratios.reduce((sum, r) => sum + r.ratio, 0) / ratios.length
@@ -131,6 +150,8 @@ export function SummaryStats({ readings, dailyMetrics, bedtimeMetrics = [], date
           exerciseMinutes: daysWithExercise > 0 ? totalExercise / daysWithExercise : 0,
           carbRatio: avgRatio,
         };
+
+        console.log('[SummaryStats] Final avgLogMetrics:', avgLogMetrics);
       }
     }
   }
