@@ -2,6 +2,7 @@ import { useState, useMemo, useEffect, useCallback } from 'react';
 import { Link } from 'react-router-dom';
 import { motion } from 'framer-motion';
 import type { GlucoseReading } from '@/types/glucose';
+import type { InsulinLog, MealLog, ExerciseLog } from '@/types/logs';
 import {
   calculateDailyMetrics,
   calculateWeeklyMetrics,
@@ -21,6 +22,11 @@ import { WeeklyDetailedMetrics } from './charts/WeeklyDetailedMetrics';
 import { WeeklyA1CChart } from './charts/WeeklyA1CChart';
 import { ContinuousGlucoseChart } from './charts/ContinuousGlucoseChart';
 import { GlucoseDistributionCharts } from './charts/GlucoseDistributionCharts';
+import { DailyCarbChart } from './charts/DailyCarbChart';
+import { InsulinUsageChart } from './charts/InsulinUsageChart';
+import { CarbRatioChart } from './charts/CarbRatioChart';
+import { ExercisePatternChart } from './charts/ExercisePatternChart';
+import { MealImpactAnalysis } from './charts/MealImpactAnalysis';
 import { DateRangeSelector, type DateRangePreset } from './DateRangeSelector';
 import { LatestReading } from './LatestReading';
 import { QuickActionsBar } from './quick-actions/QuickActionsBar';
@@ -46,6 +52,11 @@ export function Dashboard({ readings, onDataUpdated }: DashboardProps) {
   const [showSettings, setShowSettings] = useState(false);
   const [showLogs, setShowLogs] = useState(false);
   const [showLoggingOverlay, setShowLoggingOverlay] = useState(false);
+
+  // Log data state
+  const [insulinLogs, setInsulinLogs] = useState<InsulinLog[]>([]);
+  const [mealLogs, setMealLogs] = useState<MealLog[]>([]);
+  const [exerciseLogs, setExerciseLogs] = useState<ExerciseLog[]>([]);
 
   // Close modals with ESC key
   useEffect(() => {
@@ -114,6 +125,58 @@ export function Dashboard({ readings, onDataUpdated }: DashboardProps) {
 
   // All readings come from the backend (includes LibreView-synced data)
   const allReadings = readings;
+
+  // Fetch log data based on date range
+  useEffect(() => {
+    const fetchLogs = async () => {
+      if (allReadings.length === 0) return;
+
+      try {
+        const sortedReadings = [...allReadings].sort((a, b) =>
+          a.timestamp.getTime() - b.timestamp.getTime()
+        );
+        const dataEnd = sortedReadings[sortedReadings.length - 1].timestamp;
+
+        let startDate: Date;
+        switch (dateRange) {
+          case 'live': {
+            const now = new Date();
+            const today7am = setMilliseconds(setSeconds(setMinutes(setHours(startOfDay(now), 7), 0), 0), 0);
+            startDate = today7am;
+            break;
+          }
+          case '7d':
+            startDate = subDays(dataEnd, 7);
+            break;
+          case '14d':
+            startDate = subWeeks(dataEnd, 2);
+            break;
+          case '30d':
+            startDate = subDays(dataEnd, 30);
+            break;
+          case '90d':
+            startDate = subDays(dataEnd, 90);
+            break;
+          default:
+            startDate = sortedReadings[0].timestamp;
+        }
+
+        const [insulin, meals, exercise] = await Promise.all([
+          apiService.getInsulinLogs(startDate, dataEnd, 500),
+          apiService.getMealLogs(startDate, dataEnd, 500),
+          apiService.getExerciseLogs(startDate, dataEnd, 500),
+        ]);
+
+        setInsulinLogs(insulin);
+        setMealLogs(meals);
+        setExerciseLogs(exercise);
+      } catch (error) {
+        console.error('Failed to fetch log data:', error);
+      }
+    };
+
+    fetchLogs();
+  }, [dateRange, allReadings]);
 
   // Get date range for filtering
   const { filteredReadings, startDate, endDate } = useMemo(() => {
@@ -326,6 +389,9 @@ export function Dashboard({ readings, onDataUpdated }: DashboardProps) {
             dailyMetrics={dailyMetrics}
             bedtimeMetrics={bedtimeMetrics}
             dateRange={dateRange}
+            insulin={insulinLogs}
+            meals={mealLogs}
+            exercise={exerciseLogs}
           />
 
           {/* Charts Grid */}
@@ -339,6 +405,10 @@ export function Dashboard({ readings, onDataUpdated }: DashboardProps) {
                     data={filteredReadings}
                     title="Today's Glucose Levels"
                     description="Real-time glucose readings from 7am through now"
+                    insulin={insulinLogs}
+                    meals={mealLogs}
+                    exercise={exerciseLogs}
+                    showEvents={true}
                   />
                 </div>
 
@@ -359,6 +429,10 @@ export function Dashboard({ readings, onDataUpdated }: DashboardProps) {
                       data={filteredReadings}
                       title="Continuous Glucose Monitor"
                       description="Detailed view of all glucose readings in selected time period"
+                      insulin={insulinLogs}
+                      meals={mealLogs}
+                      exercise={exerciseLogs}
+                      showEvents={false}
                     />
                   </div>
                 )}
@@ -425,6 +499,41 @@ export function Dashboard({ readings, onDataUpdated }: DashboardProps) {
                     </div>
                   )}
                 </div>
+              </>
+            )}
+
+            {/* Log Analytics Charts */}
+            {(mealLogs.length > 0 || insulinLogs.length > 0 || exerciseLogs.length > 0) && (
+              <>
+                {/* Meal Impact Analysis - Show in both live and historical modes */}
+                {mealLogs.length > 0 && (
+                  <MealImpactAnalysis
+                    meals={mealLogs}
+                    glucoseReadings={filteredReadings}
+                    dateRange={dateRange}
+                  />
+                )}
+
+                {/* Other log analytics charts - Only show in historical mode */}
+                {dateRange !== 'live' && (
+                  <>
+                    {mealLogs.length > 0 && (
+                      <DailyCarbChart meals={mealLogs} />
+                    )}
+
+                    {insulinLogs.length > 0 && (
+                      <InsulinUsageChart insulin={insulinLogs} />
+                    )}
+
+                    {mealLogs.length > 0 && insulinLogs.length > 0 && (
+                      <CarbRatioChart insulin={insulinLogs} meals={mealLogs} />
+                    )}
+
+                    {exerciseLogs.length > 0 && (
+                      <ExercisePatternChart exercise={exerciseLogs} />
+                    )}
+                  </>
+                )}
               </>
             )}
           </div>

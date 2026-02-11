@@ -869,8 +869,8 @@ export const sendProactiveMessageTool = new DynamicStructuredTool({
       });
 
       // 1. Find or create conversation for proactive messages
-      // Check if there's an existing "Proactive Check-ins" conversation with <10 messages
-      const MAX_MESSAGES_PER_CONVERSATION = 10;
+      // Check if there's an existing "Proactive Check-ins" conversation with <50 messages
+      const MAX_MESSAGES_PER_CONVERSATION = 50;
 
       const existingConversationResult = await query(
         `SELECT c.id, COUNT(cm.id) as message_count
@@ -2762,7 +2762,7 @@ export const estimateExerciseIntensityTool = new DynamicStructuredTool({
 
     // Estimate activity type
     let activityType = 'cardio'; // default
-    if (/walk|jog|run|bike|cycle|swim/i.test(lower)) {
+    if (/walk|jog|run|elliptical|bike|cycle|swim/i.test(lower)) {
       activityType = 'cardio';
     } else if (/weight|lift|strength|gym/i.test(lower)) {
       activityType = 'strength';

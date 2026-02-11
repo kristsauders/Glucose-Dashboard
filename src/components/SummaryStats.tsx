@@ -1,18 +1,26 @@
 import { motion } from 'framer-motion';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import type { GlucoseReading, DailyMetrics, BedtimeMetrics } from '@/types/glucose';
-import { Activity, TrendingDown, TrendingUp, Target, AlertCircle, Moon } from 'lucide-react';
+import type { InsulinLog, MealLog, ExerciseLog } from '@/types/logs';
+import { Activity, TrendingDown, TrendingUp, Target, AlertCircle, Moon, Utensils, Syringe, Dumbbell, Calculator } from 'lucide-react';
+import { getTodayLogMetrics, calculateDailyLogMetrics, calculateCarbRatios } from '@/lib/logAnalysis';
 
 interface SummaryStatsProps {
   readings: GlucoseReading[];
   dailyMetrics: DailyMetrics[];
   bedtimeMetrics?: BedtimeMetrics[];
   dateRange?: string;
+  insulin?: InsulinLog[];
+  meals?: MealLog[];
+  exercise?: ExerciseLog[];
 }
 
-export function SummaryStats({ readings, dailyMetrics, bedtimeMetrics = [], dateRange = 'live' }: SummaryStatsProps) {
+export function SummaryStats({ readings, dailyMetrics, bedtimeMetrics = [], dateRange = 'live', insulin = [], meals = [], exercise = [] }: SummaryStatsProps) {
   // Calculate overall statistics
   const allGlucose = readings.map(r => r.glucose).filter(g => !isNaN(g) && isFinite(g) && g > 0);
+
+  // Calculate log metrics
+  const hasLogs = insulin.length > 0 || meals.length > 0 || exercise.length > 0;
 
   // Handle empty dataset
   if (allGlucose.length === 0) {
@@ -71,6 +79,64 @@ export function SummaryStats({ readings, dailyMetrics, bedtimeMetrics = [], date
     }
   }
 
+  // Calculate log-based metrics
+  let logMetrics: ReturnType<typeof getTodayLogMetrics> | null = null;
+  let avgLogMetrics: { carbs: number; insulin: number; basalInsulin: number; rapidInsulin: number; exerciseMinutes: number; carbRatio: number | null } | null = null;
+
+  if (hasLogs) {
+    if (dateRange === 'live') {
+      // For live mode, show today's totals
+      logMetrics = getTodayLogMetrics(insulin, meals, exercise);
+    } else {
+      // For historical modes, show averages
+      const dailyLogs = calculateDailyLogMetrics(insulin, meals, exercise);
+      if (dailyLogs.length > 0) {
+        // Only sum valid numbers
+        const totalCarbs = dailyLogs.reduce((sum, d) => {
+          const val = Number(d.totalCarbs);
+          return sum + (isFinite(val) ? val : 0);
+        }, 0);
+        const totalInsulin = dailyLogs.reduce((sum, d) => {
+          const val = Number(d.totalInsulin);
+          return sum + (isFinite(val) ? val : 0);
+        }, 0);
+        const totalBasal = dailyLogs.reduce((sum, d) => {
+          const val = Number(d.basalInsulin);
+          return sum + (isFinite(val) ? val : 0);
+        }, 0);
+        const totalRapid = dailyLogs.reduce((sum, d) => {
+          const val = Number(d.rapidInsulin);
+          return sum + (isFinite(val) ? val : 0);
+        }, 0);
+        const totalExercise = dailyLogs.reduce((sum, d) => {
+          const val = Number(d.exerciseMinutes);
+          return sum + (isFinite(val) ? val : 0);
+        }, 0);
+
+        // Count only days with actual data for each metric
+        const daysWithCarbs = dailyLogs.filter(d => Number(d.totalCarbs) > 0).length;
+        const daysWithInsulin = dailyLogs.filter(d => Number(d.totalInsulin) > 0).length;
+        const daysWithExercise = dailyLogs.filter(d => Number(d.exerciseMinutes) > 0).length;
+
+        const ratios = calculateCarbRatios(meals, insulin);
+        const avgRatio = ratios.length > 0
+          ? ratios.reduce((sum, r) => sum + r.ratio, 0) / ratios.length
+          : null;
+
+        avgLogMetrics = {
+          carbs: daysWithCarbs > 0 ? totalCarbs / daysWithCarbs : 0,
+          insulin: daysWithInsulin > 0 ? totalInsulin / daysWithInsulin : 0,
+          basalInsulin: daysWithInsulin > 0 ? totalBasal / daysWithInsulin : 0,
+          rapidInsulin: daysWithInsulin > 0 ? totalRapid / daysWithInsulin : 0,
+          exerciseMinutes: daysWithExercise > 0 ? totalExercise / daysWithExercise : 0,
+          carbRatio: avgRatio,
+        };
+      }
+    }
+  }
+
+  const currentMetrics = dateRange === 'live' ? logMetrics : avgLogMetrics;
+
   const stats = [
     {
       title: "Average Glucose",
@@ -97,6 +163,43 @@ export function SummaryStats({ readings, dailyMetrics, bedtimeMetrics = [], date
       bgColor: bedtimeGlucose >= 80 && bedtimeGlucose <= 120 ? "bg-[hsl(var(--chart-2))]/10" : "bg-[hsl(var(--chart-4))]/10",
       subtitle: dateRange === 'live' ? "10pm-midnight avg" : `${bedtimeMetrics?.length || 0} nights avg`,
       chartId: "bedtime-glucose-chart",
+    }] : []),
+    // Log-based stats
+    ...(currentMetrics && typeof currentMetrics.carbs === 'number' && !isNaN(currentMetrics.carbs) && currentMetrics.carbs > 0 ? [{
+      title: dateRange === 'live' ? "Today's Carbs" : "Avg Daily Carbs",
+      value: `${currentMetrics.carbs.toFixed(0)}g`,
+      icon: Utensils,
+      color: "text-[hsl(var(--chart-3))]",
+      bgColor: "bg-[hsl(var(--chart-3))]/10",
+      subtitle: dateRange === 'live' ? "Total today" : "Per day average",
+      chartId: "daily-carb-chart",
+    }] : []),
+    ...(currentMetrics && typeof currentMetrics.insulin === 'number' && !isNaN(currentMetrics.insulin) && currentMetrics.insulin > 0 ? [{
+      title: dateRange === 'live' ? "Today's Insulin" : "Avg Daily Insulin",
+      value: `${currentMetrics.insulin.toFixed(1)}u`,
+      icon: Syringe,
+      color: "text-[hsl(var(--chart-4))]",
+      bgColor: "bg-[hsl(var(--chart-4))]/10",
+      subtitle: `${currentMetrics.basalInsulin.toFixed(1)}u basal, ${currentMetrics.rapidInsulin.toFixed(1)}u rapid`,
+      chartId: "insulin-usage-chart",
+    }] : []),
+    ...(currentMetrics && currentMetrics.carbRatio !== null && typeof currentMetrics.carbRatio === 'number' && !isNaN(currentMetrics.carbRatio) ? [{
+      title: dateRange === 'live' ? "Today's Carb Ratio" : "Avg Carb Ratio",
+      value: `1:${currentMetrics.carbRatio.toFixed(1)}`,
+      icon: Calculator,
+      color: "text-primary",
+      bgColor: "bg-primary/10",
+      subtitle: "Carbs per unit insulin",
+      chartId: "carb-ratio-chart",
+    }] : []),
+    ...(currentMetrics && typeof currentMetrics.exerciseMinutes === 'number' && !isNaN(currentMetrics.exerciseMinutes) && currentMetrics.exerciseMinutes > 0 ? [{
+      title: dateRange === 'live' ? "Today's Exercise" : "Avg Daily Exercise",
+      value: `${currentMetrics.exerciseMinutes.toFixed(0)} min`,
+      icon: Dumbbell,
+      color: "text-[hsl(var(--chart-2))]",
+      bgColor: "bg-[hsl(var(--chart-2))]/10",
+      subtitle: dateRange === 'live' ? "Total today" : "Per day average",
+      chartId: "exercise-pattern-chart",
     }] : []),
     {
       title: "Time in Range",

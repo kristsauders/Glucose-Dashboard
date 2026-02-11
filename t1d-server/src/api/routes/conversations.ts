@@ -62,6 +62,8 @@ router.get('/:id', async (req, res, next) => {
     const authReq = req as AuthRequest;
     const { id } = req.params;
 
+    console.log(`[GET /conversations/${id}] Fetching conversation for user:`, authReq.user!.id);
+
     // Get conversation
     const convResult = await query<Conversation>(
       `SELECT id, user_id, title, created_at, updated_at
@@ -71,8 +73,11 @@ router.get('/:id', async (req, res, next) => {
     );
 
     if (convResult.rows.length === 0) {
+      console.log(`[GET /conversations/${id}] Conversation not found`);
       return res.status(404).json({ error: 'Conversation not found' });
     }
+
+    console.log(`[GET /conversations/${id}] Found conversation:`, convResult.rows[0].title);
 
     // Get messages
     const messagesResult = await query(
@@ -83,6 +88,12 @@ router.get('/:id', async (req, res, next) => {
       [id]
     );
 
+    console.log(`[GET /conversations/${id}] Found ${messagesResult.rows.length} messages`);
+    if (messagesResult.rows.length > 0) {
+      console.log(`[GET /conversations/${id}] First message role:`, messagesResult.rows[0].role);
+      console.log(`[GET /conversations/${id}] Last message role:`, messagesResult.rows[messagesResult.rows.length - 1].role);
+    }
+
     const response: ConversationWithMessages = {
       ...convResult.rows[0],
       messages: messagesResult.rows,
@@ -90,6 +101,7 @@ router.get('/:id', async (req, res, next) => {
 
     res.json(response);
   } catch (error) {
+    console.error(`[GET /conversations/:id] Error:`, error);
     next(error);
   }
 });

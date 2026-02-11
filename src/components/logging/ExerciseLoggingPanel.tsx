@@ -8,7 +8,7 @@ interface ExerciseLoggingPanelProps {
   onSuccess: () => void;
 }
 
-const ACTIVITY_TYPES = ['Walk', 'Run', 'Bike', 'Swim', 'Gym', 'Yoga', 'Sports', 'Other'];
+const ACTIVITY_TYPES = ['Walk', 'Run', 'Bike', 'Swim', 'Gym', 'Yoga', 'Elliptical', 'Other'];
 const DURATION_OPTIONS = [15, 30, 45, 60, 90, 120];
 const INTENSITY_OPTIONS = [
   { value: 'light', label: 'Light' },
