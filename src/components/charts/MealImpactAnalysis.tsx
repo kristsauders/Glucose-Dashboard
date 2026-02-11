@@ -175,7 +175,7 @@ export function MealImpactAnalysis({ meals, glucoseReadings, insulin = [], exerc
                     <div className="flex justify-center">
                       <div className="w-full md:w-2/3 lg:w-1/2">
                         <ResponsiveContainer width="100%" height={120}>
-                          <LineChart data={impact.glucoseCurve} margin={{ top: 5, right: 40, bottom: 5, left: 5 }}>
+                          <LineChart data={impact.glucoseCurve} margin={{ top: 5, right: 40, bottom: 5, left: 35 }}>
                             <YAxis domain={[60, 200]} hide />
                             <Line
                               type="monotone"
@@ -204,11 +204,32 @@ export function MealImpactAnalysis({ meals, glucoseReadings, insulin = [], exerc
                               strokeDasharray="2 2"
                               strokeWidth={1}
                               label={{
-                                value: impact.peakGlucose.toFixed(0),
                                 position: 'top',
-                                fill: 'hsl(var(--chart-1))',
-                                fontSize: 11,
-                                offset: 5,
+                                content: ({ viewBox }) => {
+                                  // Find the index in the curve where peak occurs
+                                  const peakIndex = impact.glucoseCurve.findIndex(
+                                    p => Math.abs(p.glucose - impact.peakGlucose) < 0.5
+                                  );
+                                  if (peakIndex === -1) return null;
+
+                                  // Calculate x position based on chart width and data points
+                                  const chartWidth = (viewBox?.width || 0);
+                                  const dataPoints = impact.glucoseCurve.length;
+                                  const x = (viewBox?.x || 0) + (chartWidth * peakIndex / (dataPoints - 1));
+                                  const y = (viewBox?.y || 0) - 8;
+
+                                  return (
+                                    <text
+                                      x={x}
+                                      y={y}
+                                      fill="hsl(var(--chart-1))"
+                                      fontSize={11}
+                                      textAnchor="middle"
+                                    >
+                                      {impact.peakGlucose.toFixed(0)}
+                                    </text>
+                                  );
+                                },
                               }}
                             />
                             {/* Ending glucose (at 3 hours) line */}
