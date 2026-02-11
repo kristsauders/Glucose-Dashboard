@@ -1,14 +1,16 @@
 import { motion } from 'framer-motion';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
-import type { GlucoseReading, DailyMetrics } from '@/types/glucose';
-import { Activity, TrendingDown, TrendingUp, Target, AlertCircle } from 'lucide-react';
+import type { GlucoseReading, DailyMetrics, BedtimeMetrics } from '@/types/glucose';
+import { Activity, TrendingDown, TrendingUp, Target, AlertCircle, Moon } from 'lucide-react';
 
 interface SummaryStatsProps {
   readings: GlucoseReading[];
   dailyMetrics: DailyMetrics[];
+  bedtimeMetrics?: BedtimeMetrics[];
+  dateRange?: string;
 }
 
-export function SummaryStats({ readings, dailyMetrics }: SummaryStatsProps) {
+export function SummaryStats({ readings, dailyMetrics, bedtimeMetrics = [], dateRange = 'live' }: SummaryStatsProps) {
   // Calculate overall statistics
   const allGlucose = readings.map(r => r.glucose).filter(g => !isNaN(g) && isFinite(g) && g > 0);
 
@@ -50,6 +52,25 @@ export function SummaryStats({ readings, dailyMetrics }: SummaryStatsProps) {
   // Formula: A1C ≈ (Average Glucose + 46.7) / 28.7
   const estimatedA1C = (overallAvg + 46.7) / 28.7;
 
+  // Calculate bedtime glucose (last night's value for live, average for historical)
+  let bedtimeGlucose: number | null = null;
+  let bedtimeLabel = "Bedtime Glucose";
+  if (bedtimeMetrics && bedtimeMetrics.length > 0) {
+    if (dateRange === 'live') {
+      // For live mode, show last night's bedtime glucose
+      bedtimeGlucose = bedtimeMetrics[bedtimeMetrics.length - 1].bedtimeGlucose;
+      bedtimeLabel = "Last Night's Bedtime";
+    } else {
+      // For historical ranges, show average bedtime glucose
+      const validBedtimes = bedtimeMetrics
+        .map(m => m.bedtimeGlucose)
+        .filter(g => !isNaN(g) && isFinite(g) && g > 0);
+      if (validBedtimes.length > 0) {
+        bedtimeGlucose = validBedtimes.reduce((sum, val) => sum + val, 0) / validBedtimes.length;
+      }
+    }
+  }
+
   const stats = [
     {
       title: "Average Glucose",
@@ -68,6 +89,15 @@ export function SummaryStats({ readings, dailyMetrics }: SummaryStatsProps) {
       subtitle: estimatedA1C <= 5.7 ? "Non-diabetic range" : "Pre-diabetic range",
       chartId: "weekly-a1c-chart",
     },
+    ...(bedtimeGlucose !== null ? [{
+      title: bedtimeLabel,
+      value: `${bedtimeGlucose.toFixed(1)} mg/dL`,
+      icon: Moon,
+      color: bedtimeGlucose >= 80 && bedtimeGlucose <= 120 ? "text-[hsl(var(--chart-2))]" : "text-[hsl(var(--chart-4))]",
+      bgColor: bedtimeGlucose >= 80 && bedtimeGlucose <= 120 ? "bg-[hsl(var(--chart-2))]/10" : "bg-[hsl(var(--chart-4))]/10",
+      subtitle: dateRange === 'live' ? "10pm-midnight avg" : `${bedtimeMetrics?.length || 0} nights avg`,
+      chartId: "bedtime-glucose-chart",
+    }] : []),
     {
       title: "Time in Range",
       value: `${timeInRange.toFixed(1)}%`,

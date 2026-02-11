@@ -23,12 +23,14 @@ import { ContinuousGlucoseChart } from './charts/ContinuousGlucoseChart';
 import { GlucoseDistributionCharts } from './charts/GlucoseDistributionCharts';
 import { DateRangeSelector, type DateRangePreset } from './DateRangeSelector';
 import { LatestReading } from './LatestReading';
+import { QuickActionsBar } from './quick-actions/QuickActionsBar';
 import { AIChat } from './AIChat';
 import { Settings } from './Settings';
 import { LogsModal } from './logs';
+import { LoggingOverlay } from './logging';
 import { Button } from './ui/button';
 import { ThemeToggle } from './ThemeToggle';
-import { Upload, MessageSquare, LogOut, X, Settings as SettingsIcon, ClipboardList, FileText } from 'lucide-react';
+import { Upload, MessageSquare, LogOut, X, Settings as SettingsIcon, ClipboardList, FileText, Plus } from 'lucide-react';
 import { apiService } from '@/services/api';
 import { subDays, subWeeks, startOfDay, setHours, setMinutes, setSeconds, setMilliseconds } from 'date-fns';
 
@@ -43,12 +45,15 @@ export function Dashboard({ readings, onDataUpdated }: DashboardProps) {
   const [showChat, setShowChat] = useState(false);
   const [showSettings, setShowSettings] = useState(false);
   const [showLogs, setShowLogs] = useState(false);
+  const [showLoggingOverlay, setShowLoggingOverlay] = useState(false);
 
   // Close modals with ESC key
   useEffect(() => {
     const handleEscape = (e: KeyboardEvent) => {
       if (e.key === 'Escape') {
-        if (showLogs) {
+        if (showLoggingOverlay) {
+          setShowLoggingOverlay(false);
+        } else if (showLogs) {
           setShowLogs(false);
         } else if (showSettings) {
           setShowSettings(false);
@@ -60,7 +65,7 @@ export function Dashboard({ readings, onDataUpdated }: DashboardProps) {
 
     document.addEventListener('keydown', handleEscape);
     return () => document.removeEventListener('keydown', handleEscape);
-  }, [showChat, showSettings, showLogs]);
+  }, [showChat, showSettings, showLogs, showLoggingOverlay]);
 
   const handleLogout = () => {
     if (confirm('Are you sure you want to logout?')) {
@@ -223,17 +228,13 @@ export function Dashboard({ readings, onDataUpdated }: DashboardProps) {
         className="border-b bg-card/50 backdrop-blur-sm md:sticky top-0 z-10"
       >
         <div className="container mx-auto px-2 md:px-4 py-2 md:py-4">
-          <div className="flex flex-col md:flex-row items-start md:items-center gap-2">
-            <div className="flex-1 min-w-0">
-              <h1 className="text-xl md:text-3xl font-bold bg-gradient-to-r from-primary to-primary/60 bg-clip-text text-transparent">
-                Sage
-              </h1>
-            </div>
-            <div className="flex gap-2 flex-wrap w-full md:w-auto md:flex-shrink-0">
-              <Button variant="outline" size="sm" onClick={() => setShowChat(!showChat)}>
-                <MessageSquare className="h-4 w-4 md:mr-2" />
-                <span className="hidden md:inline">AI Chat</span>
-              </Button>
+          {/* First row: Title and utility buttons */}
+          <div className="flex items-center justify-between gap-2 mb-2">
+            <h1 className="text-xl md:text-3xl font-bold bg-gradient-to-r from-primary to-primary/60 bg-clip-text text-transparent">
+              Sage
+            </h1>
+            <div className="flex gap-2">
+              <ThemeToggle />
               <Button
                 variant="outline"
                 size="sm"
@@ -242,52 +243,67 @@ export function Dashboard({ readings, onDataUpdated }: DashboardProps) {
                 <SettingsIcon className="h-4 w-4 md:mr-2" />
                 <span className="hidden md:inline">Settings</span>
               </Button>
-              <Button
-                variant="outline"
-                size="sm"
-                asChild
-              >
-                <Link to="/reports" className="flex items-center">
-                  <FileText className="h-4 w-4 md:mr-2" />
-                  <span className="hidden md:inline">Reports</span>
-                </Link>
-              </Button>
-              <Button
-                variant="outline"
-                size="sm"
-                onClick={() => setShowLogs(true)}
-              >
-                <ClipboardList className="h-4 w-4 md:mr-2" />
-                <span className="hidden md:inline">Logs</span>
-              </Button>
-              <Button
-                variant="outline"
-                size="sm"
-                onClick={() => document.getElementById('csv-upload')?.click()}
-              >
-                <Upload className="h-4 w-4 md:mr-2" />
-                <span className="hidden md:inline">Import CSV</span>
-              </Button>
-              <input
-                id="csv-upload"
-                type="file"
-                accept=".csv"
-                onChange={handleCSVUpload}
-                className="hidden"
-              />
-              <ThemeToggle />
               <Button variant="outline" size="sm" onClick={handleLogout}>
                 <LogOut className="h-4 w-4 md:mr-2" />
                 <span className="hidden md:inline">Logout</span>
               </Button>
             </div>
           </div>
+
+          {/* Second row: Action buttons */}
+          <div className="flex gap-2 flex-wrap justify-end">
+            <Button variant="outline" size="sm" onClick={() => setShowChat(!showChat)}>
+              <MessageSquare className="h-4 w-4 md:mr-2" />
+              <span className="hidden md:inline">AI Chat</span>
+            </Button>
+            <Button
+              variant="default"
+              size="sm"
+              onClick={() => setShowLoggingOverlay(true)}
+            >
+              <Plus className="h-4 w-4 md:mr-2" />
+              <span className="hidden md:inline">Log Event</span>
+            </Button>
+            <Button
+              variant="outline"
+              size="sm"
+              asChild
+            >
+              <Link to="/reports" className="flex items-center">
+                <FileText className="h-4 w-4 md:mr-2" />
+                <span className="hidden md:inline">Reports</span>
+              </Link>
+            </Button>
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => setShowLogs(true)}
+            >
+              <ClipboardList className="h-4 w-4 md:mr-2" />
+              <span className="hidden md:inline">Logs</span>
+            </Button>
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => document.getElementById('csv-upload')?.click()}
+            >
+              <Upload className="h-4 w-4 md:mr-2" />
+              <span className="hidden md:inline">Import CSV</span>
+            </Button>
+            <input
+              id="csv-upload"
+              type="file"
+              accept=".csv"
+              onChange={handleCSVUpload}
+              className="hidden"
+            />
+          </div>
         </div>
       </motion.header>
 
       {/* Main Content */}
       <main className="container mx-auto px-2 md:px-4 py-8">
-        <div className="space-y-8">
+        <div className="space-y-4 md:space-y-8">
           {/* Date Range Selector */}
           <DateRangeSelector
             selectedRange={dateRange}
@@ -301,11 +317,19 @@ export function Dashboard({ readings, onDataUpdated }: DashboardProps) {
             <LatestReading reading={latestReading} isLive={true} />
           )}
 
+          {/* Quick Actions Bar */}
+          <QuickActionsBar onLogSuccess={onDataUpdated} />
+
           {/* Summary Stats */}
-          <SummaryStats readings={filteredReadings} dailyMetrics={dailyMetrics} />
+          <SummaryStats
+            readings={filteredReadings}
+            dailyMetrics={dailyMetrics}
+            bedtimeMetrics={bedtimeMetrics}
+            dateRange={dateRange}
+          />
 
           {/* Charts Grid */}
-          <div className="space-y-8">
+          <div className="space-y-4 md:space-y-8">
             {/* Live Mode: Today-focused charts */}
             {dateRange === 'live' ? (
               <>
@@ -318,24 +342,12 @@ export function Dashboard({ readings, onDataUpdated }: DashboardProps) {
                   />
                 </div>
 
-                {/* Time in Range for Today */}
-                <div id="time-in-range-chart">
-                  <TimeInRangeChart data={dailyMetrics} />
-                </div>
-
-                {/* Overnight and Bedtime (Last Night) */}
-                <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
-                  {overnightMetrics.length > 0 && (
-                    <div id="overnight-fasting-chart">
-                      <OvernightFastingChart data={overnightMetrics} />
-                    </div>
-                  )}
-                  {bedtimeMetrics.length > 0 && (
-                    <div id="bedtime-glucose-chart">
-                      <BedtimeGlucoseChart data={bedtimeMetrics} />
-                    </div>
-                  )}
-                </div>
+                {/* Overnight Fasting (Last Night) */}
+                {overnightMetrics.length > 0 && (
+                  <div id="overnight-fasting-chart">
+                    <OvernightFastingChart data={overnightMetrics} />
+                  </div>
+                )}
               </>
             ) : (
               <>
@@ -384,7 +396,7 @@ export function Dashboard({ readings, onDataUpdated }: DashboardProps) {
                 </div>
 
                 {/* Two column grid for medium charts */}
-                <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
+                <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 md:gap-8">
                   <div id="glucose-variability-chart">
                     <CoefficientOfVariabilityChart data={dailyMetrics} />
                   </div>
@@ -401,7 +413,7 @@ export function Dashboard({ readings, onDataUpdated }: DashboardProps) {
                 )}
 
                 {/* Overnight and Bedtime */}
-                <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
+                <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 md:gap-8">
                   {overnightMetrics.length > 0 && (
                     <div id="overnight-fasting-chart">
                       <OvernightFastingChart data={overnightMetrics} />
@@ -473,6 +485,13 @@ export function Dashboard({ readings, onDataUpdated }: DashboardProps) {
           endDate={endDate}
         />
       )}
+
+      {/* Logging Overlay */}
+      <LoggingOverlay
+        isOpen={showLoggingOverlay}
+        onClose={() => setShowLoggingOverlay(false)}
+        onLogSuccess={onDataUpdated}
+      />
     </div>
   );
 }

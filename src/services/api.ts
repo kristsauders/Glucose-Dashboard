@@ -1,6 +1,7 @@
 import type { GlucoseReading } from '@/types/glucose';
 import type { Conversation, ConversationWithMessages } from '@/types/chat';
 import type { MealLog, ExerciseLog, InsulinLog } from '@/types/logs';
+import type { QuickAction, QuickLogRequest, QuickLogResponse } from '@/types/quickActions';
 
 const API_BASE_URL = `${import.meta.env.VITE_API_URL || 'http://localhost:3002'}/api`;
 
@@ -473,6 +474,21 @@ class APIService {
   async deleteReport(reportId: string): Promise<void> {
     await this.request(`/reports/${reportId}`, {
       method: 'DELETE',
+    });
+  }
+
+  // Quick actions methods
+  async getQuickActions(): Promise<QuickAction[]> {
+    const response = await this.request<{ suggestions: QuickAction[]; generatedAt: string }>(
+      '/quick-actions/suggestions'
+    );
+    return response.suggestions;
+  }
+
+  async quickLog(request: QuickLogRequest): Promise<QuickLogResponse> {
+    return this.request<QuickLogResponse>('/quick-actions/log', {
+      method: 'POST',
+      body: JSON.stringify(request),
     });
   }
 }
