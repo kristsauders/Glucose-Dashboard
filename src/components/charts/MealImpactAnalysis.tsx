@@ -2,23 +2,61 @@ import { motion } from 'framer-motion';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import type { MealLog } from '@/types/logs';
 import type { GlucoseReading } from '@/types/glucose';
+import type { InsulinLog, ExerciseLog } from '@/types/logs';
 import { analyzeMealsImpact } from '@/lib/logAnalysis';
 import { format } from 'date-fns';
 import { TrendingUp, Clock, Target, Activity, ArrowDownToLine } from 'lucide-react';
 import { useMemo } from 'react';
-import { LineChart, Line, ResponsiveContainer, YAxis } from 'recharts';
+import { LineChart, Line, ResponsiveContainer, YAxis, ReferenceLine } from 'recharts';
 
 interface MealImpactAnalysisProps {
   meals: MealLog[];
   glucoseReadings: GlucoseReading[];
+  insulin?: InsulinLog[];
+  exercise?: ExerciseLog[];
   dateRange?: string;
 }
 
-export function MealImpactAnalysis({ meals, glucoseReadings, dateRange = 'live' }: MealImpactAnalysisProps) {
+export function MealImpactAnalysis({ meals, glucoseReadings, insulin = [], exercise = [], dateRange = 'live' }: MealImpactAnalysisProps) {
   const impacts = useMemo(() =>
     analyzeMealsImpact(meals, glucoseReadings),
     [meals, glucoseReadings]
   );
+
+  // Helper to find events during a meal's 3-hour window
+  const getEventsInWindow = (mealTime: Date) => {
+    const mealMs = new Date(mealTime).getTime();
+    const windowEnd = mealMs + 3 * 60 * 60 * 1000;
+
+    const insulinEvents = insulin.filter(i => {
+      const time = new Date(i.timestamp).getTime();
+      return time > mealMs && time <= windowEnd;
+    }).map(i => ({
+      minutes: Math.round((new Date(i.timestamp).getTime() - mealMs) / (60 * 1000)),
+      type: 'insulin' as const,
+      label: `${i.units}u ${i.insulin_type}`,
+    }));
+
+    const mealEvents = meals.filter(m => {
+      const time = new Date(m.timestamp).getTime();
+      return time > mealMs && time <= windowEnd;
+    }).map(m => ({
+      minutes: Math.round((new Date(m.timestamp).getTime() - mealMs) / (60 * 1000)),
+      type: 'meal' as const,
+      label: `${m.carbs}g carbs`,
+    }));
+
+    const exerciseEvents = exercise.filter(e => {
+      const time = new Date(e.timestamp).getTime();
+      return time > mealMs && time <= windowEnd;
+    }).map(e => ({
+      minutes: Math.round((new Date(e.timestamp).getTime() - mealMs) / (60 * 1000)),
+      type: 'exercise' as const,
+      label: e.activity_type || 'Exercise',
+    }));
+
+    return [...insulinEvents, ...mealEvents, ...exerciseEvents].sort((a, b) => a.minutes - b.minutes);
+  };
 
   // Don't show anything if no meals at all
   if (meals.length === 0) {
@@ -134,21 +172,60 @@ export function MealImpactAnalysis({ meals, glucoseReadings, dateRange = 'live' 
                   {/* Glucose curve sparkline */}
                   <div className="mb-4 p-3 rounded-lg bg-muted/30">
                     <div className="text-xs text-muted-foreground mb-2">3-Hour Glucose Response</div>
-                    <ResponsiveContainer width="100%" height={60}>
-                      <LineChart data={impact.glucoseCurve}>
-                        <YAxis domain={[60, 200]} hide />
-                        <Line
-                          type="monotone"
-                          dataKey="glucose"
-                          stroke="hsl(var(--primary))"
-                          strokeWidth={2}
-                          dot={false}
-                        />
-                      </LineChart>
-                    </ResponsiveContainer>
-                    <div className="flex justify-between text-xs text-muted-foreground mt-1">
-                      <span>Meal</span>
-                      <span>+3h</span>
+                    <div className="flex justify-center">
+                      <div className="w-full md:w-3/4 lg:w-2/3">
+                        <ResponsiveContainer width="100%" height={80}>
+                          <LineChart data={impact.glucoseCurve} margin={{ top: 5, right: 5, bottom: 5, left: 5 }}>
+                            <YAxis domain={[60, 200]} hide />
+                            <Line
+                              type="monotone"
+                              dataKey="glucose"
+                              stroke="hsl(var(--primary))"
+                              strokeWidth={2}
+                              dot={false}
+                            />
+                            {/* Event markers */}
+                            {getEventsInWindow(impact.meal.timestamp).map((event, idx) => (
+                              <ReferenceLine
+                                key={`event-${idx}`}
+                                x={impact.glucoseCurve.findIndex(p => p.minutes >= event.minutes)}
+                                stroke={
+                                  event.type === 'insulin' ? 'hsl(var(--chart-1))' :
+                                  event.type === 'exercise' ? 'hsl(var(--chart-2))' :
+                                  'hsl(var(--chart-3))'
+                                }
+                                strokeWidth={1.5}
+                                strokeDasharray="3 3"
+                              />
+                            ))}
+                          </LineChart>
+                        </ResponsiveContainer>
+                        <div className="flex justify-between text-xs text-muted-foreground mt-1">
+                          <span>Meal</span>
+                          <span>+3h</span>
+                        </div>
+                        {/* Event legend */}
+                        {getEventsInWindow(impact.meal.timestamp).length > 0 && (
+                          <div className="mt-2 flex flex-wrap gap-2">
+                            {getEventsInWindow(impact.meal.timestamp).map((event, idx) => (
+                              <div
+                                key={`legend-${idx}`}
+                                className="flex items-center gap-1 text-xs text-muted-foreground"
+                              >
+                                <div
+                                  className="w-3 h-3 border-2 border-dashed rounded-sm"
+                                  style={{
+                                    borderColor: event.type === 'insulin' ? 'hsl(var(--chart-1))' :
+                                                event.type === 'exercise' ? 'hsl(var(--chart-2))' :
+                                                'hsl(var(--chart-3))'
+                                  }}
+                                />
+                                <span>+{event.minutes}m: {event.label}</span>
+                              </div>
+                            ))}
+                          </div>
+                        )}
+                      </div>
                     </div>
                   </div>
 

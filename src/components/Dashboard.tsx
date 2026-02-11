@@ -513,6 +513,8 @@ export function Dashboard({ readings, onDataUpdated }: DashboardProps) {
                   <MealImpactAnalysis
                     meals={mealLogs}
                     glucoseReadings={filteredReadings}
+                    insulin={insulinLogs}
+                    exercise={exerciseLogs}
                     dateRange={dateRange}
                   />
                 )}
