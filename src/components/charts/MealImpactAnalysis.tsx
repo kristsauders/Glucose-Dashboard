@@ -52,7 +52,7 @@ export function MealImpactAnalysis({ meals, glucoseReadings, insulin = [], exerc
     }).map(e => ({
       minutes: Math.round((new Date(e.timestamp).getTime() - mealMs) / (60 * 1000)),
       type: 'exercise' as const,
-      label: e.activity_type || 'Exercise',
+      label: `${e.activity_type || 'Exercise'} (${e.duration_minutes}m)`,
     }));
 
     return [...insulinEvents, ...mealEvents, ...exerciseEvents].sort((a, b) => a.minutes - b.minutes);
@@ -173,8 +173,8 @@ export function MealImpactAnalysis({ meals, glucoseReadings, insulin = [], exerc
                   <div className="mb-4 p-3 rounded-lg bg-muted/30">
                     <div className="text-xs text-muted-foreground mb-2">3-Hour Glucose Response</div>
                     <div className="flex justify-center">
-                      <div className="w-full md:w-3/4 lg:w-2/3">
-                        <ResponsiveContainer width="100%" height={80}>
+                      <div className="w-full md:w-2/3 lg:w-1/2">
+                        <ResponsiveContainer width="100%" height={120}>
                           <LineChart data={impact.glucoseCurve} margin={{ top: 5, right: 5, bottom: 5, left: 5 }}>
                             <YAxis domain={[60, 200]} hide />
                             <Line
