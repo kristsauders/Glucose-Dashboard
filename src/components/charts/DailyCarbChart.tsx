@@ -46,11 +46,15 @@ export function DailyCarbChart({ meals }: DailyCarbChartProps) {
 
     // Convert to array and sort by date
     const result = Array.from(dailyCarbs.entries())
-      .map(([date, carbs]) => ({
-        date,
-        carbs,
-        displayDate: format(new Date(date), 'MMM d'),
-      }))
+      .map(([date, carbs]) => {
+        // Parse date string in local time (not UTC) by adding 'T12:00:00'
+        const localDate = new Date(date + 'T12:00:00');
+        return {
+          date,
+          carbs,
+          displayDate: format(localDate, 'MMM d'),
+        };
+      })
       .sort((a, b) => a.date.localeCompare(b.date));
 
     console.log('[DailyCarbChart] Chart data:', result);

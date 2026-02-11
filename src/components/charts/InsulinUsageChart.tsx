@@ -70,13 +70,17 @@ export function InsulinUsageChart({ insulin }: InsulinUsageChartProps) {
 
     // Convert to array and sort by date
     const result = Array.from(dailyInsulin.entries())
-      .map(([date, { basal, rapid }]) => ({
-        date,
-        basal,
-        rapid,
-        total: basal + rapid,
-        displayDate: format(new Date(date), 'MMM d'),
-      }))
+      .map(([date, { basal, rapid }]) => {
+        // Parse date string in local time (not UTC) by adding 'T12:00:00'
+        const localDate = new Date(date + 'T12:00:00');
+        return {
+          date,
+          basal,
+          rapid,
+          total: basal + rapid,
+          displayDate: format(localDate, 'MMM d'),
+        };
+      })
       .sort((a, b) => a.date.localeCompare(b.date));
 
     console.log('[InsulinUsageChart] Chart data:', result);
