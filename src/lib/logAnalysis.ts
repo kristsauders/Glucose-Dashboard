@@ -65,12 +65,19 @@ export function calculateDailyLogMetrics(
       });
     }
     const metrics = metricsMap.get(date)!;
-    metrics.totalInsulin += dose.units;
-    if (dose.insulin_type.toLowerCase().includes('lantus') ||
-        dose.insulin_type.toLowerCase().includes('basal')) {
-      metrics.basalInsulin += dose.units;
+
+    // Convert to number to prevent string concatenation bug
+    const units = Number(dose.units);
+    if (isNaN(units)) {
+      console.warn('[logAnalysis] Invalid insulin units:', dose.units, 'for dose:', dose);
     } else {
-      metrics.rapidInsulin += dose.units;
+      metrics.totalInsulin += units;
+      if (dose.insulin_type.toLowerCase().includes('lantus') ||
+          dose.insulin_type.toLowerCase().includes('basal')) {
+        metrics.basalInsulin += units;
+      } else {
+        metrics.rapidInsulin += units;
+      }
     }
   });
 
@@ -90,7 +97,14 @@ export function calculateDailyLogMetrics(
       });
     }
     const metrics = metricsMap.get(date)!;
-    metrics.totalCarbs += meal.carbs;
+
+    // Convert to number to prevent string concatenation bug
+    const carbs = Number(meal.carbs);
+    if (isNaN(carbs)) {
+      console.warn('[logAnalysis] Invalid carbs value:', meal.carbs, 'for meal:', meal);
+    } else {
+      metrics.totalCarbs += carbs;
+    }
     metrics.mealCount += 1;
   });
 
@@ -110,7 +124,14 @@ export function calculateDailyLogMetrics(
       });
     }
     const metrics = metricsMap.get(date)!;
-    metrics.exerciseMinutes += session.duration_minutes;
+
+    // Convert to number to prevent string concatenation bug
+    const minutes = Number(session.duration_minutes);
+    if (isNaN(minutes)) {
+      console.warn('[logAnalysis] Invalid exercise minutes:', session.duration_minutes, 'for session:', session);
+    } else {
+      metrics.exerciseMinutes += minutes;
+    }
   });
 
   // Calculate averages
