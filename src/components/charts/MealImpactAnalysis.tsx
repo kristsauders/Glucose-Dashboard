@@ -175,7 +175,7 @@ export function MealImpactAnalysis({ meals, glucoseReadings, insulin = [], exerc
                     <div className="flex justify-center">
                       <div className="w-full md:w-2/3 lg:w-1/2">
                         <ResponsiveContainer width="100%" height={120}>
-                          <LineChart data={impact.glucoseCurve} margin={{ top: 5, right: 5, bottom: 5, left: 5 }}>
+                          <LineChart data={impact.glucoseCurve} margin={{ top: 5, right: 40, bottom: 5, left: 5 }}>
                             <YAxis domain={[60, 200]} hide />
                             <Line
                               type="monotone"
@@ -184,6 +184,47 @@ export function MealImpactAnalysis({ meals, glucoseReadings, insulin = [], exerc
                               strokeWidth={2}
                               dot={false}
                             />
+                            {/* Baseline glucose line */}
+                            <ReferenceLine
+                              y={impact.baselineGlucose}
+                              stroke="hsl(var(--muted-foreground))"
+                              strokeDasharray="2 2"
+                              strokeWidth={1}
+                              label={{
+                                value: `Baseline: ${impact.baselineGlucose.toFixed(0)}`,
+                                position: 'right',
+                                fill: 'hsl(var(--muted-foreground))',
+                                fontSize: 10,
+                              }}
+                            />
+                            {/* Peak glucose line */}
+                            <ReferenceLine
+                              y={impact.peakGlucose}
+                              stroke="hsl(var(--chart-1))"
+                              strokeDasharray="2 2"
+                              strokeWidth={1}
+                              label={{
+                                value: `Peak: ${impact.peakGlucose.toFixed(0)}`,
+                                position: 'right',
+                                fill: 'hsl(var(--chart-1))',
+                                fontSize: 10,
+                              }}
+                            />
+                            {/* Ending glucose (at 3 hours) line */}
+                            {impact.glucoseAt3Hours !== null && (
+                              <ReferenceLine
+                                y={impact.glucoseAt3Hours}
+                                stroke="hsl(var(--chart-2))"
+                                strokeDasharray="2 2"
+                                strokeWidth={1}
+                                label={{
+                                  value: `End: ${impact.glucoseAt3Hours.toFixed(0)}`,
+                                  position: 'right',
+                                  fill: 'hsl(var(--chart-2))',
+                                  fontSize: 10,
+                                }}
+                              />
+                            )}
                             {/* Event markers */}
                             {getEventsInWindow(impact.meal.timestamp).map((event, idx) => (
                               <ReferenceLine
@@ -220,7 +261,7 @@ export function MealImpactAnalysis({ meals, glucoseReadings, insulin = [], exerc
                                                 'hsl(var(--chart-3))'
                                   }}
                                 />
-                                <span>+{event.minutes}m: {event.label}</span>
+                                <span>{event.label}</span>
                               </div>
                             ))}
                           </div>
@@ -230,7 +271,7 @@ export function MealImpactAnalysis({ meals, glucoseReadings, insulin = [], exerc
                   </div>
 
                   {/* Metrics grid */}
-                  <div className="grid grid-cols-2 md:grid-cols-4 gap-3 mb-3">
+                  <div className="grid grid-cols-2 md:grid-cols-3 gap-3">
                     <div className={`p-3 rounded-lg ${getSpikeBgColor(impact.totalRise)}`}>
                       <div className="flex items-center gap-2 mb-1">
                         <TrendingUp className={`h-4 w-4 ${getSpikeColor(impact.totalRise)}`} />
@@ -238,28 +279,6 @@ export function MealImpactAnalysis({ meals, glucoseReadings, insulin = [], exerc
                       </div>
                       <div className={`text-xl font-bold ${getSpikeColor(impact.totalRise)}`}>
                         +{impact.totalRise.toFixed(0)}
-                      </div>
-                      <div className="text-xs text-muted-foreground">mg/dL</div>
-                    </div>
-
-                    <div className="p-3 rounded-lg bg-muted">
-                      <div className="flex items-center gap-2 mb-1">
-                        <Activity className="h-4 w-4 text-muted-foreground" />
-                        <span className="text-xs text-muted-foreground">Baseline</span>
-                      </div>
-                      <div className="text-xl font-bold">
-                        {impact.baselineGlucose.toFixed(0)}
-                      </div>
-                      <div className="text-xs text-muted-foreground">mg/dL</div>
-                    </div>
-
-                    <div className="p-3 rounded-lg bg-muted">
-                      <div className="flex items-center gap-2 mb-1">
-                        <TrendingUp className="h-4 w-4 text-muted-foreground" />
-                        <span className="text-xs text-muted-foreground">Peak</span>
-                      </div>
-                      <div className="text-xl font-bold">
-                        {impact.peakGlucose.toFixed(0)}
                       </div>
                       <div className="text-xs text-muted-foreground">mg/dL</div>
                     </div>
@@ -274,10 +293,18 @@ export function MealImpactAnalysis({ meals, glucoseReadings, insulin = [], exerc
                       </div>
                       <div className="text-xs text-muted-foreground">minutes</div>
                     </div>
-                  </div>
 
-                  {/* Additional metrics row */}
-                  <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+                    <div className="p-3 rounded-lg bg-muted">
+                      <div className="flex items-center gap-2 mb-1">
+                        <ArrowDownToLine className="h-4 w-4 text-muted-foreground" />
+                        <span className="text-xs text-muted-foreground">Return Time</span>
+                      </div>
+                      <div className="text-xl font-bold">
+                        {impact.timeToBaselineMinutes !== null ? impact.timeToBaselineMinutes : '>180'}
+                      </div>
+                      <div className="text-xs text-muted-foreground">minutes</div>
+                    </div>
+
                     <div className="p-3 rounded-lg bg-muted">
                       <div className="flex items-center gap-2 mb-1">
                         <Target className="h-4 w-4 text-muted-foreground" />
@@ -298,28 +325,6 @@ export function MealImpactAnalysis({ meals, glucoseReadings, insulin = [], exerc
                         {impact.timeInTargetPct.toFixed(0)}%
                       </div>
                       <div className="text-xs text-muted-foreground">70-140 mg/dL</div>
-                    </div>
-
-                    <div className="p-3 rounded-lg bg-muted">
-                      <div className="flex items-center gap-2 mb-1">
-                        <Activity className="h-4 w-4 text-muted-foreground" />
-                        <span className="text-xs text-muted-foreground">At 3 Hours</span>
-                      </div>
-                      <div className="text-xl font-bold">
-                        {impact.glucoseAt3Hours !== null ? impact.glucoseAt3Hours.toFixed(0) : 'N/A'}
-                      </div>
-                      <div className="text-xs text-muted-foreground">mg/dL</div>
-                    </div>
-
-                    <div className="p-3 rounded-lg bg-muted">
-                      <div className="flex items-center gap-2 mb-1">
-                        <ArrowDownToLine className="h-4 w-4 text-muted-foreground" />
-                        <span className="text-xs text-muted-foreground">Return Time</span>
-                      </div>
-                      <div className="text-xl font-bold">
-                        {impact.timeToBaselineMinutes !== null ? impact.timeToBaselineMinutes : '>180'}
-                      </div>
-                      <div className="text-xs text-muted-foreground">minutes</div>
                     </div>
                   </div>
                 </div>
