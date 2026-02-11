@@ -206,6 +206,9 @@ export function MealImpactAnalysis({ meals, glucoseReadings, insulin = [], exerc
                               label={{
                                 position: 'top',
                                 content: ({ viewBox }) => {
+                                  // Type guard for Cartesian ViewBox
+                                  if (!viewBox || typeof viewBox === 'number' || !('width' in viewBox)) return null;
+
                                   // Find the index in the curve where peak occurs
                                   const peakIndex = impact.glucoseCurve.findIndex(
                                     p => Math.abs(p.glucose - impact.peakGlucose) < 0.5
@@ -213,10 +216,10 @@ export function MealImpactAnalysis({ meals, glucoseReadings, insulin = [], exerc
                                   if (peakIndex === -1) return null;
 
                                   // Calculate x position based on chart width and data points
-                                  const chartWidth = (viewBox?.width || 0);
+                                  const chartWidth = viewBox.width || 0;
                                   const dataPoints = impact.glucoseCurve.length;
-                                  const x = (viewBox?.x || 0) + (chartWidth * peakIndex / (dataPoints - 1));
-                                  const y = (viewBox?.y || 0) - 8;
+                                  const x = (viewBox.x || 0) + (chartWidth * peakIndex / (dataPoints - 1));
+                                  const y = (viewBox.y || 0) - 8;
 
                                   return (
                                     <text
