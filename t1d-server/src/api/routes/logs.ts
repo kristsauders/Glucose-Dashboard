@@ -29,7 +29,7 @@ router.get('/meals', async (req, res, next) => {
     }
 
     if (end) {
-      queryText += ` AND timestamp < $${paramIndex}`;
+      queryText += ` AND timestamp <= $${paramIndex}`;
       params.push(end);
       paramIndex++;
     }
@@ -72,7 +72,7 @@ router.get('/exercise', async (req, res, next) => {
     }
 
     if (end) {
-      queryText += ` AND timestamp < $${paramIndex}`;
+      queryText += ` AND timestamp <= $${paramIndex}`;
       params.push(end);
       paramIndex++;
     }
@@ -115,7 +115,7 @@ router.get('/insulin', async (req, res, next) => {
     }
 
     if (end) {
-      queryText += ` AND timestamp < $${paramIndex}`;
+      queryText += ` AND timestamp <= $${paramIndex}`;
       params.push(end);
       paramIndex++;
     }
