@@ -28,7 +28,10 @@ export function DailyCarbChart({ meals }: DailyCarbChartProps) {
 
     meals.forEach(meal => {
       const date = new Date(meal.timestamp).toISOString().split('T')[0];
-      dailyCarbs.set(date, (dailyCarbs.get(date) || 0) + meal.carbs);
+      const carbs = Number(meal.carbs);
+      if (!isNaN(carbs)) {
+        dailyCarbs.set(date, (dailyCarbs.get(date) || 0) + carbs);
+      }
     });
 
     // Convert to array and sort by date

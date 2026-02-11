@@ -31,11 +31,25 @@ export function InsulinUsageChart({ insulin }: InsulinUsageChartProps) {
       const date = new Date(dose.timestamp).toISOString().split('T')[0];
       const current = dailyInsulin.get(date) || { basal: 0, rapid: 0 };
 
-      if (dose.insulin_type.toLowerCase().includes('lantus') ||
-          dose.insulin_type.toLowerCase().includes('basal')) {
-        current.basal += dose.units;
-      } else {
-        current.rapid += dose.units;
+      // Categorize insulin type - detect all basal insulin types
+      const type = dose.insulin_type.toLowerCase();
+      const isBasal = type.includes('lantus') ||
+                      type.includes('basal') ||
+                      type.includes('tresiba') ||
+                      type.includes('levemir') ||
+                      type.includes('toujeo') ||
+                      type.includes('degludec') ||
+                      type.includes('glargine') ||
+                      type.includes('detemir');
+
+      // Convert to number to prevent string concatenation
+      const units = Number(dose.units);
+      if (!isNaN(units)) {
+        if (isBasal) {
+          current.basal += units;
+        } else {
+          current.rapid += units;
+        }
       }
 
       dailyInsulin.set(date, current);

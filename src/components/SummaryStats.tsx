@@ -116,6 +116,8 @@ export function SummaryStats({ readings, dailyMetrics, bedtimeMetrics = [], date
         // Count only days with actual data for each metric
         const daysWithCarbs = dailyLogs.filter(d => Number(d.totalCarbs) > 0).length;
         const daysWithInsulin = dailyLogs.filter(d => Number(d.totalInsulin) > 0).length;
+        const daysWithBasal = dailyLogs.filter(d => Number(d.basalInsulin) > 0).length;
+        const daysWithRapid = dailyLogs.filter(d => Number(d.rapidInsulin) > 0).length;
         const daysWithExercise = dailyLogs.filter(d => Number(d.exerciseMinutes) > 0).length;
 
         const ratios = calculateCarbRatios(meals, insulin);
@@ -126,8 +128,8 @@ export function SummaryStats({ readings, dailyMetrics, bedtimeMetrics = [], date
         avgLogMetrics = {
           carbs: daysWithCarbs > 0 ? totalCarbs / daysWithCarbs : 0,
           insulin: daysWithInsulin > 0 ? totalInsulin / daysWithInsulin : 0,
-          basalInsulin: daysWithInsulin > 0 ? totalBasal / daysWithInsulin : 0,
-          rapidInsulin: daysWithInsulin > 0 ? totalRapid / daysWithInsulin : 0,
+          basalInsulin: daysWithBasal > 0 ? totalBasal / daysWithBasal : 0,
+          rapidInsulin: daysWithRapid > 0 ? totalRapid / daysWithRapid : 0,
           exerciseMinutes: daysWithExercise > 0 ? totalExercise / daysWithExercise : 0,
           carbRatio: avgRatio,
         };
