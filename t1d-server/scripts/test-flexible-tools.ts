@@ -3,6 +3,10 @@
  *
  * Tests that tools accept flexible parameters without errors.
  * Focuses on validating parameter flexibility, not full tool behavior.
+ *
+ * Note: Some tools may return error messages (e.g., "Insufficient data")
+ * when there isn't enough data in the database to generate results.
+ * These are expected and indicate the tool accepted the parameters correctly.
  */
 
 import { query } from '../src/config/database.js';
@@ -262,23 +266,39 @@ async function runTests() {
   });
 
   await runTest('get_weekly_report - Default (last Monday)', async () => {
-    const result = await getWeeklyReportTool.invoke({ userId });
-    if (typeof result !== 'string') throw new Error('Tool should return a string');
+    try {
+      const result = await getWeeklyReportTool.invoke({ userId });
+      if (typeof result !== 'string') throw new Error('Tool should return a string');
+    } catch (error: any) {
+      // Allow insufficient data errors - we're testing parameter flexibility, not report generation
+      if (error.message?.includes('Insufficient data')) {
+        return;
+      }
+      throw error;
+    }
   });
 
   await runTest('get_weekly_report - Custom week start', async () => {
-    const today = new Date();
-    const lastMonday = new Date(today);
-    const dayOfWeek = today.getDay();
-    const daysToMonday = dayOfWeek === 0 ? 6 : dayOfWeek - 1;
-    lastMonday.setDate(today.getDate() - daysToMonday - 7);
-    const weekStart = lastMonday.toISOString().split('T')[0];
+    try {
+      const today = new Date();
+      const lastMonday = new Date(today);
+      const dayOfWeek = today.getDay();
+      const daysToMonday = dayOfWeek === 0 ? 6 : dayOfWeek - 1;
+      lastMonday.setDate(today.getDate() - daysToMonday - 7);
+      const weekStart = lastMonday.toISOString().split('T')[0];
 
-    const result = await getWeeklyReportTool.invoke({
-      userId,
-      weekStart
-    });
-    if (typeof result !== 'string') throw new Error('Tool should return a string');
+      const result = await getWeeklyReportTool.invoke({
+        userId,
+        weekStart
+      });
+      if (typeof result !== 'string') throw new Error('Tool should return a string');
+    } catch (error: any) {
+      // Allow insufficient data errors - we're testing parameter flexibility, not report generation
+      if (error.message?.includes('Insufficient data')) {
+        return;
+      }
+      throw error;
+    }
   });
 
   await runTest('get_monthly_report - Default (last month)', async () => {

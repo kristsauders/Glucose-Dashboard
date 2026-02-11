@@ -404,7 +404,7 @@ export class WeeklyReportGenerator {
     endDate.setDate(endDate.getDate() + 7);
 
     // Try to use daily_reports if available, otherwise aggregate from glucose_readings
-    const dailyReportsResult = await query(
+    let dailyReportsResult = await query(
       `SELECT * FROM daily_reports
        WHERE user_id = $1
          AND report_date >= $2
@@ -412,6 +412,43 @@ export class WeeklyReportGenerator {
        ORDER BY report_date ASC`,
       [userId, weekStart, endDate.toISOString().split('T')[0]]
     );
+
+    // Generate missing daily reports on-demand for the full week
+    if (dailyReportsResult.rows.length < 7) {
+      const existingDates = new Set(
+        dailyReportsResult.rows.map((r: any) => r.report_date.toISOString().split('T')[0])
+      );
+
+      const dailyGenerator = new DailyReportGenerator();
+
+      // Generate reports for each missing day in the week
+      for (let i = 0; i < 7; i++) {
+        const currentDate = new Date(startDate);
+        currentDate.setDate(currentDate.getDate() + i);
+        const dateStr = currentDate.toISOString().split('T')[0];
+
+        if (!existingDates.has(dateStr)) {
+          try {
+            console.log(`  📝 Generating missing daily report for ${dateStr}`);
+            const report = await dailyGenerator.generateReport(userId, dateStr);
+            await dailyGenerator.storeReport(report);
+            console.log(`  ✓ Daily report saved for ${dateStr}`);
+          } catch (error: any) {
+            console.log(`  ⚠️  Could not generate daily report for ${dateStr}: ${error.message}`);
+          }
+        }
+      }
+
+      // Re-query to get all daily reports (including newly generated ones)
+      dailyReportsResult = await query(
+        `SELECT * FROM daily_reports
+         WHERE user_id = $1
+           AND report_date >= $2
+           AND report_date < $3
+         ORDER BY report_date ASC`,
+        [userId, weekStart, endDate.toISOString().split('T')[0]]
+      );
+    }
 
     let weeklyMetrics;
     if (dailyReportsResult.rows.length >= 5) {
@@ -433,7 +470,7 @@ export class WeeklyReportGenerator {
     }));
 
     let trendAnalysis = null;
-    if (trendData.length >= 3) {
+    if (trendData.length >= 7) {
       trendAnalysis = await analyzeTrend(trendData, 'average_glucose', 0);
     }
 
