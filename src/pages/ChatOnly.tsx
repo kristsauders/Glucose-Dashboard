@@ -3,6 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import { AIChat } from '../components/AIChat';
 import { usePushNotifications } from '../hooks/usePushNotifications';
 import { useNotificationDebugger } from '../hooks/useNotificationDebugger';
+import { debugLogger } from '../utils/debug-logger';
 import { Button } from '../components/ui/button';
 import { Bug } from 'lucide-react';
 
@@ -18,6 +19,15 @@ export function ChatOnly() {
   const [showDebugButton, setShowDebugButton] = useState(false);
   const tapCountRef = useRef(0);
   const tapTimerRef = useRef<NodeJS.Timeout | null>(null);
+
+  // Log when ChatOnly mounts
+  useEffect(() => {
+    debugLogger.log('ChatOnly', 'ChatOnly component mounted', {
+      url: window.location.href,
+      pathname: window.location.pathname,
+      search: window.location.search,
+    });
+  }, []);
 
   // Auto-request notification permission on mount (if not already granted/denied)
   // Deferred to avoid blocking initial render
