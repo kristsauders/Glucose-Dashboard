@@ -87,6 +87,8 @@ export function ExerciseLogCard({ log, index, onDelete }: ExerciseLogCardProps) 
       return <Badge variant="secondary" className="text-xs">CSV</Badge>;
     } else if (source === 'agent') {
       return <Badge className="text-xs bg-green-500/10 text-green-600 border-green-500/20">✨ Agent</Badge>;
+    } else if (source === 'apple_health') {
+      return <Badge className="text-xs bg-blue-500/10 text-blue-600 border-blue-500/20">⌚ Apple Watch</Badge>;
     } else {
       return <Badge className="text-xs">Manual</Badge>;
     }

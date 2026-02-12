@@ -424,6 +424,16 @@ class APIService {
     });
   }
 
+  // Apple Health integration
+  async getAppleHealthStatus(): Promise<{
+    connected: boolean;
+    totalWorkouts: number;
+    lastWorkout?: string;
+    firstWorkout?: string;
+  }> {
+    return this.request('/apple-health/status');
+  }
+
   // Discord integration
   async linkDiscord(discordUserId: string): Promise<void> {
     await this.request('/settings/discord', {
