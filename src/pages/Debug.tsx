@@ -11,16 +11,24 @@ export function Debug() {
   const [autoRefresh, setAutoRefresh] = useState(true);
 
   const loadLogs = () => {
-    setLogs(debugLogger.getLogs());
+    const currentLogs = debugLogger.getLogs();
+    console.log('[Debug Page] Loaded logs:', currentLogs.length);
+    setLogs(currentLogs);
   };
 
   useEffect(() => {
+    // Add a test log when debug page opens
+    debugLogger.log('Debug Page', 'Debug page opened - logging system is working!');
+
     // Load logs initially
     loadLogs();
 
     // Listen for debug logs from service worker
     const handleMessage = (event: MessageEvent) => {
+      console.log('[Debug Page] Received message:', event.data);
+
       if (event.data.type === 'DEBUG_LOG') {
+        console.log('[Debug Page] Got DEBUG_LOG from service worker');
         debugLogger.log(
           event.data.log.source,
           event.data.log.message,
