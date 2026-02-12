@@ -35,7 +35,7 @@ export function AppleHealthSettings() {
       const status = await apiService.getAppleHealthStatus();
       setIsConnected(status.connected);
       setTotalWorkouts(status.totalWorkouts || 0);
-      setLastWorkout(status.lastWorkout);
+      setLastWorkout(status.lastWorkout || null);
     } catch (err) {
       console.error('Failed to check Apple Health status:', err);
       setIsConnected(false);
