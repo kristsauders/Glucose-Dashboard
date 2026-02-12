@@ -95,7 +95,8 @@ export function AIChat() {
     // Skip if already viewing this conversation
     if (conversationId === activeConversationId) {
       console.log('[Deep-Link] Already viewing this conversation, clearing URL param');
-      setSearchParams({});
+      // Delay clearing to ensure everything is loaded
+      setTimeout(() => setSearchParams({}), 1000);
       return;
     }
 
@@ -103,8 +104,12 @@ export function AIChat() {
     const conversation = conversations.find(c => c.id === conversationId);
     if (conversation) {
       console.log('[Deep-Link] Found conversation in list:', conversation.title);
-      loadConversation(conversationId);
-      setSearchParams({});
+      loadConversation(conversationId).then(() => {
+        // Only clear search params after conversation loads successfully
+        setTimeout(() => setSearchParams({}), 500);
+      }).catch(() => {
+        // Don't clear on error so user can retry
+      });
       return;
     }
 
@@ -115,14 +120,15 @@ export function AIChat() {
     loadConversation(conversationId)
       .then(() => {
         console.log('[Deep-Link] Direct load successful');
-        setSearchParams({});
+        // Only clear search params after conversation loads successfully
+        setTimeout(() => setSearchParams({}), 500);
         // Refresh conversation list to include the new one
         fetchConversations();
       })
       .catch((error) => {
         console.error('[Deep-Link] Direct load failed:', error);
         console.error('[Deep-Link] Error details:', error.message, error.response?.status);
-        setSearchParams({});
+        // Don't clear search params on error so user can see what failed
         // Show error to user
         setError(`Failed to load conversation: ${error.message}`);
       });
