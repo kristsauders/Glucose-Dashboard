@@ -3,7 +3,6 @@ import { X, Settings as SettingsIcon } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { LibreViewSettings } from './LibreViewSettings';
-import { AppleHealthSettings } from './AppleHealthSettings';
 import { DiscordSettings } from './DiscordSettings';
 import { NotificationSettings } from './NotificationSettings';
 import { VoiceSettings } from './VoiceSettings';
@@ -49,7 +48,6 @@ export function Settings({ onClose }: SettingsProps) {
               <h3 className="text-sm font-semibold mb-3">Data Sources</h3>
               <div className="space-y-4">
                 <LibreViewSettings />
-                <AppleHealthSettings />
               </div>
             </div>
 
