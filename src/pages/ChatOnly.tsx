@@ -3,6 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import { AIChat } from '../components/AIChat';
 import { usePushNotifications } from '../hooks/usePushNotifications';
 import { useNotificationDebugger } from '../hooks/useNotificationDebugger';
+import { useNotificationLaunch } from '../hooks/useNotificationLaunch';
 import { debugLogger } from '../utils/debug-logger';
 import { Button } from '../components/ui/button';
 import { Bug } from 'lucide-react';
@@ -16,6 +17,7 @@ export function ChatOnly() {
   const navigate = useNavigate();
   const { requestPermission, permission } = usePushNotifications();
   useNotificationDebugger(); // Add debugging for notifications
+  useNotificationLaunch(); // Handle iOS PWA cold start from notifications
   const [showDebugButton, setShowDebugButton] = useState(false);
   const tapCountRef = useRef(0);
   const tapTimerRef = useRef<NodeJS.Timeout | null>(null);

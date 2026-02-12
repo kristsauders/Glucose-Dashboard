@@ -17,6 +17,13 @@ export function useNotificationDebugger() {
         conversationId,
         fullUrl: window.location.href,
       });
+
+      // Store as pending notification for iOS PWA cold starts
+      // This helps when the service worker can't navigate properly
+      localStorage.setItem('pending_notification', JSON.stringify({
+        conversationId,
+        timestamp: Date.now(),
+      }));
     }
   }, [searchParams]);
 
