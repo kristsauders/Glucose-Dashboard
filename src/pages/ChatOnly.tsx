@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useState, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { AIChat } from '../components/AIChat';
 import { usePushNotifications } from '../hooks/usePushNotifications';
@@ -13,8 +13,9 @@ import { Bug } from 'lucide-react';
 export function ChatOnly() {
   const navigate = useNavigate();
   const { requestPermission, permission } = usePushNotifications();
-  const [tapCount, setTapCount] = useState(0);
   const [showDebugButton, setShowDebugButton] = useState(false);
+  const tapCountRef = useRef(0);
+  const tapTimerRef = useRef<NodeJS.Timeout | null>(null);
 
   // Auto-request notification permission on mount (if not already granted/denied)
   // Deferred to avoid blocking initial render
@@ -31,21 +32,29 @@ export function ChatOnly() {
   // Triple-tap anywhere to reveal debug button
   useEffect(() => {
     const handleTap = () => {
-      setTapCount(prev => {
-        const newCount = prev + 1;
-        if (newCount >= 3) {
-          setShowDebugButton(true);
-          return 0;
-        }
-        return newCount;
-      });
+      tapCountRef.current += 1;
+
+      if (tapCountRef.current >= 3) {
+        setShowDebugButton(true);
+        tapCountRef.current = 0;
+      }
 
       // Reset tap count after 1 second
-      setTimeout(() => setTapCount(0), 1000);
+      if (tapTimerRef.current) {
+        clearTimeout(tapTimerRef.current);
+      }
+      tapTimerRef.current = setTimeout(() => {
+        tapCountRef.current = 0;
+      }, 1000);
     };
 
     document.addEventListener('click', handleTap);
-    return () => document.removeEventListener('click', handleTap);
+    return () => {
+      document.removeEventListener('click', handleTap);
+      if (tapTimerRef.current) {
+        clearTimeout(tapTimerRef.current);
+      }
+    };
   }, []);
 
   return (
