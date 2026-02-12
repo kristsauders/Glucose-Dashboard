@@ -9,8 +9,6 @@ import {
   XCircle,
   ChevronDown,
   ChevronUp,
-  Download,
-  ExternalLink,
   Copy,
   Check
 } from 'lucide-react';
@@ -194,18 +192,9 @@ export function AppleHealthSettings() {
                   2
                 </div>
                 <div className="flex-1">
-                  <p className="text-sm font-medium mb-2">Download the Sage Health Sync shortcut</p>
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    className="w-full"
-                    onClick={() => window.open('https://www.icloud.com/shortcuts/placeholder', '_blank')}
-                  >
-                    <ExternalLink className="h-4 w-4 mr-2" />
-                    Download Shortcut
-                  </Button>
-                  <p className="text-xs text-muted-foreground mt-2">
-                    Opens in Safari to install the shortcut
+                  <p className="text-sm font-medium mb-2">Create the Sage Health Sync shortcut</p>
+                  <p className="text-sm text-muted-foreground">
+                    Open the <strong>Shortcuts</strong> app on your iPhone and tap the <strong>+</strong> button to create a new shortcut.
                   </p>
                 </div>
               </div>
@@ -215,8 +204,13 @@ export function AppleHealthSettings() {
                   3
                 </div>
                 <div className="flex-1">
-                  <p className="text-sm">
-                    When prompted, paste your token into the shortcut configuration
+                  <p className="text-sm font-medium mb-1">Configure the shortcut</p>
+                  <p className="text-sm text-muted-foreground">
+                    Add actions to query Health workouts, extract details, and POST to{' '}
+                    <code className="text-xs bg-muted px-1 py-0.5 rounded">
+                      {window.location.origin}/api/apple-health/workouts
+                    </code>{' '}
+                    with your token. See detailed guide for step-by-step instructions.
                   </p>
                 </div>
               </div>
@@ -227,7 +221,7 @@ export function AppleHealthSettings() {
                 </div>
                 <div className="flex-1">
                   <p className="text-sm">
-                    Grant permissions to access Health data when prompted by iOS
+                    Grant permissions to access Workout data when prompted by iOS
                   </p>
                 </div>
               </div>
@@ -238,7 +232,7 @@ export function AppleHealthSettings() {
                 </div>
                 <div className="flex-1">
                   <p className="text-sm">
-                    In the Shortcuts app, tap the ••• menu on "Sage Health Sync"
+                    Test the shortcut by tapping "Run" - workouts should appear in your exercise log
                   </p>
                 </div>
               </div>
@@ -248,31 +242,9 @@ export function AppleHealthSettings() {
                   6
                 </div>
                 <div className="flex-1">
-                  <p className="text-sm">
-                    Enable "Automation" and set it to run every 2 hours
-                  </p>
-                </div>
-              </div>
-
-              <div className="flex gap-3">
-                <div className="flex-shrink-0 flex items-center justify-center w-6 h-6 rounded-full bg-primary text-primary-foreground text-xs font-semibold">
-                  7
-                </div>
-                <div className="flex-1">
-                  <p className="text-sm">
-                    Turn off "Ask Before Running" so it runs automatically
-                  </p>
-                </div>
-              </div>
-
-              <div className="flex gap-3">
-                <div className="flex-shrink-0 flex items-center justify-center w-6 h-6 rounded-full bg-primary text-primary-foreground text-xs font-semibold">
-                  8
-                </div>
-                <div className="flex-1 space-y-2">
-                  <p className="text-sm font-medium">Test the sync</p>
+                  <p className="text-sm font-medium mb-1">Enable automation</p>
                   <p className="text-sm text-muted-foreground">
-                    Tap "Run Shortcut" to test. Your workouts should appear in the exercise log within a few seconds.
+                    Go to Automations tab → Create Time of Day automation → Run every 2 hours → Turn off "Ask Before Running"
                   </p>
                 </div>
               </div>
@@ -281,8 +253,10 @@ export function AppleHealthSettings() {
             <Alert>
               <Activity className="h-4 w-4" />
               <AlertDescription className="text-xs">
-                <strong>Note:</strong> The shortcut will sync workouts from the last 2 hours each time it runs.
-                Older workouts can be manually synced by running the shortcut.
+                <strong>Need detailed instructions?</strong> The full setup guide with screenshots and troubleshooting
+                is available in the repository at <code>docs/APPLE_HEALTH_SETUP.md</code>.
+                The shortcut configuration requires several specific actions to query Health data, format it as JSON,
+                and POST to the API with authentication.
               </AlertDescription>
             </Alert>
           </div>
