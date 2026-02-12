@@ -57,6 +57,14 @@ export default defineConfig({
     host: true, // Listen on all network interfaces
     port: 5173,
     https: getHttpsConfig(),
+    // Proxy API requests to backend server
+    proxy: {
+      '/api': {
+        target: 'http://localhost:3002',
+        changeOrigin: true,
+        secure: false,
+      },
+    },
     // Improve HMR stability
     hmr: {
       protocol: 'ws',

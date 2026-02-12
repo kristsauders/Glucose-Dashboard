@@ -186,7 +186,10 @@ export function AIChat() {
 
   const loadConversation = async (conversationId: string) => {
     try {
+      console.log('[Load Conversation] Loading conversation:', conversationId);
       const conversation = await apiService.getConversation(conversationId);
+      console.log('[Load Conversation] Received conversation with', conversation.messages.length, 'messages');
+      console.log('[Load Conversation] Conversation title:', conversation.title);
       setActiveConversationId(conversationId);
       setMessages(conversation.messages);
 
@@ -227,9 +230,15 @@ export function AIChat() {
           }
         }, 600);
       }
-    } catch (err) {
-      console.error('Failed to load conversation:', err);
-      setError('Failed to load conversation');
+    } catch (err: any) {
+      console.error('[Load Conversation] Failed to load conversation:', err);
+      console.error('[Load Conversation] Error details:', {
+        message: err.message,
+        status: err.status,
+        conversationId
+      });
+      setError(`Failed to load conversation: ${err.message || 'Unknown error'}`);
+      throw err; // Re-throw so the deep-link handler can catch it
     }
   };
 

@@ -1,8 +1,36 @@
 // Service Worker for Web Push Notifications
 // Handles push notifications for Sage proactive messages
 
+// Simple debug logger for PWA (stores in localStorage)
+function debugLog(source, message, data) {
+  const log = {
+    timestamp: new Date().toISOString(),
+    source: source,
+    message: message,
+    data: data ? JSON.stringify(data, null, 2) : undefined
+  };
+
+  console.log(`[${source}]`, message, data);
+
+  try {
+    // Note: Service workers can't directly access localStorage
+    // We'll send this to the client via postMessage
+    self.clients.matchAll().then(clients => {
+      clients.forEach(client => {
+        client.postMessage({
+          type: 'DEBUG_LOG',
+          log: log
+        });
+      });
+    });
+  } catch (error) {
+    console.error('Failed to send debug log:', error);
+  }
+}
+
 self.addEventListener('install', (event) => {
   console.log('[Service Worker] Installing...');
+  debugLog('Service Worker', 'Installing...');
   self.skipWaiting(); // Activate immediately
 });
 
@@ -23,6 +51,7 @@ self.addEventListener('push', (event) => {
   try {
     const data = event.data.json();
     console.log('[Service Worker] Push data:', data);
+    console.log('[Service Worker] conversationId in push data:', data.data?.conversationId);
 
     const options = {
       body: data.body,
@@ -40,6 +69,8 @@ self.addEventListener('push', (event) => {
         }
       ]
     };
+
+    console.log('[Service Worker] Creating notification with data:', options.data);
 
     event.waitUntil(
       self.registration.showNotification(data.title || 'Sage', options)
@@ -63,6 +94,11 @@ self.addEventListener('notificationclick', async (event) => {
 
   console.log('[Service Worker] Extracted conversationId:', conversationId);
   console.log('[Service Worker] Extracted messageId:', messageId);
+  debugLog('Notification Click', 'Notification clicked', {
+    conversationId: conversationId,
+    messageId: messageId,
+    hasActions: actions.length > 0
+  });
 
   // Check if user clicked an action button
   if (event.action && event.action !== 'open') {
@@ -108,6 +144,7 @@ self.addEventListener('notificationclick', async (event) => {
     : '/chat';
 
   console.log('[Service Worker] URL to open:', urlToOpen);
+  debugLog('Notification Click', 'URL to open', { url: urlToOpen });
 
   event.waitUntil(
     clients
@@ -123,6 +160,7 @@ self.addEventListener('notificationclick', async (event) => {
           // If chat window is already open
           if (clientUrl.pathname === '/chat' && 'focus' in client) {
             console.log('[Service Worker] Found existing /chat window, sending postMessage');
+            debugLog('Notification Click', 'Found existing chat window, sending postMessage', { conversationId });
             // Send message to client to load the conversation
             if (conversationId) {
               client.postMessage({
@@ -130,6 +168,7 @@ self.addEventListener('notificationclick', async (event) => {
                 conversationId: conversationId,
               });
               console.log('[Service Worker] Sent OPEN_CONVERSATION message with ID:', conversationId);
+              debugLog('Notification Click', 'Sent OPEN_CONVERSATION postMessage', { conversationId });
             }
             return client.focus();
           }
@@ -137,6 +176,7 @@ self.addEventListener('notificationclick', async (event) => {
 
         // No chat window open, open a new one
         console.log('[Service Worker] No /chat window found, opening new window');
+        debugLog('Notification Click', 'No chat window found, opening new window', { url: urlToOpen });
         if (clients.openWindow) {
           return clients.openWindow(urlToOpen);
         }

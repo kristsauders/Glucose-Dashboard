@@ -12,6 +12,7 @@ const Dashboard = lazy(() => import('./components/Dashboard').then(m => ({ defau
 const ChatOnly = lazy(() => import('./pages/ChatOnly').then(m => ({ default: m.ChatOnly })));
 const Voice = lazy(() => import('./pages/Voice').then(m => ({ default: m.Voice })));
 const Reports = lazy(() => import('./pages/Reports').then(m => ({ default: m.Reports })));
+const Debug = lazy(() => import('./pages/Debug').then(m => ({ default: m.Debug })));
 
 function AppContent() {
   const location = useLocation();
@@ -88,6 +89,7 @@ function AppContent() {
         <Route path="/chat" element={<ChatOnly />} />
         <Route path="/voice" element={<Voice />} />
         <Route path="/reports" element={<Reports />} />
+        <Route path="/debug" element={<Debug />} />
         <Route path="*" element={<Navigate to="/" replace />} />
       </Routes>
     </Suspense>
