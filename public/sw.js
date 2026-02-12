@@ -1,6 +1,29 @@
 // Service Worker for Web Push Notifications
 // Handles push notifications for Sage proactive messages
 
+// Pending notification storage (Cache API - accessible from service worker)
+const CACHE_NAME = 'sage-pending-notifications';
+const NOTIFICATION_KEY = 'pending-notification';
+
+/**
+ * Store pending notification data when push is received
+ * This is needed for iOS PWA where notification click events don't fire when app is fully closed
+ */
+async function storePendingNotification(data) {
+  try {
+    console.log('[SW Storage] Storing pending notification:', data);
+
+    // Store in Cache API (accessible from service worker)
+    const cache = await caches.open(CACHE_NAME);
+    const response = new Response(JSON.stringify(data));
+    await cache.put(NOTIFICATION_KEY, response);
+
+    console.log('[SW Storage] Notification stored successfully');
+  } catch (error) {
+    console.error('[SW Storage] Failed to store notification:', error);
+  }
+}
+
 // Simple debug logger for PWA (stores in localStorage)
 function debugLog(source, message, data) {
   const log = {
@@ -72,8 +95,20 @@ self.addEventListener('push', (event) => {
 
     console.log('[Service Worker] Creating notification with data:', options.data);
 
+    // Store notification data for iOS PWA cold starts
+    // iOS doesn't fire notification click events when PWA is fully closed
+    // So we store the data here when push is received
+    const pendingNotification = {
+      conversationId: data.data?.conversationId,
+      messageId: data.data?.messageId,
+      timestamp: Date.now()
+    };
+
     event.waitUntil(
-      self.registration.showNotification(data.title || 'Sage', options)
+      Promise.all([
+        self.registration.showNotification(data.title || 'Sage', options),
+        storePendingNotification(pendingNotification)
+      ])
     );
   } catch (error) {
     console.error('[Service Worker] Error processing push:', error);

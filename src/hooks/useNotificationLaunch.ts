@@ -1,6 +1,7 @@
 import { useEffect } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import { debugLogger } from '@/utils/debug-logger';
+import { getPendingNotification, clearPendingNotification } from '@/utils/pending-notification-storage';
 
 /**
  * Hook to handle app launch from notification on iOS PWA
@@ -42,23 +43,16 @@ export function useNotificationLaunch() {
       return;
     }
 
-    // Check for pending notification in localStorage
-    const pendingNotif = localStorage.getItem('pending_notification');
-    if (!pendingNotif) {
-      debugLogger.log('Notification Launch', 'No pending notification');
-      return;
-    }
-
-    try {
-      const { conversationId, timestamp } = JSON.parse(pendingNotif);
-      const age = now - timestamp;
-
-      // Only use notifications from last 10 seconds
-      if (age > 10000) {
-        debugLogger.log('Notification Launch', 'Notification too old, ignoring', { age });
-        localStorage.removeItem('pending_notification');
+    // Check for pending notification using the utility
+    // This checks both Cache API (from service worker) and localStorage
+    getPendingNotification().then(pendingNotif => {
+      if (!pendingNotif) {
+        debugLogger.log('Notification Launch', 'No pending notification');
         return;
       }
+
+      const { conversationId, timestamp } = pendingNotif;
+      const age = now - timestamp;
 
       debugLogger.log('Notification Launch', 'Found recent notification, navigating', {
         conversationId,
@@ -66,14 +60,15 @@ export function useNotificationLaunch() {
       });
 
       // Clear the pending notification
-      localStorage.removeItem('pending_notification');
+      clearPendingNotification();
 
       // Navigate to conversation
       navigate(`/chat?conversation=${conversationId}`, { replace: true });
-
-    } catch (error) {
-      console.error('Failed to parse pending notification:', error);
-      localStorage.removeItem('pending_notification');
-    }
+    }).catch(error => {
+      console.error('Failed to get pending notification:', error);
+      debugLogger.log('Notification Launch', 'Error getting pending notification', {
+        error: error.message
+      });
+    });
   }, [conversationParam, navigate]);
 }

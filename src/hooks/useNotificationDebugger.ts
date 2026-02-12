@@ -1,6 +1,7 @@
 import { useEffect } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import { debugLogger } from '@/utils/debug-logger';
+import { storePendingNotification } from '@/utils/pending-notification-storage';
 
 /**
  * Hook to debug notification deep-linking
@@ -20,10 +21,10 @@ export function useNotificationDebugger() {
 
       // Store as pending notification for iOS PWA cold starts
       // This helps when the service worker can't navigate properly
-      localStorage.setItem('pending_notification', JSON.stringify({
+      storePendingNotification({
         conversationId,
         timestamp: Date.now(),
-      }));
+      });
     }
   }, [searchParams]);
 
