@@ -257,10 +257,13 @@ Format as JSON: { score: number, reasons: string[], personalRelevance: string }`
         // detected_patterns table doesn't exist yet, skip patterns
       }
 
+      const avgGlucose = statsResult.rows[0]?.avg_glucose;
+      const avgGlucoseStr = avgGlucose ? Number(avgGlucose).toFixed(0) : 'N/A';
+
       const context = `
 - Diagnosis: ${user?.diagnosis_type || 'Type 1 Diabetes'}
 - Recent patterns: ${patternsText}
-- Average glucose (30d): ${statsResult.rows[0]?.avg_glucose?.toFixed(0) || 'N/A'} mg/dL
+- Average glucose (30d): ${avgGlucoseStr} mg/dL
       `.trim();
 
       return context;

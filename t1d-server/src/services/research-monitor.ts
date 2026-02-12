@@ -7,7 +7,7 @@ import { pushNotificationService } from './push-notification-service.js';
  * Runs 2-3x per week to discover new T1D research and share relevant findings
  */
 export class ResearchMonitor {
-  private checkInterval = 2.5 * 24 * 60 * 60 * 1000; // ~2.5 days
+  private checkInterval = 1 * 24 * 60 * 60 * 1000; // ~1 day
   private timer: NodeJS.Timeout | null = null;
   private isRunning = false;
 

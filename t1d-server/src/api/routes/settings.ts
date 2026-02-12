@@ -5,6 +5,7 @@ import { query } from '../../config/database.js';
 import { libreViewPoller } from '../../services/libreviewPoller.js';
 import { LibreViewClient } from '../../services/libreview.js';
 import { encrypt } from '../../utils/crypto.js';
+import { researchMonitor } from '../../services/research-monitor.js';
 import type { AuthRequest, User } from '../../types/index.js';
 
 const router = Router();
@@ -344,6 +345,28 @@ router.put('/research-preferences', async (req, res, next) => {
     );
 
     res.json(newPrefs);
+  } catch (error) {
+    next(error);
+  }
+});
+
+// Test endpoint: Manually trigger research monitor check
+router.post('/research/trigger', async (req, res, next) => {
+  try {
+    const authReq = req as AuthRequest;
+
+    console.log(`[Test] Manually triggering research check for user ${authReq.user!.id}`);
+
+    // Trigger a research check (this runs in background)
+    researchMonitor.runScheduledCheck().catch((err: Error) => {
+      console.error('[Test] Research check failed:', err);
+    });
+
+    res.json({
+      success: true,
+      message: 'Research monitor check triggered. This runs in the background and may take 30-60 seconds. Check your chat for proactive messages.',
+      note: 'The system will analyze your patterns and send relevant research papers if found.'
+    });
   } catch (error) {
     next(error);
   }
