@@ -9,6 +9,7 @@ export function Debug() {
   const navigate = useNavigate();
   const [logs, setLogs] = useState<DebugLog[]>([]);
   const [autoRefresh, setAutoRefresh] = useState(true);
+  const [swStatus, setSwStatus] = useState<string>('Checking...');
 
   const loadLogs = () => {
     const currentLogs = debugLogger.getLogs();
@@ -19,6 +20,26 @@ export function Debug() {
   useEffect(() => {
     // Add a test log when debug page opens
     debugLogger.log('Debug Page', 'Debug page opened - logging system is working!');
+
+    // Check service worker status
+    if ('serviceWorker' in navigator) {
+      navigator.serviceWorker.getRegistration().then(registration => {
+        if (registration) {
+          const state = registration.active?.state || 'no active worker';
+          setSwStatus(`Registered - ${state}`);
+          debugLogger.log('Service Worker', 'Service worker status', {
+            state,
+            scope: registration.scope,
+            updateViaCache: registration.updateViaCache,
+          });
+        } else {
+          setSwStatus('Not registered');
+          debugLogger.log('Service Worker', 'Service worker not registered');
+        }
+      });
+    } else {
+      setSwStatus('Not supported');
+    }
 
     // Load logs initially
     loadLogs();
@@ -105,14 +126,22 @@ export function Debug() {
           </div>
         </CardHeader>
         <CardContent className="p-4">
-          <div className="mb-4 p-3 bg-muted rounded-lg text-sm">
-            <p className="font-semibold mb-2">How to use:</p>
-            <ol className="list-decimal list-inside space-y-1 text-muted-foreground">
-              <li>Keep this page open in the background</li>
-              <li>Click a notification from the home screen app</li>
-              <li>Come back here to see what happened</li>
-              <li>Export logs to share or investigate</li>
-            </ol>
+          <div className="mb-4 space-y-3">
+            <div className="p-3 bg-muted rounded-lg text-sm">
+              <p className="font-semibold mb-1">Service Worker Status:</p>
+              <p className={swStatus.includes('activated') ? 'text-green-600' : 'text-amber-600'}>
+                {swStatus}
+              </p>
+            </div>
+            <div className="p-3 bg-muted rounded-lg text-sm">
+              <p className="font-semibold mb-2">How to use:</p>
+              <ol className="list-decimal list-inside space-y-1 text-muted-foreground">
+                <li>Keep this page open in the background</li>
+                <li>Click a notification from the home screen app</li>
+                <li>Come back here to see what happened</li>
+                <li>Export logs to share or investigate</li>
+              </ol>
+            </div>
           </div>
 
           {logs.length === 0 ? (
