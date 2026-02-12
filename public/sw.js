@@ -152,31 +152,17 @@ self.addEventListener('notificationclick', async (event) => {
       .then((clientList) => {
         console.log('[Service Worker] Found', clientList.length, 'client windows');
 
-        // Check if there's already a window open to the chat app
-        for (const client of clientList) {
-          const clientUrl = new URL(client.url);
-          console.log('[Service Worker] Checking client:', clientUrl.pathname);
+        // For PWAs, always navigate to the URL with conversation parameter
+        // This is more reliable than postMessage for backgrounded apps
+        console.log('[Service Worker] Opening/navigating to:', urlToOpen);
+        debugLog('Notification Click', 'Opening window with URL (works for new and existing windows)', {
+          url: urlToOpen,
+          clientCount: clientList.length
+        });
 
-          // If chat window is already open
-          if (clientUrl.pathname === '/chat' && 'focus' in client) {
-            console.log('[Service Worker] Found existing /chat window, sending postMessage');
-            debugLog('Notification Click', 'Found existing chat window, sending postMessage', { conversationId });
-            // Send message to client to load the conversation
-            if (conversationId) {
-              client.postMessage({
-                type: 'OPEN_CONVERSATION',
-                conversationId: conversationId,
-              });
-              console.log('[Service Worker] Sent OPEN_CONVERSATION message with ID:', conversationId);
-              debugLog('Notification Click', 'Sent OPEN_CONVERSATION postMessage', { conversationId });
-            }
-            return client.focus();
-          }
-        }
-
-        // No chat window open, open a new one
-        console.log('[Service Worker] No /chat window found, opening new window');
-        debugLog('Notification Click', 'No chat window found, opening new window', { url: urlToOpen });
+        // openWindow will either:
+        // - Navigate existing window to the new URL (PWA behavior)
+        // - Open a new tab/window (browser behavior)
         if (clients.openWindow) {
           return clients.openWindow(urlToOpen);
         }
