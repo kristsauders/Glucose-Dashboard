@@ -144,7 +144,7 @@ export function AppleHealthSettings() {
               onClick={() => setShowInstructions(!showInstructions)}
               className="w-full"
             >
-              <Download className="h-4 w-4 mr-2" />
+              <Activity className="h-4 w-4 mr-2" />
               Setup Apple Health Sync
             </Button>
           </div>
