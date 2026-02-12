@@ -152,19 +152,47 @@ self.addEventListener('notificationclick', async (event) => {
       .then((clientList) => {
         console.log('[Service Worker] Found', clientList.length, 'client windows');
 
-        // For PWAs, always navigate to the URL with conversation parameter
-        // This is more reliable than postMessage for backgrounded apps
-        console.log('[Service Worker] Opening/navigating to:', urlToOpen);
-        debugLog('Notification Click', 'Opening window with URL (works for new and existing windows)', {
-          url: urlToOpen,
-          clientCount: clientList.length
-        });
+        // Try to navigate existing client, or open new window
+        let targetClient = null;
 
-        // openWindow will either:
-        // - Navigate existing window to the new URL (PWA behavior)
-        // - Open a new tab/window (browser behavior)
-        if (clients.openWindow) {
-          return clients.openWindow(urlToOpen);
+        // Find any existing client (prefer /chat, but any will do)
+        for (const client of clientList) {
+          const clientUrl = new URL(client.url);
+          if (clientUrl.pathname === '/chat') {
+            targetClient = client;
+            break;
+          }
+        }
+
+        // If no /chat client, use any client
+        if (!targetClient && clientList.length > 0) {
+          targetClient = clientList[0];
+        }
+
+        if (targetClient && 'navigate' in targetClient) {
+          // Navigate existing window to conversation URL
+          console.log('[Service Worker] Navigating existing client to:', urlToOpen);
+          debugLog('Notification Click', 'Navigating existing client', {
+            url: urlToOpen,
+            currentUrl: targetClient.url
+          });
+
+          return targetClient.navigate(urlToOpen).then(client => {
+            if (client) {
+              return client.focus();
+            }
+          });
+        } else {
+          // No existing client or navigate not supported, open new window
+          console.log('[Service Worker] Opening new window at:', urlToOpen);
+          debugLog('Notification Click', 'Opening new window', {
+            url: urlToOpen,
+            reason: targetClient ? 'navigate not supported' : 'no existing client'
+          });
+
+          if (clients.openWindow) {
+            return clients.openWindow(urlToOpen);
+          }
         }
       })
   );
