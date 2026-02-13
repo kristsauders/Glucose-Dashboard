@@ -722,7 +722,7 @@ export function AIChat() {
 
       <CardContent className="flex-1 flex flex-col p-0 min-h-0">
         {/* Messages */}
-        <div ref={messagesContainerRef} className="flex-1 overflow-x-auto overflow-y-auto px-2 py-4 md:p-4 space-y-4">
+        <div ref={messagesContainerRef} className="flex-1 overflow-x-hidden overflow-y-auto px-4 py-4 md:p-4 space-y-4">
           {messages.length === 0 ? (
             <div className="h-full flex flex-col items-center justify-center text-center p-8">
               <MessageSquare className="h-12 w-12 text-muted-foreground mb-4" />
@@ -749,62 +749,60 @@ export function AIChat() {
                     message.role === 'user' ? 'justify-end' : 'justify-start'
                   }`}
                 >
-                  <div
-                    className={`${
-                      message.role === 'user' ? 'flex-1 max-w-[80%] text-right' : 'min-w-0 flex-1 text-left'
-                    }`}
-                  >
-                    <div
-                      className={`block rounded-lg p-3 w-full ${
-                        message.role === 'user'
-                          ? 'bg-primary text-primary-foreground'
-                          : 'bg-muted'
-                      }`}
-                      style={{ maxWidth: '100%', overflowX: 'auto' }}
-                    >
-                      {message.role === 'user' ? (
-                        <p className="text-[13px] md:text-sm whitespace-pre-wrap break-words">{message.content}</p>
-                      ) : (
-                        <div className="text-[13px] md:text-sm prose prose-sm dark:prose-invert max-w-none overflow-x-auto">
+                  {message.role === 'user' ? (
+                    <>
+                      <div className="flex-1 max-w-[80%] text-right">
+                        <div className="block rounded-lg p-3 w-full bg-primary text-primary-foreground" style={{ maxWidth: '100%', overflowX: 'auto' }}>
+                          <p className="text-[13px] md:text-sm whitespace-pre-wrap break-words">{message.content}</p>
+                        </div>
+                        <div className="flex items-center gap-2 mt-1 text-xs text-muted-foreground justify-end">
+                          <span>
+                            {format(new Date(message.created_at), 'MMM d, h:mm a')}
+                          </span>
+                        </div>
+                      </div>
+                      <div className="flex-shrink-0">
+                        <div className="w-8 h-8 rounded-full bg-primary flex items-center justify-center">
+                          <User className="h-4 w-4 text-primary-foreground" />
+                        </div>
+                      </div>
+                    </>
+                  ) : (
+                    <div className="w-full">
+                      <div className="w-full py-2 font-libre-baskerville">
+                        <div className="text-base leading-relaxed prose prose-base dark:prose-invert max-w-none">
                           <ReactMarkdown remarkPlugins={[remarkGfm]}>
                             {message.content}
                           </ReactMarkdown>
                         </div>
-                      )}
-                    </div>
-                    <div className="flex items-center gap-2 mt-1 text-xs text-muted-foreground">
-                      <span>
-                        {format(new Date(message.created_at), 'MMM d, h:mm a')}
-                      </span>
-                      {message.metadata.toolCalls !== undefined &&
-                        message.metadata.toolCalls > 0 && (
-                          <div className="relative">
-                            <button
-                              onClick={() => setExpandedToolsMessageId(
-                                expandedToolsMessageId === message.id ? null : message.id
+                      </div>
+                      <div className="flex items-center gap-2 mt-1 text-xs text-muted-foreground">
+                        <span>
+                          {format(new Date(message.created_at), 'MMM d, h:mm a')}
+                        </span>
+                        {message.metadata.toolCalls !== undefined &&
+                          message.metadata.toolCalls > 0 && (
+                            <div className="relative">
+                              <button
+                                onClick={() => setExpandedToolsMessageId(
+                                  expandedToolsMessageId === message.id ? null : message.id
+                                )}
+                                className="text-primary hover:underline cursor-pointer"
+                              >
+                                • {message.metadata.toolCalls} tool{message.metadata.toolCalls !== 1 ? 's' : ''} used
+                              </button>
+                              {expandedToolsMessageId === message.id && message.metadata.toolNames && message.metadata.toolNames.length > 0 && (
+                                <div className="absolute bottom-full left-0 mb-1 bg-popover border rounded-md shadow-md p-2 z-10 min-w-[200px]">
+                                  <div className="text-xs font-semibold mb-1">Tools used:</div>
+                                  <ul className="space-y-0.5">
+                                    {message.metadata.toolNames.map((tool: string, idx: number) => (
+                                      <li key={idx} className="text-xs">• {tool}</li>
+                                    ))}
+                                  </ul>
+                                </div>
                               )}
-                              className="text-primary hover:underline cursor-pointer"
-                            >
-                              • {message.metadata.toolCalls} tool{message.metadata.toolCalls !== 1 ? 's' : ''} used
-                            </button>
-                            {expandedToolsMessageId === message.id && message.metadata.toolNames && message.metadata.toolNames.length > 0 && (
-                              <div className="absolute bottom-full left-0 mb-1 bg-popover border rounded-md shadow-md p-2 z-10 min-w-[200px]">
-                                <div className="text-xs font-semibold mb-1">Tools used:</div>
-                                <ul className="space-y-0.5">
-                                  {message.metadata.toolNames.map((tool: string, idx: number) => (
-                                    <li key={idx} className="text-xs">• {tool}</li>
-                                  ))}
-                                </ul>
-                              </div>
-                            )}
-                          </div>
-                        )}
-                    </div>
-                  </div>
-                  {message.role === 'user' && (
-                    <div className="flex-shrink-0">
-                      <div className="w-8 h-8 rounded-full bg-primary flex items-center justify-center">
-                        <User className="h-4 w-4 text-primary-foreground" />
+                            </div>
+                          )}
                       </div>
                     </div>
                   )}
@@ -826,15 +824,15 @@ export function AIChat() {
                   </div>
                 )}
                 {streamingMessage ? (
-                  <div className="bg-muted rounded-lg p-3 w-full" style={{ maxWidth: '100%', overflowX: 'auto' }}>
-                    <div className="text-[13px] md:text-sm prose prose-sm dark:prose-invert max-w-none overflow-x-auto">
+                  <div className="w-full py-2 font-libre-baskerville" style={{ maxWidth: '100%', overflowX: 'auto' }}>
+                    <div className="text-base leading-relaxed prose prose-base dark:prose-invert max-w-none overflow-x-auto">
                       <ReactMarkdown remarkPlugins={[remarkGfm]}>
                         {streamingMessage}
                       </ReactMarkdown>
                     </div>
                   </div>
                 ) : (
-                  <div className="bg-muted rounded-lg p-3">
+                  <div className="py-2">
                     <Loader2 className="h-4 w-4 animate-spin" />
                   </div>
                 )}
