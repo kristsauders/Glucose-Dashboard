@@ -14,6 +14,7 @@
     "db:migrate": "node scripts/migrate-advanced-tracking.js && node scripts/migrate-pattern-detection.js && node scripts/migrate-reports.js",
     "db:migrate:push": "node scripts/run-migration.js",
     "check-config": "node scripts/check-config.js",
+    "debug:insulin": "tsx scripts/debug-insulin-duplicates.ts",
     "docker:up": "docker-compose up -d",
     "docker:down": "docker-compose down",
     "setup": "npm install && npm run docker:up && sleep 5 && npm run db:setup",
