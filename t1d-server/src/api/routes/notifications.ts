@@ -247,7 +247,7 @@ router.post('/test', async (req, res, next) => {
       conversationId,
       messageId,
       notificationPayload,
-      hasActions: !!actions,
+      hasActions: !!actionDefinitions,
       instructions: rich ? 'Click an action button in the notification to test the full flow!' : undefined
     });
   } catch (error) {
