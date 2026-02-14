@@ -4159,9 +4159,9 @@ All queries are automatically filtered to the current user's data.
 
 Available tables (all prefixed with user_):
 - user_glucose_readings: id, timestamp, glucose, device, record_type, trend, source, created_at
-- user_meals: id, timestamp, description, carbs, notes, source, created_at
-- user_insulin_doses: id, timestamp, type, units, insulin_type, notes, source, created_at
-- user_exercise_logs: id, timestamp, duration_minutes, type, intensity, notes, source, created_at
+- user_meals: id, timestamp, description, carbs, meal_type, notes, source, created_at
+- user_insulin_doses: id, timestamp, units, insulin_type, brand_name, purpose, notes, source, created_at
+- user_exercise_logs: id, timestamp, duration_minutes, activity_type, intensity, description, notes, source, created_at
 - user_glucose_patterns: id, pattern_type, time_of_day, avg_glucose, occurrences, last_seen
 - user_glucose_correlations: id, factor_type, correlation_strength, confidence, last_updated
 - user_sage_messages: id, type, title, content, sent_at

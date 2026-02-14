@@ -1074,6 +1074,563 @@ export class ChartGenerator {
   }
 
   /**
+   * Generate a daily carbs bar chart
+   */
+  async generateDailyCarbsChart(
+    meals: any[],
+    title: string = 'Daily Carbohydrate Intake'
+  ): Promise<Buffer> {
+    // Group meals by date
+    const dailyCarbs = new Map<string, number>();
+
+    meals.forEach(meal => {
+      const date = new Date(meal.timestamp).toISOString().split('T')[0];
+      const carbs = Number(meal.carbs);
+      if (!isNaN(carbs)) {
+        dailyCarbs.set(date, (dailyCarbs.get(date) || 0) + carbs);
+      }
+    });
+
+    const dates: string[] = [];
+    const carbValues: number[] = [];
+
+    Array.from(dailyCarbs.entries())
+      .sort(([a], [b]) => a.localeCompare(b))
+      .forEach(([date, carbs]) => {
+        dates.push(new Date(date).toLocaleDateString());
+        carbValues.push(carbs);
+      });
+
+    const avgCarbs = carbValues.reduce((sum, v) => sum + v, 0) / carbValues.length;
+
+    const config: ChartConfiguration = {
+      type: 'bar',
+      data: {
+        labels: dates,
+        datasets: [
+          {
+            label: 'Carbs (g)',
+            data: carbValues,
+            backgroundColor: 'rgba(147, 51, 234, 0.7)',
+            borderColor: 'rgb(147, 51, 234)',
+            borderWidth: 1,
+          },
+        ],
+      },
+      options: {
+        responsive: true,
+        plugins: {
+          title: {
+            display: true,
+            text: title,
+            font: { size: 16, weight: 'bold' },
+          },
+          legend: {
+            display: true,
+            position: 'top',
+          },
+        },
+        scales: {
+          y: {
+            title: {
+              display: true,
+              text: 'Carbs (g)',
+            },
+            beginAtZero: true,
+          },
+          x: {
+            title: {
+              display: true,
+              text: 'Date',
+            },
+            ticks: {
+              maxRotation: 45,
+              minRotation: 45,
+            },
+          },
+        },
+      },
+      plugins: [
+        {
+          id: 'avgLine',
+          afterDraw: (chart) => {
+            const ctx = chart.ctx;
+            const yAxis = chart.scales.y;
+            const xAxis = chart.scales.x;
+            const y = yAxis.getPixelForValue(avgCarbs);
+
+            ctx.save();
+            ctx.strokeStyle = 'rgba(107, 114, 128, 0.8)';
+            ctx.lineWidth = 2;
+            ctx.setLineDash([5, 5]);
+            ctx.beginPath();
+            ctx.moveTo(xAxis.left, y);
+            ctx.lineTo(xAxis.right, y);
+            ctx.stroke();
+
+            ctx.fillStyle = 'rgba(107, 114, 128, 1)';
+            ctx.font = '12px Arial';
+            ctx.fillText(`Avg: ${avgCarbs.toFixed(0)}g`, xAxis.right - 80, y - 5);
+            ctx.restore();
+          },
+        },
+      ],
+    };
+
+    return await this.canvas.renderToBuffer(config);
+  }
+
+  /**
+   * Generate an insulin usage stacked bar chart (basal vs rapid)
+   */
+  async generateInsulinUsageChart(
+    insulin: any[],
+    title: string = 'Daily Insulin Usage (Basal vs Rapid)'
+  ): Promise<Buffer> {
+    // Helper to check if insulin is basal
+    const isBasal = (insulinType: string): boolean => {
+      const type = insulinType.toLowerCase();
+      return type.includes('lantus') ||
+             type.includes('basal') ||
+             type.includes('tresiba') ||
+             type.includes('levemir') ||
+             type.includes('toujeo') ||
+             type.includes('degludec') ||
+             type.includes('glargine') ||
+             type.includes('detemir') ||
+             type.includes('long-acting') ||
+             type.includes('long');
+    };
+
+    // Group insulin by date and type
+    const dailyInsulin = new Map<string, { basal: number; rapid: number }>();
+
+    insulin.forEach(dose => {
+      const date = new Date(dose.timestamp).toISOString().split('T')[0];
+      const current = dailyInsulin.get(date) || { basal: 0, rapid: 0 };
+      const units = Number(dose.units);
+
+      if (!isNaN(units)) {
+        if (isBasal(dose.insulin_type)) {
+          current.basal += units;
+        } else {
+          current.rapid += units;
+        }
+      }
+
+      dailyInsulin.set(date, current);
+    });
+
+    const dates: string[] = [];
+    const basalValues: number[] = [];
+    const rapidValues: number[] = [];
+
+    Array.from(dailyInsulin.entries())
+      .sort(([a], [b]) => a.localeCompare(b))
+      .forEach(([date, { basal, rapid }]) => {
+        dates.push(new Date(date).toLocaleDateString());
+        basalValues.push(basal);
+        rapidValues.push(rapid);
+      });
+
+    const totalValues = basalValues.map((b, i) => b + rapidValues[i]);
+    const avgTotal = totalValues.reduce((sum, v) => sum + v, 0) / totalValues.length;
+
+    const config: ChartConfiguration = {
+      type: 'bar',
+      data: {
+        labels: dates,
+        datasets: [
+          {
+            label: 'Basal Insulin',
+            data: basalValues,
+            backgroundColor: 'rgba(251, 146, 60, 0.7)',
+            borderColor: 'rgb(251, 146, 60)',
+            borderWidth: 1,
+          },
+          {
+            label: 'Rapid Insulin',
+            data: rapidValues,
+            backgroundColor: 'rgba(239, 68, 68, 0.7)',
+            borderColor: 'rgb(239, 68, 68)',
+            borderWidth: 1,
+          },
+        ],
+      },
+      options: {
+        responsive: true,
+        plugins: {
+          title: {
+            display: true,
+            text: title,
+            font: { size: 16, weight: 'bold' },
+          },
+          legend: {
+            display: true,
+            position: 'top',
+          },
+        },
+        scales: {
+          y: {
+            title: {
+              display: true,
+              text: 'Units',
+            },
+            stacked: true,
+            beginAtZero: true,
+          },
+          x: {
+            title: {
+              display: true,
+              text: 'Date',
+            },
+            stacked: true,
+            ticks: {
+              maxRotation: 45,
+              minRotation: 45,
+            },
+          },
+        },
+      },
+      plugins: [
+        {
+          id: 'avgLine',
+          afterDraw: (chart) => {
+            const ctx = chart.ctx;
+            const yAxis = chart.scales.y;
+            const xAxis = chart.scales.x;
+            const y = yAxis.getPixelForValue(avgTotal);
+
+            ctx.save();
+            ctx.strokeStyle = 'rgba(107, 114, 128, 0.8)';
+            ctx.lineWidth = 2;
+            ctx.setLineDash([5, 5]);
+            ctx.beginPath();
+            ctx.moveTo(xAxis.left, y);
+            ctx.lineTo(xAxis.right, y);
+            ctx.stroke();
+
+            ctx.fillStyle = 'rgba(107, 114, 128, 1)';
+            ctx.font = '12px Arial';
+            ctx.fillText(`Avg: ${avgTotal.toFixed(1)}u`, xAxis.right - 80, y - 5);
+            ctx.restore();
+          },
+        },
+      ],
+    };
+
+    return await this.canvas.renderToBuffer(config);
+  }
+
+  /**
+   * Generate a carb ratio line chart
+   */
+  async generateCarbRatioChart(
+    meals: any[],
+    insulin: any[],
+    title: string = 'Carb-to-Insulin Ratio Over Time'
+  ): Promise<Buffer> {
+    // Helper to check if insulin is basal
+    const isBasal = (insulinType: string): boolean => {
+      const type = insulinType.toLowerCase();
+      return type.includes('lantus') ||
+             type.includes('basal') ||
+             type.includes('tresiba') ||
+             type.includes('levemir') ||
+             type.includes('toujeo') ||
+             type.includes('degludec') ||
+             type.includes('glargine') ||
+             type.includes('detemir') ||
+             type.includes('long-acting') ||
+             type.includes('long');
+    };
+
+    // Calculate carb ratios
+    const ratios: Array<{ date: string; ratio: number }> = [];
+
+    meals.forEach(meal => {
+      const mealTime = new Date(meal.timestamp).getTime();
+      const mealCarbs = Number(meal.carbs);
+
+      if (isNaN(mealCarbs) || mealCarbs === 0) return;
+
+      // Find rapid insulin within 30 minutes
+      const matchingInsulin = insulin.find(dose => {
+        if (isBasal(dose.insulin_type)) return false;
+        const doseTime = new Date(dose.timestamp).getTime();
+        const timeDiff = Math.abs(doseTime - mealTime);
+        return timeDiff <= 30 * 60 * 1000;
+      });
+
+      if (matchingInsulin) {
+        const insulinUnits = Number(matchingInsulin.units);
+        if (!isNaN(insulinUnits) && insulinUnits > 0) {
+          ratios.push({
+            date: new Date(meal.timestamp).toLocaleDateString(),
+            ratio: mealCarbs / insulinUnits,
+          });
+        }
+      }
+    });
+
+    if (ratios.length === 0) {
+      // Return empty chart if no ratios calculated
+      const config: ChartConfiguration = {
+        type: 'line',
+        data: {
+          labels: ['No Data'],
+          datasets: [],
+        },
+        options: {
+          responsive: true,
+          plugins: {
+            title: {
+              display: true,
+              text: title + ' (No data available)',
+              font: { size: 16, weight: 'bold' },
+            },
+          },
+        },
+      };
+      return await this.canvas.renderToBuffer(config);
+    }
+
+    const dates = ratios.map(r => r.date);
+    const ratioValues = ratios.map(r => r.ratio);
+    const avgRatio = ratioValues.reduce((sum, v) => sum + v, 0) / ratioValues.length;
+
+    const config: ChartConfiguration = {
+      type: 'line',
+      data: {
+        labels: dates,
+        datasets: [
+          {
+            label: 'Carb Ratio (g/u)',
+            data: ratioValues,
+            borderColor: 'rgb(34, 197, 94)',
+            backgroundColor: 'rgba(34, 197, 94, 0.1)',
+            borderWidth: 2,
+            pointRadius: 4,
+            fill: false,
+          },
+        ],
+      },
+      options: {
+        responsive: true,
+        plugins: {
+          title: {
+            display: true,
+            text: title,
+            font: { size: 16, weight: 'bold' },
+          },
+          legend: {
+            display: true,
+            position: 'top',
+          },
+        },
+        scales: {
+          y: {
+            title: {
+              display: true,
+              text: 'Carb Ratio (g/u)',
+            },
+            beginAtZero: true,
+            suggestedMax: 20,
+          },
+          x: {
+            title: {
+              display: true,
+              text: 'Date',
+            },
+            ticks: {
+              maxRotation: 45,
+              minRotation: 45,
+            },
+          },
+        },
+      },
+      plugins: [
+        {
+          id: 'targetRange',
+          beforeDraw: (chart) => {
+            const ctx = chart.ctx;
+            const yAxis = chart.scales.y;
+            const xAxis = chart.scales.x;
+            const y1 = yAxis.getPixelForValue(8);
+            const y2 = yAxis.getPixelForValue(15);
+
+            ctx.save();
+            ctx.fillStyle = 'rgba(34, 197, 94, 0.1)';
+            ctx.fillRect(xAxis.left, y2, xAxis.width, y1 - y2);
+            ctx.restore();
+          },
+          afterDraw: (chart) => {
+            const ctx = chart.ctx;
+            const yAxis = chart.scales.y;
+            const xAxis = chart.scales.x;
+            const y = yAxis.getPixelForValue(avgRatio);
+
+            ctx.save();
+            ctx.strokeStyle = 'rgba(107, 114, 128, 0.8)';
+            ctx.lineWidth = 2;
+            ctx.setLineDash([5, 5]);
+            ctx.beginPath();
+            ctx.moveTo(xAxis.left, y);
+            ctx.lineTo(xAxis.right, y);
+            ctx.stroke();
+
+            ctx.fillStyle = 'rgba(107, 114, 128, 1)';
+            ctx.font = '12px Arial';
+            ctx.fillText(`Avg: 1:${avgRatio.toFixed(1)}`, xAxis.right - 90, y - 5);
+            ctx.restore();
+          },
+        },
+      ],
+    };
+
+    return await this.canvas.renderToBuffer(config);
+  }
+
+  /**
+   * Generate an exercise pattern stacked bar chart
+   */
+  async generateExercisePatternChart(
+    exercise: any[],
+    title: string = 'Daily Exercise Duration by Intensity'
+  ): Promise<Buffer> {
+    // Group exercise by date and intensity
+    const dailyExercise = new Map<string, { light: number; moderate: number; intense: number }>();
+
+    exercise.forEach(session => {
+      const date = new Date(session.timestamp).toISOString().split('T')[0];
+      const current = dailyExercise.get(date) || { light: 0, moderate: 0, intense: 0 };
+      const intensity = session.intensity?.toLowerCase() || 'moderate';
+      const duration = Number(session.duration_minutes);
+
+      if (!isNaN(duration)) {
+        if (intensity === 'light') {
+          current.light += duration;
+        } else if (intensity === 'intense') {
+          current.intense += duration;
+        } else {
+          current.moderate += duration;
+        }
+      }
+
+      dailyExercise.set(date, current);
+    });
+
+    const dates: string[] = [];
+    const lightValues: number[] = [];
+    const moderateValues: number[] = [];
+    const intenseValues: number[] = [];
+
+    Array.from(dailyExercise.entries())
+      .sort(([a], [b]) => a.localeCompare(b))
+      .forEach(([date, { light, moderate, intense }]) => {
+        dates.push(new Date(date).toLocaleDateString());
+        lightValues.push(light);
+        moderateValues.push(moderate);
+        intenseValues.push(intense);
+      });
+
+    const totalValues = lightValues.map((l, i) => l + moderateValues[i] + intenseValues[i]);
+    const avgTotal = totalValues.reduce((sum, v) => sum + v, 0) / totalValues.length;
+
+    const config: ChartConfiguration = {
+      type: 'bar',
+      data: {
+        labels: dates,
+        datasets: [
+          {
+            label: 'Light',
+            data: lightValues,
+            backgroundColor: 'rgba(168, 85, 247, 0.7)',
+            borderColor: 'rgb(168, 85, 247)',
+            borderWidth: 1,
+          },
+          {
+            label: 'Moderate',
+            data: moderateValues,
+            backgroundColor: 'rgba(34, 197, 94, 0.7)',
+            borderColor: 'rgb(34, 197, 94)',
+            borderWidth: 1,
+          },
+          {
+            label: 'Intense',
+            data: intenseValues,
+            backgroundColor: 'rgba(239, 68, 68, 0.7)',
+            borderColor: 'rgb(239, 68, 68)',
+            borderWidth: 1,
+          },
+        ],
+      },
+      options: {
+        responsive: true,
+        plugins: {
+          title: {
+            display: true,
+            text: title,
+            font: { size: 16, weight: 'bold' },
+          },
+          legend: {
+            display: true,
+            position: 'top',
+          },
+        },
+        scales: {
+          y: {
+            title: {
+              display: true,
+              text: 'Minutes',
+            },
+            stacked: true,
+            beginAtZero: true,
+          },
+          x: {
+            title: {
+              display: true,
+              text: 'Date',
+            },
+            stacked: true,
+            ticks: {
+              maxRotation: 45,
+              minRotation: 45,
+            },
+          },
+        },
+      },
+      plugins: [
+        {
+          id: 'avgLine',
+          afterDraw: (chart) => {
+            const ctx = chart.ctx;
+            const yAxis = chart.scales.y;
+            const xAxis = chart.scales.x;
+            const y = yAxis.getPixelForValue(avgTotal);
+
+            ctx.save();
+            ctx.strokeStyle = 'rgba(107, 114, 128, 0.8)';
+            ctx.lineWidth = 2;
+            ctx.setLineDash([5, 5]);
+            ctx.beginPath();
+            ctx.moveTo(xAxis.left, y);
+            ctx.lineTo(xAxis.right, y);
+            ctx.stroke();
+
+            ctx.fillStyle = 'rgba(107, 114, 128, 1)';
+            ctx.font = '12px Arial';
+            ctx.fillText(`Avg: ${avgTotal.toFixed(0)} min`, xAxis.right - 100, y - 5);
+            ctx.restore();
+          },
+        },
+      ],
+    };
+
+    return await this.canvas.renderToBuffer(config);
+  }
+
+  /**
    * Fetch glucose readings for a user within a date range
    */
   static async fetchReadings(

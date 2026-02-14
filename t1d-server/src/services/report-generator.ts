@@ -44,6 +44,24 @@ export interface GlucoseStats {
   dailyMaxAvg?: number;
 }
 
+export interface LogData {
+  meals: any[];
+  insulin: any[];
+  exercise: any[];
+}
+
+export interface LogStats {
+  avgDailyCarbs: number;
+  avgDailyInsulin: number;
+  avgBasalInsulin: number;
+  avgRapidInsulin: number;
+  avgDailyExercise: number;
+  avgCarbRatio: number | null;
+  totalMeals: number;
+  totalExerciseSessions: number;
+  daysWithData: number;
+}
+
 /**
  * Service for generating medical reports as PDFs
  */
@@ -184,6 +202,136 @@ export class ReportGenerator {
   }
 
   /**
+   * Fetch log data (meals, insulin, exercise) for a date range
+   */
+  private async fetchLogData(userId: string, startDate: Date, endDate: Date): Promise<LogData> {
+    const [meals, insulin, exercise] = await Promise.all([
+      query(
+        `SELECT id, user_id, timestamp, description, carbs, notes
+         FROM meals
+         WHERE user_id = $1 AND timestamp >= $2 AND timestamp <= $3
+         ORDER BY timestamp ASC`,
+        [userId, startDate, endDate]
+      ),
+      query(
+        `SELECT id, user_id, timestamp, insulin_type, brand_name, units, purpose, notes
+         FROM insulin_doses
+         WHERE user_id = $1 AND timestamp >= $2 AND timestamp <= $3
+         ORDER BY timestamp ASC`,
+        [userId, startDate, endDate]
+      ),
+      query(
+        `SELECT id, user_id, timestamp, description, duration_minutes, activity_type, intensity, notes
+         FROM exercise_logs
+         WHERE user_id = $1 AND timestamp >= $2 AND timestamp <= $3
+         ORDER BY timestamp ASC`,
+        [userId, startDate, endDate]
+      ),
+    ]);
+
+    return {
+      meals: meals.rows,
+      insulin: insulin.rows,
+      exercise: exercise.rows,
+    };
+  }
+
+  /**
+   * Check if an insulin type is a basal (long-acting) insulin
+   */
+  private isBasalInsulin(insulinType: string): boolean {
+    const type = insulinType.toLowerCase();
+    return type.includes('lantus') ||
+           type.includes('basal') ||
+           type.includes('tresiba') ||
+           type.includes('levemir') ||
+           type.includes('toujeo') ||
+           type.includes('degludec') ||
+           type.includes('glargine') ||
+           type.includes('detemir') ||
+           type.includes('long-acting') ||
+           type.includes('long');
+  }
+
+  /**
+   * Calculate log-based statistics
+   */
+  private calculateLogStats(logData: LogData, startDate: Date, endDate: Date): LogStats {
+    const { meals, insulin, exercise } = logData;
+
+    // Calculate number of days in range
+    const daysDiff = Math.ceil((endDate.getTime() - startDate.getTime()) / (1000 * 60 * 60 * 24));
+    const daysWithData = Math.max(1, daysDiff);
+
+    // Calculate total carbs
+    const totalCarbs = meals.reduce((sum, meal) => {
+      const carbs = Number(meal.carbs);
+      return sum + (isNaN(carbs) ? 0 : carbs);
+    }, 0);
+
+    // Calculate insulin breakdown
+    let totalBasal = 0;
+    let totalRapid = 0;
+    insulin.forEach(dose => {
+      const units = Number(dose.units);
+      if (!isNaN(units)) {
+        if (this.isBasalInsulin(dose.insulin_type)) {
+          totalBasal += units;
+        } else {
+          totalRapid += units;
+        }
+      }
+    });
+    const totalInsulin = totalBasal + totalRapid;
+
+    // Calculate total exercise
+    const totalExercise = exercise.reduce((sum, session) => {
+      const minutes = Number(session.duration_minutes);
+      return sum + (isNaN(minutes) ? 0 : minutes);
+    }, 0);
+
+    // Calculate carb ratios (match meals with insulin within 30 min)
+    const carbRatios: number[] = [];
+    meals.forEach(meal => {
+      const mealTime = new Date(meal.timestamp).getTime();
+      const mealCarbs = Number(meal.carbs);
+
+      if (isNaN(mealCarbs) || mealCarbs === 0) return;
+
+      // Find rapid insulin within 30 minutes before or after meal
+      const matchingInsulin = insulin.find(dose => {
+        if (this.isBasalInsulin(dose.insulin_type)) return false;
+        const doseTime = new Date(dose.timestamp).getTime();
+        const timeDiff = Math.abs(doseTime - mealTime);
+        return timeDiff <= 30 * 60 * 1000; // 30 minutes in milliseconds
+      });
+
+      if (matchingInsulin) {
+        const insulinUnits = Number(matchingInsulin.units);
+        if (!isNaN(insulinUnits) && insulinUnits > 0) {
+          carbRatios.push(mealCarbs / insulinUnits);
+        }
+      }
+    });
+
+    const avgCarbRatio = carbRatios.length > 0
+      ? carbRatios.reduce((sum, r) => sum + r, 0) / carbRatios.length
+      : null;
+
+    return {
+      avgDailyCarbs: totalCarbs / daysWithData,
+      avgDailyInsulin: totalInsulin / daysWithData,
+      avgBasalInsulin: totalBasal / daysWithData,
+      avgRapidInsulin: totalRapid / daysWithData,
+      avgDailyExercise: totalExercise / daysWithData,
+      avgCarbRatio,
+      totalMeals: meals.length,
+      totalExerciseSessions: exercise.length,
+      daysWithData,
+    };
+  }
+
+  /**
    * Generate HTML for the report
    */
   private async generateHTML(
@@ -199,8 +347,13 @@ export class ReportGenerator {
       bedtimeGlucose?: string;
       dailyTrends?: string;
       overnightGlucose?: string;
+      dailyCarbs?: string;
+      insulinUsage?: string;
+      carbRatio?: string;
+      exercisePattern?: string;
     },
-    comparisonStats?: GlucoseStats
+    comparisonStats?: GlucoseStats,
+    logStats?: LogStats
   ): Promise<string> {
     const formatDate = (date: Date) => date.toLocaleDateString();
 
@@ -480,6 +633,50 @@ export class ReportGenerator {
     </div>
   </div>
 
+  ${logStats && (logStats.totalMeals > 0 || logStats.totalExerciseSessions > 0) ? `
+  <div class="section">
+    <h2>Lifestyle Management</h2>
+    <div class="stats-grid">
+      ${logStats.totalMeals > 0 && logStats.avgDailyCarbs > 0 ? `
+      <div class="stat-card">
+        <div class="stat-label">Avg Daily Carbs</div>
+        <div class="stat-value">${logStats.avgDailyCarbs.toFixed(0)}<span class="stat-unit">g</span></div>
+      </div>
+      <div class="stat-card">
+        <div class="stat-label">Total Meals Logged</div>
+        <div class="stat-value">${logStats.totalMeals}</div>
+      </div>
+      ` : ''}
+      ${logStats.avgDailyInsulin > 0 ? `
+      <div class="stat-card">
+        <div class="stat-label">Avg Daily Insulin</div>
+        <div class="stat-value">${logStats.avgDailyInsulin.toFixed(1)}<span class="stat-unit">u</span></div>
+      </div>
+      <div class="stat-card">
+        <div class="stat-label">Basal vs Rapid</div>
+        <div class="stat-value">${logStats.avgBasalInsulin.toFixed(1)}u / ${logStats.avgRapidInsulin.toFixed(1)}<span class="stat-unit">u</span></div>
+      </div>
+      ` : ''}
+      ${logStats.avgCarbRatio !== null ? `
+      <div class="stat-card">
+        <div class="stat-label">Avg Carb Ratio</div>
+        <div class="stat-value">1:${logStats.avgCarbRatio.toFixed(1)}</div>
+      </div>
+      ` : ''}
+      ${logStats.totalExerciseSessions > 0 && logStats.avgDailyExercise > 0 ? `
+      <div class="stat-card">
+        <div class="stat-label">Avg Daily Exercise</div>
+        <div class="stat-value">${logStats.avgDailyExercise.toFixed(0)}<span class="stat-unit">min</span></div>
+      </div>
+      <div class="stat-card">
+        <div class="stat-label">Exercise Sessions</div>
+        <div class="stat-value">${logStats.totalExerciseSessions}</div>
+      </div>
+      ` : ''}
+    </div>
+  </div>
+  ` : ''}
+
   ${config.reportType === 'comparison' && comparisonStats ? `
   <div class="section page-break">
     <h2>Period Comparison</h2>
@@ -626,6 +823,40 @@ export class ReportGenerator {
     ` : ''}
   </div>
 
+  ${(chartImages.dailyCarbs || chartImages.insulinUsage || chartImages.carbRatio || chartImages.exercisePattern) ? `
+  <div class="section">
+    <h2>Lifestyle Management Charts</h2>
+
+    ${chartImages.dailyCarbs ? `
+    <div class="chart-container">
+      <img src="data:image/png;base64,${chartImages.dailyCarbs}" alt="Daily Carbohydrate Intake" />
+      <div class="chart-description">Total carbs consumed per day. Helps track dietary patterns and consistency.</div>
+    </div>
+    ` : ''}
+
+    ${chartImages.insulinUsage ? `
+    <div class="chart-container">
+      <img src="data:image/png;base64,${chartImages.insulinUsage}" alt="Daily Insulin Usage" />
+      <div class="chart-description">Basal vs rapid insulin usage per day. Shows insulin distribution and total daily doses.</div>
+    </div>
+    ` : ''}
+
+    ${chartImages.carbRatio ? `
+    <div class="chart-container">
+      <img src="data:image/png;base64,${chartImages.carbRatio}" alt="Carb-to-Insulin Ratio" />
+      <div class="chart-description">Grams of carbs per unit of rapid insulin over time. Target range is typically 8-15g per unit.</div>
+    </div>
+    ` : ''}
+
+    ${chartImages.exercisePattern ? `
+    <div class="chart-container">
+      <img src="data:image/png;base64,${chartImages.exercisePattern}" alt="Exercise Patterns" />
+      <div class="chart-description">Daily exercise duration by intensity level. Helps correlate physical activity with glucose patterns.</div>
+    </div>
+    ` : ''}
+  </div>
+  ` : ''}
+
   ${config.notes ? `
   <div class="notes">
     <h3>Notes</h3>
@@ -685,8 +916,12 @@ export class ReportGenerator {
         throw new Error('No glucose readings found for the specified date range');
       }
 
-      // Calculate stats
+      // Calculate glucose stats
       const stats = this.calculateStats(readings);
+
+      // Fetch log data
+      const logData = await this.fetchLogData(config.userId, config.dateRangeStart, config.dateRangeEnd);
+      const logStats = this.calculateLogStats(logData, config.dateRangeStart, config.dateRangeEnd);
 
       // Fetch comparison data if needed
       let comparisonStats: GlucoseStats | undefined;
@@ -748,8 +983,33 @@ export class ReportGenerator {
         await this.chartGenerator.generateDailyTrendsChart(readings)
       ).toString('base64');
 
-      // Generate HTML
-      const html = await this.generateHTML(config, stats, chartImages, comparisonStats);
+      // Generate log analytics charts if we have log data
+      if (logData.meals.length > 0) {
+        chartImages.dailyCarbs = (
+          await this.chartGenerator.generateDailyCarbsChart(logData.meals)
+        ).toString('base64');
+      }
+
+      if (logData.insulin.length > 0) {
+        chartImages.insulinUsage = (
+          await this.chartGenerator.generateInsulinUsageChart(logData.insulin)
+        ).toString('base64');
+      }
+
+      if (logData.meals.length > 0 && logData.insulin.length > 0) {
+        chartImages.carbRatio = (
+          await this.chartGenerator.generateCarbRatioChart(logData.meals, logData.insulin)
+        ).toString('base64');
+      }
+
+      if (logData.exercise.length > 0) {
+        chartImages.exercisePattern = (
+          await this.chartGenerator.generateExercisePatternChart(logData.exercise)
+        ).toString('base64');
+      }
+
+      // Generate HTML with log statistics
+      const html = await this.generateHTML(config, stats, chartImages, comparisonStats, logStats);
 
       // Generate PDF using Puppeteer
       const browser = await puppeteer.launch({
