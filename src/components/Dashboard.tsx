@@ -38,7 +38,7 @@ import { Button } from './ui/button';
 import { ThemeToggle } from './ThemeToggle';
 import { Upload, MessageSquare, LogOut, X, Settings as SettingsIcon, ClipboardList, FileText, Plus } from 'lucide-react';
 import { apiService } from '@/services/api';
-import { subDays, subWeeks, startOfDay, setHours, setMinutes, setSeconds, setMilliseconds } from 'date-fns';
+import { subDays, subWeeks, startOfDay, endOfDay, setHours, setMinutes, setSeconds, setMilliseconds, addDays } from 'date-fns';
 
 interface DashboardProps {
   readings: GlucoseReading[];
@@ -48,6 +48,7 @@ interface DashboardProps {
 
 export function Dashboard({ readings, onDataUpdated }: DashboardProps) {
   const [dateRange, setDateRange] = useState<DateRangePreset>('live');
+  const [selectedDate, setSelectedDate] = useState<Date>(subDays(new Date(), 1)); // For 1d mode
   const [showChat, setShowChat] = useState(false);
   const [showSettings, setShowSettings] = useState(false);
   const [showLogs, setShowLogs] = useState(false);
@@ -146,7 +147,7 @@ export function Dashboard({ readings, onDataUpdated }: DashboardProps) {
             break;
           }
           case '1d':
-            startDate = subDays(dataEnd, 1);
+            startDate = startOfDay(selectedDate);
             break;
           case '7d':
             startDate = subDays(dataEnd, 7);
@@ -182,7 +183,7 @@ export function Dashboard({ readings, onDataUpdated }: DashboardProps) {
     };
 
     fetchLogs();
-  }, [dateRange, allReadings]);
+  }, [dateRange, selectedDate, allReadings]);
 
   // Get date range for filtering
   const { filteredReadings, startDate, endDate } = useMemo(() => {
@@ -197,7 +198,7 @@ export function Dashboard({ readings, onDataUpdated }: DashboardProps) {
     const dataEnd = sortedReadings[sortedReadings.length - 1].timestamp;
 
     let rangeStart: Date;
-    const rangeEnd = dataEnd;
+    let rangeEnd = dataEnd;
 
     switch (dateRange) {
       case 'live': {
@@ -208,9 +209,12 @@ export function Dashboard({ readings, onDataUpdated }: DashboardProps) {
         rangeStart = today7am;
         break;
       }
-      case '1d':
-        rangeStart = subDays(rangeEnd, 1);
+      case '1d': {
+        // For 1d mode: show full 24 hours of selected date
+        rangeStart = startOfDay(selectedDate);
+        rangeEnd = endOfDay(selectedDate);
         break;
+      }
       case '7d':
         rangeStart = subDays(rangeEnd, 7);
         break;
@@ -236,7 +240,7 @@ export function Dashboard({ readings, onDataUpdated }: DashboardProps) {
       startDate: rangeStart,
       endDate: rangeEnd,
     };
-  }, [allReadings, dateRange]);
+  }, [allReadings, dateRange, selectedDate]);
 
   // For Live mode, get last night's data for bedtime/overnight charts
   const lastNightReadings = useMemo(() => {
@@ -382,6 +386,10 @@ export function Dashboard({ readings, onDataUpdated }: DashboardProps) {
             onRangeChange={setDateRange}
             dataStartDate={dataStartDate}
             dataEndDate={dataEndDate}
+            selectedDate={selectedDate}
+            onDateChange={setSelectedDate}
+            onPreviousDay={() => setSelectedDate(prev => subDays(prev, 1))}
+            onNextDay={() => setSelectedDate(prev => addDays(prev, 1))}
           />
 
           {/* Live Mode: Latest Reading */}

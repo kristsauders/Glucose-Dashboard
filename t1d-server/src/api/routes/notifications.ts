@@ -145,12 +145,13 @@ router.post('/action-response', async (req, res, next) => {
 // Test endpoint - Send a test notification
 const testSchema = z.object({
   message: z.string().optional(),
+  rich: z.boolean().optional().describe('Include action buttons for rich notification testing'),
 });
 
 router.post('/test', async (req, res, next) => {
   try {
     const authReq = req as AuthRequest;
-    const { message } = testSchema.parse(req.body);
+    const { message, rich } = testSchema.parse(req.body);
     const testMessage = message || 'This is a test notification from Sage! Everything is working correctly. 🎉';
 
     // Create a test conversation
@@ -159,6 +160,26 @@ router.post('/test', async (req, res, next) => {
       [authReq.user!.id, 'Test Notification']
     );
     const conversationId = conversationResult.rows[0].id;
+
+    // Create a sage_message entry for action tracking (if rich notification)
+    let messageId: string | undefined;
+    if (rich) {
+      const sageMessageResult = await query<{ id: string }>(
+        `INSERT INTO sage_messages (user_id, conversation_id, type, title, content, metadata)
+         VALUES ($1, $2, 'test', 'Test Rich Notification', $3, $4)
+         RETURNING id`,
+        [
+          authReq.user!.id,
+          conversationId,
+          testMessage,
+          JSON.stringify({ actions: [
+            { id: 'test_yes', label: 'Yes, it works!', message: 'Yes, the rich notification worked perfectly!' },
+            { id: 'test_no', label: 'Not quite', message: 'No, something seems off with the notification.' }
+          ]})
+        ]
+      );
+      messageId = sageMessageResult.rows[0].id;
+    }
 
     // Save test message to chat_messages
     await query(
@@ -183,25 +204,52 @@ router.post('/test', async (req, res, next) => {
       });
     }
 
+    // Prepare action buttons for rich notification
+    const actions = rich ? [
+      {
+        id: 'test_yes',
+        label: 'Yes, it works!',
+        message: 'Yes, the rich notification worked perfectly!',
+      },
+      {
+        id: 'test_no',
+        label: 'Not quite',
+        message: 'No, something seems off with the notification.',
+      }
+    ] : undefined;
+
     // Send push notification
-    const notificationPayload = {
-      title: 'Test Notification',
+    const notificationPayload: any = {
+      title: rich ? 'Test Rich Notification' : 'Test Notification',
       body: testMessage.length > 100 ? testMessage.substring(0, 97) + '...' : testMessage,
       icon: '/sage-icon.png',
       badge: '/sage-badge.png',
       data: {
         conversationId,
-        url: `/chat?conversation=${conversationId}`
+        messageId,  // Include messageId for action tracking
+        url: `/chat?conversation=${conversationId}`,
+        actions: actions  // Full action definitions for service worker
       }
     };
+
+    // Add action buttons to notification
+    if (actions) {
+      notificationPayload.actions = actions.map(a => ({
+        action: a.id,
+        title: a.label
+      }));
+    }
 
     await pushNotificationService.sendToUser(authReq.user!.id, notificationPayload);
 
     res.json({
       success: true,
-      message: 'Test notification sent successfully',
+      message: rich ? 'Test rich notification with action buttons sent!' : 'Test notification sent successfully',
       conversationId,
-      notificationPayload
+      messageId,
+      notificationPayload,
+      hasActions: !!actions,
+      instructions: rich ? 'Click an action button in the notification to test the full flow!' : undefined
     });
   } catch (error) {
     next(error);

@@ -1,7 +1,7 @@
 import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
-import { Calendar, Radio } from 'lucide-react';
-import { subDays, subWeeks, format, startOfDay, endOfDay } from 'date-fns';
+import { Calendar, Radio, ChevronLeft, ChevronRight } from 'lucide-react';
+import { subDays, subWeeks, format, startOfDay, endOfDay, isBefore } from 'date-fns';
 
 export type DateRangePreset = 'live' | '1d' | '7d' | '14d' | '30d' | '90d' | 'all';
 
@@ -10,6 +10,10 @@ interface DateRangeSelectorProps {
   onRangeChange: (range: DateRangePreset) => void;
   dataStartDate: Date;
   dataEndDate: Date;
+  selectedDate?: Date;
+  onDateChange?: (date: Date) => void;
+  onPreviousDay?: () => void;
+  onNextDay?: () => void;
 }
 
 export function DateRangeSelector({
@@ -17,6 +21,9 @@ export function DateRangeSelector({
   onRangeChange,
   dataStartDate,
   dataEndDate,
+  selectedDate,
+  onPreviousDay,
+  onNextDay,
 }: DateRangeSelectorProps) {
   const presets: { value: DateRangePreset; label: string; icon?: typeof Radio }[] = [
     { value: 'live', label: 'Live', icon: Radio },
@@ -31,6 +38,10 @@ export function DateRangeSelector({
   const getDateRangeDisplay = () => {
     if (selectedRange === 'live') {
       return 'Today (Live Updates)';
+    }
+
+    if (selectedRange === '1d' && selectedDate) {
+      return format(selectedDate, 'EEEE, MMMM d, yyyy');
     }
 
     const end = endOfDay(dataEndDate);
@@ -60,6 +71,9 @@ export function DateRangeSelector({
     return `${format(start, 'MMM d, yyyy')} - ${format(end, 'MMM d, yyyy')}`;
   };
 
+  const canGoPrevious = selectedDate && isBefore(startOfDay(dataStartDate), selectedDate);
+  const canGoNext = selectedDate && isBefore(selectedDate, startOfDay(new Date()));
+
   return (
     <Card>
       <CardContent className="pt-6">
@@ -87,6 +101,30 @@ export function DateRangeSelector({
             })}
           </div>
         </div>
+
+        {/* Date navigation for 1d mode */}
+        {selectedRange === '1d' && selectedDate && (
+          <div className="flex items-center justify-center gap-2 mt-4">
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={onPreviousDay}
+              disabled={!canGoPrevious}
+            >
+              <ChevronLeft className="h-4 w-4" />
+              Previous Day
+            </Button>
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={onNextDay}
+              disabled={!canGoNext}
+            >
+              Next Day
+              <ChevronRight className="h-4 w-4" />
+            </Button>
+          </div>
+        )}
       </CardContent>
     </Card>
   );

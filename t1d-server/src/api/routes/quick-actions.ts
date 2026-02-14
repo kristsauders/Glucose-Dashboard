@@ -7,6 +7,24 @@ import type { AuthRequest } from '../../types/index.js';
 const router = express.Router();
 
 /**
+ * Determine meal type based on time of day
+ */
+function getMealTypeFromTime(timestamp: string): string {
+  const date = new Date(timestamp);
+  const hour = date.getHours();
+
+  if (hour >= 5 && hour < 11) {
+    return 'breakfast';
+  } else if (hour >= 11 && hour < 15) {
+    return 'lunch';
+  } else if (hour >= 15 && hour < 21) {
+    return 'dinner';
+  } else {
+    return 'snack';
+  }
+}
+
+/**
  * GET /api/quick-actions/suggestions
  * Get personalized quick action suggestions based on user history
  */
@@ -52,6 +70,8 @@ router.post('/log', authMiddleware, async (req: AuthRequest, res) => {
         break;
 
       case 'meal':
+        // Determine meal type from timestamp if not provided
+        const mealType = data.mealType || getMealTypeFromTime(logTimestamp);
         result = await query(
           `INSERT INTO meals (user_id, description, carbs, meal_type, timestamp)
            VALUES ($1, $2, $3, $4, $5)
@@ -60,11 +80,11 @@ router.post('/log', authMiddleware, async (req: AuthRequest, res) => {
             userId,
             data.description || `${data.carbs}g carbs`,
             data.carbs,
-            data.mealType || 'snack',
+            mealType,
             logTimestamp,
           ]
         );
-        message = `Logged ${data.carbs}g carbs`;
+        message = `Logged ${data.carbs}g carbs (${mealType})`;
         break;
 
       case 'exercise':

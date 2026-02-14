@@ -92,14 +92,13 @@ export class QuickActionsAnalyzer {
     const result = await query(
       `SELECT
         ROUND(carbs / 10) * 10 as rounded_carbs,
-        meal_type,
         COUNT(*) as frequency,
         MAX(timestamp) as last_used
       FROM meals
       WHERE user_id = $1
         AND timestamp >= NOW() - INTERVAL '30 days'
         AND carbs IS NOT NULL
-      GROUP BY rounded_carbs, meal_type
+      GROUP BY rounded_carbs
       HAVING COUNT(*) >= 2
       ORDER BY COUNT(*) DESC
       LIMIT 2`,
@@ -109,7 +108,7 @@ export class QuickActionsAnalyzer {
     return result.rows.map((row) => {
       const carbs = parseInt(row.rounded_carbs);
       return {
-        id: `meal_${carbs}g_${row.meal_type || 'snack'}`.toLowerCase().replace(/\s+/g, '_'),
+        id: `meal_${carbs}g`.toLowerCase().replace(/\s+/g, '_'),
         type: 'meal' as const,
         label: `${carbs}g Carbs`,
         icon: 'utensils',
@@ -118,7 +117,7 @@ export class QuickActionsAnalyzer {
         metadata: {
           carbs,
           description: `${carbs}g carbs`,
-          mealType: row.meal_type || 'snack',
+          // Don't include mealType - let backend determine from current time
         },
       };
     });

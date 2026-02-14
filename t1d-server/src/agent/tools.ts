@@ -2725,6 +2725,108 @@ export const logMealTool = new DynamicStructuredTool({
 });
 
 /**
+ * Tool: Update an existing meal
+ */
+export const updateMealTool = new DynamicStructuredTool({
+  name: 'update_meal',
+  description: 'Update an existing meal log. Use this to fix incorrect information or add more details. Always confirm changes with user first.',
+  schema: z.object({
+    userId: z.string().optional().describe('The user ID (automatically provided)'),
+    mealId: z.string().describe('The ID of the meal to update'),
+    timestamp: z.string().optional().describe('New timestamp in ISO format if changing time'),
+    description: z.string().optional().describe('Updated meal description'),
+    carbs: z.number().optional().describe('Updated carbohydrates (grams)'),
+    notes: z.string().optional().describe('Updated or additional notes'),
+  }),
+  func: async ({ userId, mealId, timestamp, description, carbs, notes }) => {
+    try {
+      const updates: any = {};
+      if (timestamp !== undefined) updates.timestamp = timestamp;
+      if (description !== undefined) updates.description = description;
+      if (carbs !== undefined) updates.carbs = carbs;
+      if (notes !== undefined) updates.notes = notes;
+
+      if (Object.keys(updates).length === 0) {
+        return JSON.stringify({
+          success: false,
+          error: 'No fields to update',
+        });
+      }
+
+      const response = await fetch(`${process.env.API_URL || 'http://localhost:3000'}/api/logs/meals/${mealId}`, {
+        method: 'PUT',
+        headers: {
+          'Content-Type': 'application/json',
+          'X-User-Id': userId!,
+        },
+        body: JSON.stringify(updates),
+      });
+
+      if (!response.ok) {
+        const error = await response.json();
+        return JSON.stringify({
+          success: false,
+          error: error.error || 'Failed to update meal',
+        });
+      }
+
+      const result = await response.json();
+      return JSON.stringify({
+        success: true,
+        meal: result.meal,
+        message: `Updated meal: ${result.meal.description}`,
+      });
+    } catch (error) {
+      return JSON.stringify({
+        success: false,
+        error: error instanceof Error ? error.message : 'Unknown error',
+      });
+    }
+  },
+});
+
+/**
+ * Tool: Delete a meal
+ */
+export const deleteMealTool = new DynamicStructuredTool({
+  name: 'delete_meal',
+  description: 'Delete a meal log. Always confirm with user before deleting.',
+  schema: z.object({
+    userId: z.string().optional().describe('The user ID (automatically provided)'),
+    mealId: z.string().describe('The ID of the meal to delete'),
+  }),
+  func: async ({ userId, mealId }) => {
+    try {
+      const response = await fetch(`${process.env.API_URL || 'http://localhost:3000'}/api/logs/meals/${mealId}`, {
+        method: 'DELETE',
+        headers: {
+          'Content-Type': 'application/json',
+          'X-User-Id': userId!,
+        },
+      });
+
+      if (!response.ok) {
+        const error = await response.json();
+        return JSON.stringify({
+          success: false,
+          error: error.error || 'Failed to delete meal',
+        });
+      }
+
+      return JSON.stringify({
+        success: true,
+        message: 'Meal deleted successfully',
+      });
+    } catch (error) {
+      return JSON.stringify({
+        success: false,
+        error: error instanceof Error ? error.message : 'Unknown error',
+      });
+    }
+  },
+});
+
+/**
  * Tool: Get meal history
  */
 export const getMealHistoryTool = new DynamicStructuredTool({
@@ -2927,6 +3029,114 @@ export const logExerciseTool = new DynamicStructuredTool({
 });
 
 /**
+ * Tool: Update an existing exercise log
+ */
+export const updateExerciseTool = new DynamicStructuredTool({
+  name: 'update_exercise',
+  description: 'Update an existing exercise log. Use this to fix incorrect information or add more details. Always confirm changes with user first.',
+  schema: z.object({
+    userId: z.string().optional().describe('The user ID (automatically provided)'),
+    exerciseId: z.string().describe('The ID of the exercise log to update'),
+    timestamp: z.string().optional().describe('New timestamp in ISO format if changing time'),
+    description: z.string().optional().describe('Updated exercise description'),
+    activityType: z.enum(['cardio', 'strength', 'flexibility', 'sports']).optional()
+      .describe('Updated activity type'),
+    durationMinutes: z.number().optional().describe('Updated duration in minutes'),
+    intensity: z.enum(['low', 'moderate', 'high', 'intense']).optional()
+      .describe('Updated exercise intensity'),
+    notes: z.string().optional().describe('Updated or additional notes'),
+  }),
+  func: async ({ userId, exerciseId, timestamp, description, activityType, durationMinutes, intensity, notes }) => {
+    try {
+      const updates: any = {};
+      if (timestamp !== undefined) updates.timestamp = timestamp;
+      if (description !== undefined) updates.description = description;
+      if (activityType !== undefined) updates.activity_type = activityType;
+      if (durationMinutes !== undefined) updates.duration_minutes = durationMinutes;
+      if (intensity !== undefined) updates.intensity = intensity;
+      if (notes !== undefined) updates.notes = notes;
+
+      if (Object.keys(updates).length === 0) {
+        return JSON.stringify({
+          success: false,
+          error: 'No fields to update',
+        });
+      }
+
+      const response = await fetch(`${process.env.API_URL || 'http://localhost:3000'}/api/logs/exercise/${exerciseId}`, {
+        method: 'PUT',
+        headers: {
+          'Content-Type': 'application/json',
+          'X-User-Id': userId!,
+        },
+        body: JSON.stringify(updates),
+      });
+
+      if (!response.ok) {
+        const error = await response.json();
+        return JSON.stringify({
+          success: false,
+          error: error.error || 'Failed to update exercise',
+        });
+      }
+
+      const result = await response.json();
+      return JSON.stringify({
+        success: true,
+        exercise: result.exercise,
+        message: `Updated exercise: ${result.exercise.description}`,
+      });
+    } catch (error) {
+      return JSON.stringify({
+        success: false,
+        error: error instanceof Error ? error.message : 'Unknown error',
+      });
+    }
+  },
+});
+
+/**
+ * Tool: Delete an exercise log
+ */
+export const deleteExerciseTool = new DynamicStructuredTool({
+  name: 'delete_exercise',
+  description: 'Delete an exercise log. Always confirm with user before deleting.',
+  schema: z.object({
+    userId: z.string().optional().describe('The user ID (automatically provided)'),
+    exerciseId: z.string().describe('The ID of the exercise log to delete'),
+  }),
+  func: async ({ userId, exerciseId }) => {
+    try {
+      const response = await fetch(`${process.env.API_URL || 'http://localhost:3000'}/api/logs/exercise/${exerciseId}`, {
+        method: 'DELETE',
+        headers: {
+          'Content-Type': 'application/json',
+          'X-User-Id': userId!,
+        },
+      });
+
+      if (!response.ok) {
+        const error = await response.json();
+        return JSON.stringify({
+          success: false,
+          error: error.error || 'Failed to delete exercise',
+        });
+      }
+
+      return JSON.stringify({
+        success: true,
+        message: 'Exercise log deleted successfully',
+      });
+    } catch (error) {
+      return JSON.stringify({
+        success: false,
+        error: error instanceof Error ? error.message : 'Unknown error',
+      });
+    }
+  },
+});
+
+/**
  * Tool: Get exercise history
  */
 export const getExerciseHistoryTool = new DynamicStructuredTool({
@@ -3016,6 +3226,112 @@ export const logInsulinTool = new DynamicStructuredTool({
           units: parseFloat(result.rows[0].units),
         },
         message: `Logged: ${units} units of ${insulinType} (${purpose})`,
+      });
+    } catch (error) {
+      return JSON.stringify({
+        success: false,
+        error: error instanceof Error ? error.message : 'Unknown error',
+      });
+    }
+  },
+});
+
+/**
+ * Tool: Update an existing insulin dose
+ */
+export const updateInsulinTool = new DynamicStructuredTool({
+  name: 'update_insulin',
+  description: 'Update an existing insulin dose log. Use this to fix incorrect information or add more details. Always confirm changes with user first.',
+  schema: z.object({
+    userId: z.string().optional().describe('The user ID (automatically provided)'),
+    doseId: z.string().describe('The ID of the insulin dose to update'),
+    timestamp: z.string().optional().describe('New timestamp in ISO format if changing time'),
+    insulinType: z.string().optional()
+      .describe('Updated insulin brand/type (e.g., Humalog, Novolog, Lantus, Fiasp)'),
+    units: z.number().optional().describe('Updated number of units'),
+    purpose: z.enum(['meal', 'correction', 'basal']).optional()
+      .describe('Updated purpose of dose'),
+    notes: z.string().optional().describe('Updated or additional notes'),
+  }),
+  func: async ({ userId, doseId, timestamp, insulinType, units, purpose, notes }) => {
+    try {
+      const updates: any = {};
+      if (timestamp !== undefined) updates.timestamp = timestamp;
+      if (insulinType !== undefined) updates.insulin_type = insulinType;
+      if (units !== undefined) updates.units = units;
+      if (purpose !== undefined) updates.purpose = purpose;
+      if (notes !== undefined) updates.notes = notes;
+
+      if (Object.keys(updates).length === 0) {
+        return JSON.stringify({
+          success: false,
+          error: 'No fields to update',
+        });
+      }
+
+      const response = await fetch(`${process.env.API_URL || 'http://localhost:3000'}/api/logs/insulin/${doseId}`, {
+        method: 'PUT',
+        headers: {
+          'Content-Type': 'application/json',
+          'X-User-Id': userId!,
+        },
+        body: JSON.stringify(updates),
+      });
+
+      if (!response.ok) {
+        const error = await response.json();
+        return JSON.stringify({
+          success: false,
+          error: error.error || 'Failed to update insulin dose',
+        });
+      }
+
+      const result = await response.json();
+      return JSON.stringify({
+        success: true,
+        dose: result.dose,
+        message: `Updated insulin dose: ${result.dose.units} units of ${result.dose.insulin_type}`,
+      });
+    } catch (error) {
+      return JSON.stringify({
+        success: false,
+        error: error instanceof Error ? error.message : 'Unknown error',
+      });
+    }
+  },
+});
+
+/**
+ * Tool: Delete an insulin dose
+ */
+export const deleteInsulinTool = new DynamicStructuredTool({
+  name: 'delete_insulin',
+  description: 'Delete an insulin dose log. Always confirm with user before deleting.',
+  schema: z.object({
+    userId: z.string().optional().describe('The user ID (automatically provided)'),
+    doseId: z.string().describe('The ID of the insulin dose to delete'),
+  }),
+  func: async ({ userId, doseId }) => {
+    try {
+      const response = await fetch(`${process.env.API_URL || 'http://localhost:3000'}/api/logs/insulin/${doseId}`, {
+        method: 'DELETE',
+        headers: {
+          'Content-Type': 'application/json',
+          'X-User-Id': userId!,
+        },
+      });
+
+      if (!response.ok) {
+        const error = await response.json();
+        return JSON.stringify({
+          success: false,
+          error: error.error || 'Failed to delete insulin dose',
+        });
+      }
+
+      return JSON.stringify({
+        success: true,
+        message: 'Insulin dose deleted successfully',
       });
     } catch (error) {
       return JSON.stringify({
@@ -3893,15 +4209,21 @@ export const allTools = [
   // Meal logging tools
   estimateMealCarbsTool,
   logMealTool,
+  updateMealTool,
+  deleteMealTool,
   getMealHistoryTool,
 
   // Exercise logging tools
   estimateExerciseIntensityTool,
   logExerciseTool,
+  updateExerciseTool,
+  deleteExerciseTool,
   getExerciseHistoryTool,
 
   // Insulin logging tools
   logInsulinTool,
+  updateInsulinTool,
+  deleteInsulinTool,
   getInsulinHistoryTool,
 
   // Proactive monitoring tools
