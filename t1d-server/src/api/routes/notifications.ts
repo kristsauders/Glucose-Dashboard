@@ -205,7 +205,7 @@ router.post('/test', async (req, res, next) => {
     }
 
     // Prepare action buttons for rich notification
-    const actions = rich ? [
+    const actionDefinitions = rich ? [
       {
         id: 'test_yes',
         label: 'Yes, it works!',
@@ -218,6 +218,12 @@ router.post('/test', async (req, res, next) => {
       }
     ] : undefined;
 
+    // Format actions for Web Push Notifications API (action + title)
+    const formattedActions = actionDefinitions?.map(a => ({
+      action: a.id,
+      title: a.label
+    }));
+
     // Send push notification
     const notificationPayload: any = {
       title: rich ? 'Test Rich Notification' : 'Test Notification',
@@ -228,17 +234,10 @@ router.post('/test', async (req, res, next) => {
         conversationId,
         messageId,  // Include messageId for action tracking
         url: `/chat?conversation=${conversationId}`,
-        actions: actions  // Full action definitions for service worker
+        actions: formattedActions,  // Formatted actions for service worker to display
+        actionDefinitions: actionDefinitions  // Full definitions with messages for action handling
       }
     };
-
-    // Add action buttons to notification
-    if (actions) {
-      notificationPayload.actions = actions.map(a => ({
-        action: a.id,
-        title: a.label
-      }));
-    }
 
     await pushNotificationService.sendToUser(authReq.user!.id, notificationPayload);
 

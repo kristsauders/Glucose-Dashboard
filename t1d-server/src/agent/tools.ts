@@ -1031,20 +1031,23 @@ export const sendProactiveMessageTool = new DynamicStructuredTool({
 
       if (preferences.proactive_enabled) {
         // 6. Send push notification with deep-link and action buttons
+        // Format actions for Web Push Notifications API (max 2 for mobile UX)
+        const formattedActions = actions?.slice(0, 2).map(a => ({
+          action: a.id,
+          title: a.label.substring(0, 20)  // Max 20 chars for notifications
+        }));
+
         await pushNotificationService.sendToUser(userId, {
           title: title,
           body: content.length > 100 ? content.substring(0, 97) + '...' : content,
           icon: '/sage-icon.png',
           badge: '/sage-badge.png',
-          actions: actions?.slice(0, 2).map(a => ({  // Max 2 for mobile UX
-            action: a.id,
-            title: a.label.substring(0, 20)  // Max 20 chars for notifications
-          })),
           data: {
             conversationId,
             messageId,  // Include messageId for action tracking
             url: `/chat?conversation=${conversationId}`,
-            actions  // Store full definitions for service worker
+            actions: formattedActions,  // Formatted actions for service worker to display
+            actionDefinitions: actions  // Full definitions with messages for action handling
           },
         });
 

@@ -125,19 +125,19 @@ self.addEventListener('notificationclick', async (event) => {
 
   const conversationId = event.notification.data?.conversationId;
   const messageId = event.notification.data?.messageId;
-  const actions = event.notification.data?.actions || [];
+  const actionDefinitions = event.notification.data?.actionDefinitions || [];
 
   console.log('[Service Worker] Extracted conversationId:', conversationId);
   console.log('[Service Worker] Extracted messageId:', messageId);
   debugLog('Notification Click', 'Notification clicked', {
     conversationId: conversationId,
     messageId: messageId,
-    hasActions: actions.length > 0
+    hasActions: actionDefinitions.length > 0
   });
 
   // Check if user clicked an action button
   if (event.action && event.action !== 'open') {
-    const action = actions.find(a => a.id === event.action);
+    const action = actionDefinitions.find(a => a.id === event.action);
 
     if (action) {
       console.log('[Service Worker] Action button clicked:', action);
