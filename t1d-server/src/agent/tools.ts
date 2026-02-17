@@ -859,7 +859,7 @@ export const getRecentSageMessagesTool = new DynamicStructuredTool({
   description: 'Get recent proactive messages sent to the user. Use this to avoid sending duplicate messages or spamming.',
   schema: z.object({
     userId: z.string().optional().describe('The user ID (automatically provided)'),
-    hours: z.number().default(24).describe('Hours to look back (default 24)'),
+    hours: z.number().default(72).describe('Hours to look back (default 72 hours = 3 days for better repetition detection)'),
     type: z.string().optional().describe('Optional filter by message type'),
   }),
   func: async ({ userId, hours, type }) => {
@@ -2841,9 +2841,9 @@ export const getMealHistoryTool = new DynamicStructuredTool({
   description: 'Retrieve past meals for analysis or comparison',
   schema: z.object({
     userId: z.string().optional().describe('The user ID (automatically provided)'),
-    days: z.number().default(7).describe('Number of days to look back'),
+    days: z.number().default(14).describe('Number of days to look back (default 14 for better coverage)'),
     mealType: z.string().optional().describe('Filter by meal type'),
-    limit: z.number().default(20).describe('Max meals to return'),
+    limit: z.number().default(100).describe('Max meals to return (default 100 for comprehensive analysis)'),
     userTimezone: z.string().optional().describe('User timezone (automatically provided)'),
   }),
   func: async ({ userId, days, mealType, limit, userTimezone }) => {
@@ -3151,8 +3151,8 @@ export const getExerciseHistoryTool = new DynamicStructuredTool({
   description: 'Retrieve past exercise sessions for analysis',
   schema: z.object({
     userId: z.string().optional().describe('The user ID (automatically provided)'),
-    days: z.number().default(7).describe('Number of days to look back'),
-    limit: z.number().default(20).describe('Max sessions to return'),
+    days: z.number().default(14).describe('Number of days to look back (default 14 for better coverage)'),
+    limit: z.number().default(100).describe('Max sessions to return (default 100 for comprehensive analysis)'),
     userTimezone: z.string().optional().describe('User timezone (automatically provided)'),
   }),
   func: async ({ userId, days, limit, userTimezone }) => {
@@ -3357,9 +3357,9 @@ export const getInsulinHistoryTool = new DynamicStructuredTool({
   description: 'Retrieve past insulin doses for analysis',
   schema: z.object({
     userId: z.string().optional().describe('The user ID (automatically provided)'),
-    days: z.number().default(7).describe('Number of days to look back'),
+    days: z.number().default(14).describe('Number of days to look back (default 14 for better coverage)'),
     purpose: z.string().optional().describe('Filter by purpose'),
-    limit: z.number().default(20).describe('Max doses to return'),
+    limit: z.number().default(100).describe('Max doses to return (default 100 for comprehensive analysis)'),
     userTimezone: z.string().optional().describe('User timezone (automatically provided)'),
   }),
   func: async ({ userId, days, purpose, limit, userTimezone }) => {
