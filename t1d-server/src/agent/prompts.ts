@@ -421,3 +421,77 @@ When user asks about past meals/events with temporal phrases, you MUST interpret
 
   return SYSTEM_PROMPT.replace('${timezone}', timezone).replace('${Math.abs(Math.round(offsetHours))}', Math.abs(Math.round(offsetHours)).toString()) + USER_CONTEXT_PROMPT;
 }
+
+// Export USER_CONTEXT_PROMPT as a function for hybrid-graph.ts
+export function USER_CONTEXT_PROMPT(userContext: { email: string; diagnosisType?: string; diagnosisDate?: string; timezone: string }) {
+  const { email, diagnosisType, diagnosisDate, timezone } = userContext;
+  const now = new Date();
+
+  // Calculate timezone offset
+  const tzDate = new Date(now.toLocaleString('en-US', { timeZone: timezone }));
+  const tzOffset = (tzDate.getTime() - now.getTime()) / 60000;
+  const offsetHours = Math.round(tzOffset / 60);
+  const offsetSign = offsetHours >= 0 ? '+' : '';
+  const offsetString = `UTC${offsetSign}${offsetHours}`;
+
+  // Get current date/time in user's timezone
+  const localDate = now.toLocaleString('en-US', {
+    timeZone: timezone,
+    weekday: 'long',
+    year: 'numeric',
+    month: 'long',
+    day: 'numeric',
+    hour: 'numeric',
+    minute: '2-digit',
+    hour12: true,
+  });
+
+  // Get ISO format dates
+  const isoDate = now.toISOString();
+  const isoDateOnly = new Date(now.toLocaleString('en-US', { timeZone: timezone }))
+    .toISOString()
+    .split('T')[0];
+
+  return `
+
+## User Context
+- Email: ${email}
+- Diagnosis: ${diagnosisType || 'Not specified'}
+- Diagnosis Date: ${diagnosisDate || 'Not specified'}
+- Timezone: ${timezone} (${offsetString})
+- Current Date/Time: ${localDate}
+- Current ISO Date: ${isoDateOnly}
+- Current ISO Timestamp: ${isoDate}
+
+**IMPORTANT - Timezone Conversion for Timestamps:**
+When user mentions a time (e.g., "7:30am"), that's in their LOCAL timezone (${timezone}).
+To create an ISO timestamp for TODAY, you must ADD ${Math.abs(Math.round(offsetHours))} hours to the local time to convert to UTC.
+
+**CRITICAL - Use the correct date:**
+- "today" = ${isoDateOnly} (the date shown in Current Date/Time above)
+- "yesterday" = subtract 1 day from ${isoDateOnly}
+- For past times today: if user says "at 2pm" and it's currently before 2pm, assume they mean YESTERDAY
+
+The Current ISO Date above (${isoDateOnly}) is in the user's LOCAL timezone, not UTC!
+
+**TEMPORAL REASONING FOR QUERIES - Critical for correct meal/log identification:**
+
+When user asks about past meals/events with temporal phrases, you MUST interpret them correctly:
+
+**Interpreting Common Phrases:**
+- "last night" = evening of YESTERDAY (dinner time, 5pm-10pm yesterday)
+- "yesterday" = the entire previous calendar day
+- "this morning" / "today" = current calendar day before noon
+- "breakfast today" = meal_type=breakfast AND timestamp is TODAY
+- "dinner last night" = meal_type=dinner AND timestamp is YESTERDAY
+- "tuesday" = most recent Tuesday in the past (NOT future Tuesday unless explicitly stated)
+- "last tuesday" = the Tuesday from the previous week
+
+**Critical: When querying meal history:**
+1. ALWAYS use the 'days' parameter to limit the search range appropriately
+   - "last night" → days=1 (yesterday only)
+   - "yesterday" → days=1
+   - "this week" → days=7
+   - "tuesday" → days=7 (to capture last week's Tuesday if needed)
+`;
+}
