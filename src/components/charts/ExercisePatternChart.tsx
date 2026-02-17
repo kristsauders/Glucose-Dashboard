@@ -28,7 +28,13 @@ export function ExercisePatternChart({ exercise }: ExercisePatternChartProps) {
     const dailyExercise = new Map<string, { light: number; moderate: number; intense: number }>();
 
     exercise.forEach(session => {
-      const date = new Date(session.timestamp).toISOString().split('T')[0];
+      // Use LOCAL date, not UTC date, for grouping
+      const timestamp = new Date(session.timestamp);
+      const year = timestamp.getFullYear();
+      const month = String(timestamp.getMonth() + 1).padStart(2, '0');
+      const day = String(timestamp.getDate()).padStart(2, '0');
+      const date = `${year}-${month}-${day}`;
+
       const current = dailyExercise.get(date) || { light: 0, moderate: 0, intense: 0 };
 
       const intensity = session.intensity?.toLowerCase() || 'moderate';

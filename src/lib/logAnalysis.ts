@@ -57,6 +57,18 @@ export interface ExerciseMetrics {
 }
 
 /**
+ * Helper function to get local date string from a timestamp
+ * This ensures dates are grouped by the user's local timezone, not UTC
+ */
+function getLocalDateString(timestamp: Date | string): string {
+  const date = timestamp instanceof Date ? timestamp : new Date(timestamp);
+  const year = date.getFullYear();
+  const month = String(date.getMonth() + 1).padStart(2, '0');
+  const day = String(date.getDate()).padStart(2, '0');
+  return `${year}-${month}-${day}`;
+}
+
+/**
  * Calculate daily aggregated metrics for logs
  */
 export function calculateDailyLogMetrics(
@@ -68,7 +80,7 @@ export function calculateDailyLogMetrics(
 
   // Process insulin doses
   insulin.forEach(dose => {
-    const date = new Date(dose.timestamp).toISOString().split('T')[0];
+    const date = getLocalDateString(dose.timestamp);
     if (!metricsMap.has(date)) {
       metricsMap.set(date, {
         date,
@@ -99,7 +111,7 @@ export function calculateDailyLogMetrics(
 
   // Process meals
   meals.forEach(meal => {
-    const date = new Date(meal.timestamp).toISOString().split('T')[0];
+    const date = getLocalDateString(meal.timestamp);
     if (!metricsMap.has(date)) {
       metricsMap.set(date, {
         date,
@@ -126,7 +138,7 @@ export function calculateDailyLogMetrics(
 
   // Process exercise
   exercise.forEach(session => {
-    const date = new Date(session.timestamp).toISOString().split('T')[0];
+    const date = getLocalDateString(session.timestamp);
     if (!metricsMap.has(date)) {
       metricsMap.set(date, {
         date,
@@ -279,16 +291,16 @@ export function getTodayLogMetrics(
   exerciseMinutes: number;
   carbRatio: number | null;
 } {
-  const today = new Date().toISOString().split('T')[0];
+  const today = getLocalDateString(new Date());
 
   const todayInsulin = insulin.filter(d =>
-    new Date(d.timestamp).toISOString().split('T')[0] === today
+    getLocalDateString(d.timestamp) === today
   );
   const todayMeals = meals.filter(m =>
-    new Date(m.timestamp).toISOString().split('T')[0] === today
+    getLocalDateString(m.timestamp) === today
   );
   const todayExercise = exercise.filter(e =>
-    new Date(e.timestamp).toISOString().split('T')[0] === today
+    getLocalDateString(e.timestamp) === today
   );
 
   const carbs = todayMeals.reduce((sum, m) => sum + m.carbs, 0);

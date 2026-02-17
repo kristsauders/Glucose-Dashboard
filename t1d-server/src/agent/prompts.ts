@@ -1273,15 +1273,28 @@ export const USER_CONTEXT_PROMPT = (userInfo: {
 
 **IMPORTANT - Timezone Conversion for Timestamps:**
 When user mentions a time (e.g., "7:30am"), that's in their LOCAL timezone (${timezone}).
-To create an ISO timestamp for TODAY, you must ADD ${Math.abs(Math.round(offsetHours))} hours to the local time to convert to UTC.
-${offsetHours > 0 ? `Example: User says "7:30am today" → Local time is 7:30am ${timezone} → ADD ${Math.round(offsetHours)} hours → UTC is ${7 + Math.round(offsetHours)}:30 → Timestamp: "${isoDateOnly}T${String((7 + Math.round(offsetHours)) % 24).padStart(2, '0')}:30:00.000Z"` : `Example: User says "2:00pm today" → Local time is 2:00pm ${timezone} → ADD ${Math.abs(Math.round(offsetHours))} hours → UTC is ${14 + Math.abs(Math.round(offsetHours))}:00 → Timestamp: "${isoDateOnly}T${String(14 + Math.abs(Math.round(offsetHours))).padStart(2, '0')}:00:00.000Z"`}
+To convert to UTC:
+1. Start with the LOCAL date and time the user mentioned
+2. ADD ${Math.abs(Math.round(offsetHours))} hours to convert to UTC
+3. If adding hours goes past midnight (≥24), the UTC date is the NEXT day
 
-**CRITICAL - Use the correct date:**
-- "today" = ${isoDateOnly} (the date shown in Current Date/Time above)
+**Step-by-step process:**
+Example 1: User says "7pm yesterday (Feb 16)"
+- Step 1: Local datetime = 2025-02-16T19:00:00 (Feb 16 at 7pm)
+- Step 2: Add ${Math.abs(Math.round(offsetHours))} hours: 19 + ${Math.abs(Math.round(offsetHours))} = ${19 + Math.abs(Math.round(offsetHours))}
+- Step 3: Since ${19 + Math.abs(Math.round(offsetHours))} ${19 + Math.abs(Math.round(offsetHours)) >= 24 ? '>= 24, subtract 24 and increment date' : '< 24, keep same date'}
+- Result: ${19 + Math.abs(Math.round(offsetHours)) >= 24 ? `2025-02-17T${String((19 + Math.abs(Math.round(offsetHours))) - 24).padStart(2, '0')}:00:00.000Z (Feb 17 UTC)` : `2025-02-16T${String(19 + Math.abs(Math.round(offsetHours))).padStart(2, '0')}:00:00.000Z (Feb 16 UTC)`}
+
+Example 2: User says "7am yesterday (Feb 16)"
+- Step 1: Local datetime = 2025-02-16T07:00:00 (Feb 16 at 7am)
+- Step 2: Add ${Math.abs(Math.round(offsetHours))} hours: 7 + ${Math.abs(Math.round(offsetHours))} = ${7 + Math.abs(Math.round(offsetHours))}
+- Step 3: Since ${7 + Math.abs(Math.round(offsetHours))} < 24, date stays the same
+- Result: 2025-02-16T${String(7 + Math.abs(Math.round(offsetHours))).padStart(2, '0')}:00:00.000Z (Feb 16 UTC)
+
+**CRITICAL - Date references:**
+- "today" = ${isoDateOnly} (in ${timezone})
 - "yesterday" = subtract 1 day from ${isoDateOnly}
-- For past times today: if user says "at 2pm" and it's currently before 2pm, assume they mean YESTERDAY
-
-The Current ISO Date above (${isoDateOnly}) is in the user's LOCAL timezone, not UTC!
+- Always start with the LOCAL date the user specifies, then convert to UTC using the steps above
 
 **TEMPORAL REASONING FOR QUERIES - Critical for correct meal/log identification:**
 

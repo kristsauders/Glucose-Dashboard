@@ -28,7 +28,13 @@ export function InsulinUsageChart({ insulin }: InsulinUsageChartProps) {
     const dailyInsulin = new Map<string, { basal: number; rapid: number }>();
 
     insulin.forEach(dose => {
-      const date = new Date(dose.timestamp).toISOString().split('T')[0];
+      // Use LOCAL date, not UTC date, for grouping
+      const timestamp = new Date(dose.timestamp);
+      const year = timestamp.getFullYear();
+      const month = String(timestamp.getMonth() + 1).padStart(2, '0');
+      const day = String(timestamp.getDate()).padStart(2, '0');
+      const date = `${year}-${month}-${day}`;
+
       const current = dailyInsulin.get(date) || { basal: 0, rapid: 0 };
 
       // Categorize insulin type - detect all basal insulin types

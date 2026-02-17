@@ -27,7 +27,13 @@ export function DailyCarbChart({ meals }: DailyCarbChartProps) {
     const dailyCarbs = new Map<string, number>();
 
     meals.forEach(meal => {
-      const date = new Date(meal.timestamp).toISOString().split('T')[0];
+      // Use LOCAL date, not UTC date, for grouping
+      const timestamp = new Date(meal.timestamp);
+      const year = timestamp.getFullYear();
+      const month = String(timestamp.getMonth() + 1).padStart(2, '0');
+      const day = String(timestamp.getDate()).padStart(2, '0');
+      const date = `${year}-${month}-${day}`;
+
       const carbs = Number(meal.carbs);
       if (!isNaN(carbs)) {
         dailyCarbs.set(date, (dailyCarbs.get(date) || 0) + carbs);
