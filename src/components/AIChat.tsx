@@ -34,6 +34,7 @@ export function AIChat() {
   const streamingMessageRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLInputElement>(null);
   const messagesContainerRef = useRef<HTMLDivElement>(null);
+  const deepLinkAttemptedRef = useRef<string | null>(null);
 
   // Only render recent messages for performance (paginated)
   const visibleMessages = useMemo(() => {
@@ -79,14 +80,24 @@ export function AIChat() {
 
     // Skip if no conversation ID in URL
     if (!conversationId) {
+      deepLinkAttemptedRef.current = null;
       return;
     }
 
     // Skip if still fetching conversations (will retry when fetch completes)
     if (isFetchingConversations) {
-      console.log('[Deep-Link] Waiting for conversations to load...');
+      console.log('[Deep-Link] Waiting for conversations to load...', { conversationId });
       return;
     }
+
+    // Skip if we've already attempted this conversation
+    if (deepLinkAttemptedRef.current === conversationId) {
+      console.log('[Deep-Link] Already attempted this conversation:', conversationId);
+      return;
+    }
+
+    // Mark this conversation as attempted
+    deepLinkAttemptedRef.current = conversationId;
 
     console.log('[Deep-Link] Attempting to open conversation:', conversationId);
     console.log('[Deep-Link] Available conversations:', conversations.map(c => ({ id: c.id, title: c.title })));
@@ -133,7 +144,7 @@ export function AIChat() {
         setError(`Failed to load conversation: ${error.message}`);
       });
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [searchParams.get('conversation'), conversations.length, activeConversationId, isFetchingConversations]);
+  }, [searchParams.get('conversation'), conversations, activeConversationId, isFetchingConversations]);
 
   // Listen for messages from service worker
   useEffect(() => {
