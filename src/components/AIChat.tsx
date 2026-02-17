@@ -128,21 +128,33 @@ export function AIChat() {
     console.warn('[Deep-Link] Conversation not in list, attempting direct load...');
     console.warn('[Deep-Link] This is normal for new proactive messages');
 
-    loadConversation(conversationId)
-      .then(() => {
+    // Retry logic for race conditions where notification arrives before DB commit
+    const attemptLoad = async (retryCount = 0): Promise<void> => {
+      try {
+        await loadConversation(conversationId);
         console.log('[Deep-Link] Direct load successful');
         // Only clear search params after conversation loads successfully
         setTimeout(() => setSearchParams({}), 500);
         // Refresh conversation list to include the new one
         fetchConversations();
-      })
-      .catch((error) => {
-        console.error('[Deep-Link] Direct load failed:', error);
-        console.error('[Deep-Link] Error details:', error.message, error.response?.status);
-        // Don't clear search params on error so user can see what failed
-        // Show error to user
-        setError(`Failed to load conversation: ${error.message}`);
-      });
+      } catch (error: any) {
+        // Retry up to 2 times with increasing delays if conversation not found
+        const isNotFound = error.message?.includes('not found') || error.response?.status === 404;
+        if (isNotFound && retryCount < 2) {
+          const delay = (retryCount + 1) * 300; // 300ms, 600ms
+          console.warn(`[Deep-Link] Conversation not found, retrying in ${delay}ms (attempt ${retryCount + 1}/2)`);
+          setTimeout(() => attemptLoad(retryCount + 1), delay);
+        } else {
+          console.error('[Deep-Link] Direct load failed:', error);
+          console.error('[Deep-Link] Error details:', error.message, error.response?.status);
+          // Don't clear search params on error so user can see what failed
+          // Show error to user
+          setError(`Failed to load conversation: ${error.message}`);
+        }
+      }
+    };
+
+    attemptLoad();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [searchParams.get('conversation'), conversations, activeConversationId, isFetchingConversations]);
 
