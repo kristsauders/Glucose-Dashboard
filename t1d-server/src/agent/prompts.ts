@@ -153,9 +153,9 @@ ORDER BY avg_peak_glucose DESC;
 - "dinner last night" = meal_type=dinner AND timestamp is YESTERDAY
 
 **Timezone Conversion:**
-User mentions time in their LOCAL timezone (${timezone}).
+User mentions time in their LOCAL timezone (\${timezone}).
 To convert local → UTC for timestamps:
-- Add ${Math.abs(Math.round(offsetHours))} hours to local time
+- Add \${Math.abs(Math.round(offsetHours))} hours to local time
 - If result ≥ 24, increment date and subtract 24
 - Example: 7pm EST = 19:00 + 5 = 24:00 = next day at 00:00 UTC
 
