@@ -250,7 +250,7 @@ export class ResearchMonitor {
       const paper = papers[0]; // Send one at a time
       const summary = paper.summary || await researchService.summarizePaper(paper);
 
-      const message = this.formatResearchMessage(paper, summary);
+      const message = await this.formatResearchMessage(paper, summary, userId);
 
       // Send via sendProactiveMessageTool to create proper conversation
       const { sendProactiveMessageTool } = await import('../agent/tools.js');
@@ -287,13 +287,97 @@ export class ResearchMonitor {
   }
 
   /**
-   * Format research message for user
+   * Format research message for user with AI-generated detailed analysis
    */
-  private formatResearchMessage(paper: any, summary: any): string {
-    const keyFindings = summary.keyFindings?.slice(0, 3).map((f: string) => `- ${f}`).join('\n') || '';
-    const implications = summary.clinicalImplications?.slice(0, 2).map((i: string) => `- ${i}`).join('\n') || '';
+  private async formatResearchMessage(paper: any, summary: any, userId: string): Promise<string> {
+    // Use AI to create a detailed, personalized analysis
+    const { createHybridAgentGraph } = await import('../agent/hybrid-graph.js');
 
-    return `🔬 New Research: ${paper.title}
+    // Fetch user preferences for model configuration
+    const prefsResult = await query(
+      `SELECT preferences FROM users WHERE id = $1`,
+      [userId]
+    );
+    const userPreferences = prefsResult.rows[0]?.preferences || {};
+    const userModelConfig = userPreferences.modelConfig;
+
+    // Create user-specific agent
+    const agent = createHybridAgentGraph('proactive', userModelConfig);
+
+    const detailedPrompt = `You are analyzing a recent diabetes research paper to share with a user. Create a comprehensive, engaging summary that explains:
+
+**Research Paper:**
+Title: ${paper.title}
+Journal: ${paper.journal}
+Published: ${paper.publishedDate.getFullYear()}
+Abstract: ${paper.abstract}
+
+**Existing Summary:**
+Key Findings: ${summary.keyFindings?.join('; ') || 'Not available'}
+Clinical Implications: ${summary.clinicalImplications?.join('; ') || 'Not available'}
+Limitations: ${summary.limitations?.join('; ') || 'Not available'}
+Relevance to T1D: ${summary.relevanceToT1D || 'Not available'}
+
+**Your Task:**
+Create a detailed, engaging analysis (300-400 words) that includes:
+
+1. **What Was Tested** (2-3 sentences)
+   - Explain the study design, participants, and methodology in accessible language
+   - What question were the researchers trying to answer?
+
+2. **Key Findings & Insights** (3-4 sentences)
+   - What did they discover? Be specific with numbers/percentages if available
+   - What was surprising or particularly interesting about the results?
+   - How strong was the evidence? (e.g., "showed significant improvement" vs "suggested potential benefit")
+
+3. **Clinical Implications** (2-3 sentences)
+   - What does this mean for people with Type 1 diabetes?
+   - Are there practical takeaways or action items?
+
+4. **Future Directions** (1-2 sentences)
+   - What questions remain unanswered?
+   - What should future research explore?
+
+5. **Personalized Relevance** (2-3 sentences)
+   - Use tools to check this user's recent data (glucose patterns, insulin doses, meals, exercise)
+   - Explain how this research might specifically apply to their diabetes management
+   - If the research relates to patterns you see in their data, mention it
+
+**IMPORTANT:**
+- Call tools to analyze the user's recent data (last 7-14 days) to personalize your analysis
+- Tools available: get_recent_glucose, analyze_trends, get_meal_history, get_insulin_history, analyze_meal_patterns, get_detected_patterns
+- Call 2-3 tools minimum to understand their patterns
+- Be specific about how the research relates to what you observe in their data
+- Use accessible language - avoid excessive jargon
+- Be engaging and conversational, not academic
+- End with: "Link: ${paper.url}"
+
+Format your response as a cohesive, flowing analysis (not bullet points with headers). Make it feel like a knowledgeable friend explaining exciting research.`;
+
+    try {
+      const result = await agent.invoke({
+        messages: [{ role: 'user', content: detailedPrompt }],
+        userId,
+        userContext: {
+          email: '', // Not needed for this analysis
+          timezone: 'America/New_York'
+        }
+      });
+
+      const lastMessage = result.messages[result.messages.length - 1];
+      const detailedAnalysis = typeof lastMessage.content === 'string'
+        ? lastMessage.content
+        : JSON.stringify(lastMessage.content);
+
+      return `🔬 New Research: ${paper.title}\n\n${detailedAnalysis}`;
+    } catch (error) {
+      console.error('[ResearchMonitor] Error generating detailed analysis:', error);
+
+      // Fallback to simple format if AI analysis fails
+      const keyFindings = summary.keyFindings?.slice(0, 3).map((f: string) => `- ${f}`).join('\n') || '';
+      const implications = summary.clinicalImplications?.slice(0, 2).map((i: string) => `- ${i}`).join('\n') || '';
+
+      return `🔬 New Research: ${paper.title}
 
 **Key Findings:**
 ${keyFindings}
@@ -305,6 +389,7 @@ ${implications}
 **Link:** ${paper.url}
 
 This study might be relevant to your diabetes management. Would you like to discuss any of these findings?`;
+    }
   }
 
   /**
