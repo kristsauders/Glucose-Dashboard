@@ -11,24 +11,12 @@ import { createHybridAgentGraph } from '../agent/hybrid-graph.js';
  * Monitors glucose data and proactively reaches out with insights, questions, and suggestions
  */
 export class ProactiveMonitor {
-  private smallModel: any;
-  private toolOnlyAgent: any;
   private isRunning: boolean = false;
   private checkInterval: number = 90 * 60 * 1000; // 90 minutes for responsive monitoring
   private intervalId: NodeJS.Timeout | null = null;
 
   constructor() {
-    // Get proactive providers (small model for Phases 1 & 2, large model for Phase 3)
-    const providers = getHybridAIProvider('proactive');
-    console.log('✓ ProactiveMonitor using models:');
-    console.log(`  - Phase 1 (tool calling): ${providers.smallModelName}`);
-    console.log(`  - Phase 2 (decision): ${providers.smallModelName}`);
-    console.log(`  - Phase 3 (synthesis): ${providers.largeModelName}`);
-
-    // Phase 1 & 2: Use small model for tool calling and decision
-    this.smallModel = providers.smallModel;
-    // Phase 1: Use hybrid graph for tool calling with small model
-    this.toolOnlyAgent = createHybridAgentGraph('proactive');
+    console.log('✓ ProactiveMonitor initialized (models configured per-user)');
   }
 
   /**
@@ -344,6 +332,19 @@ export class ProactiveMonitor {
     try {
       console.log(`  Analyzing ${user.email}...`);
 
+      // Fetch user preferences for model configuration
+      const prefsResult = await query(
+        `SELECT preferences FROM users WHERE id = $1`,
+        [user.id]
+      );
+      const userPreferences = prefsResult.rows[0]?.preferences || {};
+      const userModelConfig = userPreferences.modelConfig;
+
+      // Create user-specific agent and providers with their model preferences
+      const toolOnlyAgent = createHybridAgentGraph('proactive', userModelConfig);
+      const providers = getHybridAIProvider('proactive', userModelConfig);
+      const smallModel = providers.smallModel; // For Phase 2 decision making
+
       // Get user's timezone
       const userTimezone = user.timezone || 'America/New_York';
 
@@ -416,7 +417,7 @@ The synthesis model will write the user-facing message - your job is just to gat
       });
 
       // PHASE 1: Use tool-only agent for data gathering (no synthesis)
-      const analysisStream = await this.toolOnlyAgent.stream({
+      const analysisStream = await toolOnlyAgent.stream({
         messages: [new HumanMessage(analysisPrompt)],
         userId: user.id,
         userContext: userCtx,
@@ -500,7 +501,7 @@ Respond with ONLY "SEND" or "DONT_SEND" (no explanation needed).`;
       });
 
       // Use small model directly for simple SEND/DONT_SEND decision (no need for synthesis)
-      const decisionResponse = await this.smallModel.invoke([
+      const decisionResponse = await smallModel.invoke([
         new HumanMessage(decisionPrompt)
       ]);
 
