@@ -1,5 +1,6 @@
 import { DynamicStructuredTool } from '@langchain/core/tools';
 import { z } from 'zod';
+import fetch from 'node-fetch';
 import { query } from '../config/database.js';
 import { discordService } from '../services/discord.js';
 import { pushNotificationService, type ActionButton } from '../services/push-notification-service.js';

@@ -8,18 +8,15 @@ interface InsulinLoggingPanelProps {
   onSuccess: () => void;
 }
 
-const INSULIN_TYPES = ['Fiasp', 'Humalog', 'NovoRapid', 'Lantus', 'Levemir', 'Tresiba'];
-const UNIT_OPTIONS = [1, 2, 3, 4, 5, 6, 8, 10, 12, 15, 20];
-const PURPOSE_OPTIONS = [
-  { value: 'meal', label: 'Meal' },
-  { value: 'correction', label: 'Correction' },
-  { value: 'basal', label: 'Basal' },
+const INSULIN_TYPES = [
+  { value: 'rapid', label: 'Bolus', purpose: 'meal' },
+  { value: 'long-acting', label: 'Basal', purpose: 'basal' },
 ];
+const UNIT_OPTIONS = [1, 2, 3, 4, 5, 6, 8, 10, 12, 15, 20];
 
 export function InsulinLoggingPanel({ onSuccess }: InsulinLoggingPanelProps) {
   const [insulinType, setInsulinType] = useState<string | null>(null);
   const [units, setUnits] = useState<number | null>(null);
-  const [purpose, setPurpose] = useState<string>('meal');
   const [timestamp, setTimestamp] = useState<Date>(new Date());
   const [isLogging, setIsLogging] = useState(false);
 
@@ -28,6 +25,10 @@ export function InsulinLoggingPanel({ onSuccess }: InsulinLoggingPanelProps) {
       alert('Please select insulin type and units');
       return;
     }
+
+    // Automatically determine purpose based on insulin type
+    const selectedType = INSULIN_TYPES.find(t => t.value === insulinType);
+    const purpose = selectedType?.purpose || 'meal';
 
     setIsLogging(true);
     try {
@@ -51,19 +52,19 @@ export function InsulinLoggingPanel({ onSuccess }: InsulinLoggingPanelProps) {
   const canSubmit = insulinType && units && !isLogging;
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-5">
       {/* Insulin Type Selection */}
       <div>
-        <label className="block text-sm font-medium mb-3">Insulin Type</label>
-        <div className="grid grid-cols-3 gap-2">
+        <label className="block text-sm font-medium mb-2">Insulin Type</label>
+        <div className="grid grid-cols-2 gap-2">
           {INSULIN_TYPES.map((type) => (
             <Button
-              key={type}
-              variant={insulinType === type ? 'default' : 'outline'}
-              onClick={() => setInsulinType(type)}
+              key={type.value}
+              variant={insulinType === type.value ? 'default' : 'outline'}
+              onClick={() => setInsulinType(type.value)}
               className="h-12"
             >
-              {type}
+              {type.label}
             </Button>
           ))}
         </div>
@@ -71,7 +72,7 @@ export function InsulinLoggingPanel({ onSuccess }: InsulinLoggingPanelProps) {
 
       {/* Units Selection */}
       <div>
-        <label className="block text-sm font-medium mb-3">Units</label>
+        <label className="block text-sm font-medium mb-2">Units</label>
         <div className="grid grid-cols-4 gap-2">
           {UNIT_OPTIONS.map((u) => (
             <Button
@@ -86,25 +87,8 @@ export function InsulinLoggingPanel({ onSuccess }: InsulinLoggingPanelProps) {
         </div>
       </div>
 
-      {/* Purpose Selection */}
-      <div>
-        <label className="block text-sm font-medium mb-3">Purpose</label>
-        <div className="grid grid-cols-3 gap-2">
-          {PURPOSE_OPTIONS.map((opt) => (
-            <Button
-              key={opt.value}
-              variant={purpose === opt.value ? 'default' : 'outline'}
-              onClick={() => setPurpose(opt.value)}
-              className="h-12"
-            >
-              {opt.label}
-            </Button>
-          ))}
-        </div>
-      </div>
-
       {/* Time Adjuster */}
-      <TimeAdjuster value={timestamp} onChange={setTimestamp} />
+      <TimeAdjuster value={timestamp} onChange={setTimestamp} defaultExpanded />
 
       {/* Submit Button */}
       <Button

@@ -6,10 +6,11 @@ import { format } from 'date-fns';
 interface TimeAdjusterProps {
   value: Date;
   onChange: (date: Date) => void;
+  defaultExpanded?: boolean;
 }
 
-export function TimeAdjuster({ value, onChange }: TimeAdjusterProps) {
-  const [isExpanded, setIsExpanded] = useState(false);
+export function TimeAdjuster({ value, onChange, defaultExpanded = false }: TimeAdjusterProps) {
+  const [isExpanded, setIsExpanded] = useState(defaultExpanded);
 
   const adjustMinutes = (minutes: number) => {
     const newDate = new Date(value);
