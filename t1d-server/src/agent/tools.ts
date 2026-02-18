@@ -2,6 +2,7 @@ import { DynamicStructuredTool } from '@langchain/core/tools';
 import { z } from 'zod';
 import fetch from 'node-fetch';
 import { query } from '../config/database.js';
+import { env } from '../config/env.js';
 import { discordService } from '../services/discord.js';
 import { pushNotificationService, type ActionButton } from '../services/push-notification-service.js';
 import { reportingService } from '../services/reporting-service.js';
@@ -20,6 +21,9 @@ import { researchService } from '../services/research-service.js';
 import { researchMonitor } from '../services/research-monitor.js';
 import { ReportGenerator } from '../services/report-generator.js';
 import { executeSafeReadOnlyQuery } from '../utils/safe-sql-executor.js';
+
+// Helper to construct API URL using the correct port
+const getApiUrl = () => `http://localhost:${env.PORT}`;
 
 /**
  * Tool: Get recent glucose readings
@@ -2761,7 +2765,7 @@ export const updateMealTool = new DynamicStructuredTool({
         });
       }
 
-      const response = await fetch(`${process.env.API_URL || 'http://localhost:3000'}/api/logs/meals/${mealId}`, {
+      const response = await fetch(`${getApiUrl()}/api/logs/meals/${mealId}`, {
         method: 'PUT',
         headers: {
           'Content-Type': 'application/json',
@@ -2805,7 +2809,7 @@ export const deleteMealTool = new DynamicStructuredTool({
   }),
   func: async ({ userId, mealId }) => {
     try {
-      const response = await fetch(`${process.env.API_URL || 'http://localhost:3000'}/api/logs/meals/${mealId}`, {
+      const response = await fetch(`${getApiUrl()}/api/logs/meals/${mealId}`, {
         method: 'DELETE',
         headers: {
           'Content-Type': 'application/json',
@@ -3071,7 +3075,7 @@ export const updateExerciseTool = new DynamicStructuredTool({
         });
       }
 
-      const response = await fetch(`${process.env.API_URL || 'http://localhost:3000'}/api/logs/exercise/${exerciseId}`, {
+      const response = await fetch(`${getApiUrl()}/api/logs/exercise/${exerciseId}`, {
         method: 'PUT',
         headers: {
           'Content-Type': 'application/json',
@@ -3115,7 +3119,7 @@ export const deleteExerciseTool = new DynamicStructuredTool({
   }),
   func: async ({ userId, exerciseId }) => {
     try {
-      const response = await fetch(`${process.env.API_URL || 'http://localhost:3000'}/api/logs/exercise/${exerciseId}`, {
+      const response = await fetch(`${getApiUrl()}/api/logs/exercise/${exerciseId}`, {
         method: 'DELETE',
         headers: {
           'Content-Type': 'application/json',
@@ -3277,7 +3281,7 @@ export const updateInsulinTool = new DynamicStructuredTool({
         });
       }
 
-      const response = await fetch(`${process.env.API_URL || 'http://localhost:3000'}/api/logs/insulin/${doseId}`, {
+      const response = await fetch(`${getApiUrl()}/api/logs/insulin/${doseId}`, {
         method: 'PUT',
         headers: {
           'Content-Type': 'application/json',
@@ -3321,7 +3325,7 @@ export const deleteInsulinTool = new DynamicStructuredTool({
   }),
   func: async ({ userId, doseId }) => {
     try {
-      const response = await fetch(`${process.env.API_URL || 'http://localhost:3000'}/api/logs/insulin/${doseId}`, {
+      const response = await fetch(`${getApiUrl()}/api/logs/insulin/${doseId}`, {
         method: 'DELETE',
         headers: {
           'Content-Type': 'application/json',
