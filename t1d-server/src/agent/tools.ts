@@ -2752,41 +2752,59 @@ export const updateMealTool = new DynamicStructuredTool({
   }),
   func: async ({ userId, mealId, timestamp, description, carbs, notes }) => {
     try {
-      const updates: any = {};
-      if (timestamp !== undefined) updates.timestamp = timestamp;
-      if (description !== undefined) updates.description = description;
-      if (carbs !== undefined) updates.carbs = carbs;
-      if (notes !== undefined) updates.notes = notes;
+      // Build dynamic update query
+      const updates: string[] = [];
+      const params: any[] = [];
+      let paramIndex = 1;
 
-      if (Object.keys(updates).length === 0) {
+      if (timestamp !== undefined) {
+        updates.push(`timestamp = $${paramIndex}`);
+        params.push(timestamp);
+        paramIndex++;
+      }
+      if (description !== undefined) {
+        updates.push(`description = $${paramIndex}`);
+        params.push(description);
+        paramIndex++;
+      }
+      if (carbs !== undefined) {
+        updates.push(`carbs = $${paramIndex}`);
+        params.push(carbs);
+        paramIndex++;
+      }
+      if (notes !== undefined) {
+        updates.push(`notes = $${paramIndex}`);
+        params.push(notes);
+        paramIndex++;
+      }
+
+      if (updates.length === 0) {
         return JSON.stringify({
           success: false,
           error: 'No fields to update',
         });
       }
 
-      const response = await fetch(`${getApiUrl()}/api/logs/meals/${mealId}`, {
-        method: 'PUT',
-        headers: {
-          'Content-Type': 'application/json',
-          'X-User-Id': userId!,
-        },
-        body: JSON.stringify(updates),
-      });
+      // Verify ownership and update
+      const result = await query(
+        `UPDATE meals SET ${updates.join(', ')}
+         WHERE id = $${paramIndex} AND user_id = $${paramIndex + 1}
+         RETURNING id, timestamp, description, carbs, meal_type, notes`,
+        [...params, mealId, userId]
+      );
 
-      if (!response.ok) {
-        const error = await response.json();
+      if (result.rows.length === 0) {
         return JSON.stringify({
           success: false,
-          error: error.error || 'Failed to update meal',
+          error: 'Meal not found or unauthorized',
         });
       }
 
-      const result = await response.json();
+      const meal = result.rows[0];
       return JSON.stringify({
         success: true,
-        meal: result.meal,
-        message: `Updated meal: ${result.meal.description}`,
+        meal,
+        message: `Updated meal: ${meal.description}`,
       });
     } catch (error) {
       return JSON.stringify({
@@ -2809,19 +2827,16 @@ export const deleteMealTool = new DynamicStructuredTool({
   }),
   func: async ({ userId, mealId }) => {
     try {
-      const response = await fetch(`${getApiUrl()}/api/logs/meals/${mealId}`, {
-        method: 'DELETE',
-        headers: {
-          'Content-Type': 'application/json',
-          'X-User-Id': userId!,
-        },
-      });
+      // Verify ownership before deleting
+      const result = await query(
+        'DELETE FROM meals WHERE id = $1 AND user_id = $2 RETURNING id',
+        [mealId, userId]
+      );
 
-      if (!response.ok) {
-        const error = await response.json();
+      if (result.rows.length === 0) {
         return JSON.stringify({
           success: false,
-          error: error.error || 'Failed to delete meal',
+          error: 'Meal not found or unauthorized',
         });
       }
 
@@ -3060,43 +3075,69 @@ export const updateExerciseTool = new DynamicStructuredTool({
   }),
   func: async ({ userId, exerciseId, timestamp, description, activityType, durationMinutes, intensity, notes }) => {
     try {
-      const updates: any = {};
-      if (timestamp !== undefined) updates.timestamp = timestamp;
-      if (description !== undefined) updates.description = description;
-      if (activityType !== undefined) updates.activity_type = activityType;
-      if (durationMinutes !== undefined) updates.duration_minutes = durationMinutes;
-      if (intensity !== undefined) updates.intensity = intensity;
-      if (notes !== undefined) updates.notes = notes;
+      // Build dynamic update query
+      const updates: string[] = [];
+      const params: any[] = [];
+      let paramIndex = 1;
 
-      if (Object.keys(updates).length === 0) {
+      if (timestamp !== undefined) {
+        updates.push(`timestamp = $${paramIndex}`);
+        params.push(timestamp);
+        paramIndex++;
+      }
+      if (description !== undefined) {
+        updates.push(`description = $${paramIndex}`);
+        params.push(description);
+        paramIndex++;
+      }
+      if (activityType !== undefined) {
+        updates.push(`activity_type = $${paramIndex}`);
+        params.push(activityType);
+        paramIndex++;
+      }
+      if (durationMinutes !== undefined) {
+        updates.push(`duration_minutes = $${paramIndex}`);
+        params.push(durationMinutes);
+        paramIndex++;
+      }
+      if (intensity !== undefined) {
+        updates.push(`intensity = $${paramIndex}`);
+        params.push(intensity);
+        paramIndex++;
+      }
+      if (notes !== undefined) {
+        updates.push(`notes = $${paramIndex}`);
+        params.push(notes);
+        paramIndex++;
+      }
+
+      if (updates.length === 0) {
         return JSON.stringify({
           success: false,
           error: 'No fields to update',
         });
       }
 
-      const response = await fetch(`${getApiUrl()}/api/logs/exercise/${exerciseId}`, {
-        method: 'PUT',
-        headers: {
-          'Content-Type': 'application/json',
-          'X-User-Id': userId!,
-        },
-        body: JSON.stringify(updates),
-      });
+      // Verify ownership and update
+      const result = await query(
+        `UPDATE exercise_logs SET ${updates.join(', ')}
+         WHERE id = $${paramIndex} AND user_id = $${paramIndex + 1}
+         RETURNING id, timestamp, description, activity_type, duration_minutes, intensity, notes`,
+        [...params, exerciseId, userId]
+      );
 
-      if (!response.ok) {
-        const error = await response.json();
+      if (result.rows.length === 0) {
         return JSON.stringify({
           success: false,
-          error: error.error || 'Failed to update exercise',
+          error: 'Exercise log not found or unauthorized',
         });
       }
 
-      const result = await response.json();
+      const exercise = result.rows[0];
       return JSON.stringify({
         success: true,
-        exercise: result.exercise,
-        message: `Updated exercise: ${result.exercise.description}`,
+        exercise,
+        message: `Updated exercise: ${exercise.description}`,
       });
     } catch (error) {
       return JSON.stringify({
@@ -3119,19 +3160,16 @@ export const deleteExerciseTool = new DynamicStructuredTool({
   }),
   func: async ({ userId, exerciseId }) => {
     try {
-      const response = await fetch(`${getApiUrl()}/api/logs/exercise/${exerciseId}`, {
-        method: 'DELETE',
-        headers: {
-          'Content-Type': 'application/json',
-          'X-User-Id': userId!,
-        },
-      });
+      // Verify ownership before deleting
+      const result = await query(
+        'DELETE FROM exercise_logs WHERE id = $1 AND user_id = $2 RETURNING id',
+        [exerciseId, userId]
+      );
 
-      if (!response.ok) {
-        const error = await response.json();
+      if (result.rows.length === 0) {
         return JSON.stringify({
           success: false,
-          error: error.error || 'Failed to delete exercise',
+          error: 'Exercise log not found or unauthorized',
         });
       }
 
@@ -3267,42 +3305,64 @@ export const updateInsulinTool = new DynamicStructuredTool({
   }),
   func: async ({ userId, doseId, timestamp, insulinType, units, purpose, notes }) => {
     try {
-      const updates: any = {};
-      if (timestamp !== undefined) updates.timestamp = timestamp;
-      if (insulinType !== undefined) updates.insulin_type = insulinType;
-      if (units !== undefined) updates.units = units;
-      if (purpose !== undefined) updates.purpose = purpose;
-      if (notes !== undefined) updates.notes = notes;
+      // Build dynamic update query
+      const updates: string[] = [];
+      const params: any[] = [];
+      let paramIndex = 1;
 
-      if (Object.keys(updates).length === 0) {
+      if (timestamp !== undefined) {
+        updates.push(`timestamp = $${paramIndex}`);
+        params.push(timestamp);
+        paramIndex++;
+      }
+      if (insulinType !== undefined) {
+        updates.push(`insulin_type = $${paramIndex}`);
+        params.push(insulinType);
+        paramIndex++;
+      }
+      if (units !== undefined) {
+        updates.push(`units = $${paramIndex}`);
+        params.push(units);
+        paramIndex++;
+      }
+      if (purpose !== undefined) {
+        updates.push(`purpose = $${paramIndex}`);
+        params.push(purpose);
+        paramIndex++;
+      }
+      if (notes !== undefined) {
+        updates.push(`notes = $${paramIndex}`);
+        params.push(notes);
+        paramIndex++;
+      }
+
+      if (updates.length === 0) {
         return JSON.stringify({
           success: false,
           error: 'No fields to update',
         });
       }
 
-      const response = await fetch(`${getApiUrl()}/api/logs/insulin/${doseId}`, {
-        method: 'PUT',
-        headers: {
-          'Content-Type': 'application/json',
-          'X-User-Id': userId!,
-        },
-        body: JSON.stringify(updates),
-      });
+      // Verify ownership and update
+      const result = await query(
+        `UPDATE insulin_doses SET ${updates.join(', ')}
+         WHERE id = $${paramIndex} AND user_id = $${paramIndex + 1}
+         RETURNING id, timestamp, insulin_type, brand_name, units, purpose, notes`,
+        [...params, doseId, userId]
+      );
 
-      if (!response.ok) {
-        const error = await response.json();
+      if (result.rows.length === 0) {
         return JSON.stringify({
           success: false,
-          error: error.error || 'Failed to update insulin dose',
+          error: 'Insulin dose not found or unauthorized',
         });
       }
 
-      const result = await response.json();
+      const dose = result.rows[0];
       return JSON.stringify({
         success: true,
-        dose: result.dose,
-        message: `Updated insulin dose: ${result.dose.units} units of ${result.dose.insulin_type}`,
+        dose,
+        message: `Updated insulin dose: ${dose.units} units of ${dose.insulin_type}`,
       });
     } catch (error) {
       return JSON.stringify({
@@ -3325,19 +3385,16 @@ export const deleteInsulinTool = new DynamicStructuredTool({
   }),
   func: async ({ userId, doseId }) => {
     try {
-      const response = await fetch(`${getApiUrl()}/api/logs/insulin/${doseId}`, {
-        method: 'DELETE',
-        headers: {
-          'Content-Type': 'application/json',
-          'X-User-Id': userId!,
-        },
-      });
+      // Verify ownership before deleting
+      const result = await query(
+        'DELETE FROM insulin_doses WHERE id = $1 AND user_id = $2 RETURNING id',
+        [doseId, userId]
+      );
 
-      if (!response.ok) {
-        const error = await response.json();
+      if (result.rows.length === 0) {
         return JSON.stringify({
           success: false,
-          error: error.error || 'Failed to delete insulin dose',
+          error: 'Insulin dose not found or unauthorized',
         });
       }
 
