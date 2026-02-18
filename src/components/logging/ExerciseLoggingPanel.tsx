@@ -8,18 +8,12 @@ interface ExerciseLoggingPanelProps {
   onSuccess: () => void;
 }
 
-const ACTIVITY_TYPES = ['Walk', 'Run', 'Bike', 'Swim', 'Gym', 'Yoga', 'Elliptical', 'Other'];
+const ACTIVITY_TYPES = ['Walk', 'Cardio', 'Strength', 'Sports'];
 const DURATION_OPTIONS = [15, 30, 45, 60, 90, 120];
-const INTENSITY_OPTIONS = [
-  { value: 'light', label: 'Light' },
-  { value: 'moderate', label: 'Moderate' },
-  { value: 'intense', label: 'Intense' },
-];
 
 export function ExerciseLoggingPanel({ onSuccess }: ExerciseLoggingPanelProps) {
   const [activityType, setActivityType] = useState<string | null>(null);
   const [duration, setDuration] = useState<number | null>(null);
-  const [intensity, setIntensity] = useState<string>('moderate');
   const [timestamp, setTimestamp] = useState<Date>(new Date());
   const [isLogging, setIsLogging] = useState(false);
 
@@ -37,7 +31,7 @@ export function ExerciseLoggingPanel({ onSuccess }: ExerciseLoggingPanelProps) {
         data: {
           activityType,
           duration,
-          intensity,
+          intensity: 'moderate', // Default to moderate intensity
         },
       });
 
@@ -51,10 +45,10 @@ export function ExerciseLoggingPanel({ onSuccess }: ExerciseLoggingPanelProps) {
   const canSubmit = activityType && duration && !isLogging;
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-5">
       {/* Activity Type Selection */}
       <div>
-        <label className="block text-sm font-medium mb-3">Activity Type</label>
+        <label className="block text-sm font-medium mb-2">Activity Type</label>
         <div className="grid grid-cols-4 gap-2">
           {ACTIVITY_TYPES.map((type) => (
             <Button
@@ -71,7 +65,7 @@ export function ExerciseLoggingPanel({ onSuccess }: ExerciseLoggingPanelProps) {
 
       {/* Duration Selection */}
       <div>
-        <label className="block text-sm font-medium mb-3">Duration (minutes)</label>
+        <label className="block text-sm font-medium mb-2">Duration (minutes)</label>
         <div className="grid grid-cols-3 gap-2">
           {DURATION_OPTIONS.map((d) => (
             <Button
@@ -86,25 +80,8 @@ export function ExerciseLoggingPanel({ onSuccess }: ExerciseLoggingPanelProps) {
         </div>
       </div>
 
-      {/* Intensity Selection */}
-      <div>
-        <label className="block text-sm font-medium mb-3">Intensity</label>
-        <div className="grid grid-cols-3 gap-2">
-          {INTENSITY_OPTIONS.map((opt) => (
-            <Button
-              key={opt.value}
-              variant={intensity === opt.value ? 'default' : 'outline'}
-              onClick={() => setIntensity(opt.value)}
-              className="h-12"
-            >
-              {opt.label}
-            </Button>
-          ))}
-        </div>
-      </div>
-
       {/* Time Adjuster */}
-      <TimeAdjuster value={timestamp} onChange={setTimestamp} />
+      <TimeAdjuster value={timestamp} onChange={setTimestamp} defaultExpanded />
 
       {/* Submit Button */}
       <Button

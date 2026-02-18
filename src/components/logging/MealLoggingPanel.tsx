@@ -10,16 +10,9 @@ interface MealLoggingPanelProps {
 }
 
 const CARB_OPTIONS = [10, 15, 20, 25, 30, 40, 50, 60, 75, 90, 100, 120];
-const MEAL_TYPES = [
-  { value: 'breakfast', label: 'Breakfast' },
-  { value: 'lunch', label: 'Lunch' },
-  { value: 'dinner', label: 'Dinner' },
-  { value: 'snack', label: 'Snack' },
-];
 
 export function MealLoggingPanel({ onSuccess }: MealLoggingPanelProps) {
   const [carbs, setCarbs] = useState<number | null>(null);
-  const [mealType, setMealType] = useState<string>('snack');
   const [description, setDescription] = useState<string>('');
   const [timestamp, setTimestamp] = useState<Date>(new Date());
   const [isLogging, setIsLogging] = useState(false);
@@ -37,8 +30,8 @@ export function MealLoggingPanel({ onSuccess }: MealLoggingPanelProps) {
         timestamp: timestamp.toISOString(),
         data: {
           carbs,
-          mealType,
           description: description || undefined,
+          // Backend will automatically determine mealType based on timestamp
         },
       });
 
@@ -52,10 +45,10 @@ export function MealLoggingPanel({ onSuccess }: MealLoggingPanelProps) {
   const canSubmit = carbs && !isLogging;
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-5">
       {/* Carbs Selection */}
       <div>
-        <label className="block text-sm font-medium mb-3">Carbs (grams)</label>
+        <label className="block text-sm font-medium mb-2">Carbs (grams)</label>
         <div className="grid grid-cols-4 gap-2">
           {CARB_OPTIONS.map((c) => (
             <Button
@@ -65,23 +58,6 @@ export function MealLoggingPanel({ onSuccess }: MealLoggingPanelProps) {
               className="h-12"
             >
               {c}g
-            </Button>
-          ))}
-        </div>
-      </div>
-
-      {/* Meal Type Selection */}
-      <div>
-        <label className="block text-sm font-medium mb-3">Meal Type</label>
-        <div className="grid grid-cols-2 gap-2">
-          {MEAL_TYPES.map((type) => (
-            <Button
-              key={type.value}
-              variant={mealType === type.value ? 'default' : 'outline'}
-              onClick={() => setMealType(type.value)}
-              className="h-12"
-            >
-              {type.label}
             </Button>
           ))}
         </div>
@@ -102,7 +78,7 @@ export function MealLoggingPanel({ onSuccess }: MealLoggingPanelProps) {
       </div>
 
       {/* Time Adjuster */}
-      <TimeAdjuster value={timestamp} onChange={setTimestamp} />
+      <TimeAdjuster value={timestamp} onChange={setTimestamp} defaultExpanded />
 
       {/* Submit Button */}
       <Button

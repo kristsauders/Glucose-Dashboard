@@ -128,7 +128,7 @@ export function AIChat() {
     console.warn('[Deep-Link] Conversation not in list, attempting direct load...');
     console.warn('[Deep-Link] This is normal for new proactive messages');
 
-    // Retry logic for race conditions where notification arrives before DB commit
+    // Retry logic for race conditions and network delays (e.g., VPN connection)
     const attemptLoad = async (retryCount = 0): Promise<void> => {
       try {
         await loadConversation(conversationId);
@@ -138,14 +138,19 @@ export function AIChat() {
         // Refresh conversation list to include the new one
         fetchConversations();
       } catch (error: any) {
-        // Retry up to 2 times with increasing delays if conversation not found
+        // Check if it's a network error or not found error
         const isNotFound = error.message?.includes('not found') || error.response?.status === 404;
-        if (isNotFound && retryCount < 2) {
-          const delay = (retryCount + 1) * 300; // 300ms, 600ms
-          console.warn(`[Deep-Link] Conversation not found, retrying in ${delay}ms (attempt ${retryCount + 1}/2)`);
+        const isNetworkError = error.message?.includes('fetch') || error.message?.includes('network') || !error.response;
+
+        // Retry up to 8 times with exponential backoff for not found or network errors
+        // This handles VPN connection delays and DB commit race conditions
+        if ((isNotFound || isNetworkError) && retryCount < 8) {
+          // Exponential backoff: 500ms, 1s, 2s, 3s, 4s, 5s, 6s, 7s
+          const delay = retryCount === 0 ? 500 : Math.min((retryCount) * 1000, 7000);
+          console.warn(`[Deep-Link] ${isNetworkError ? 'Network error' : 'Conversation not found'}, retrying in ${delay}ms (attempt ${retryCount + 1}/8)`);
           setTimeout(() => attemptLoad(retryCount + 1), delay);
         } else {
-          console.error('[Deep-Link] Direct load failed:', error);
+          console.error('[Deep-Link] Direct load failed after all retries:', error);
           console.error('[Deep-Link] Error details:', error.message, error.response?.status);
           // Don't clear search params on error so user can see what failed
           // Show error to user
@@ -185,21 +190,35 @@ export function AIChat() {
           return;
         }
 
-        // Conversation not in list - try direct load
+        // Conversation not in list - try direct load with retries
         console.warn('[Service Worker Message] Conversation not in list, attempting direct load...');
         console.warn('[Service Worker Message] This is normal for new proactive messages');
 
-        loadConversation(conversationId)
-          .then(() => {
+        // Retry logic for network delays (e.g., VPN connection)
+        const attemptLoadFromSW = async (retryCount = 0): Promise<void> => {
+          try {
+            await loadConversation(conversationId);
             console.log('[Service Worker Message] Direct load successful');
             // Refresh conversation list to include the new one
             fetchConversations();
-          })
-          .catch((error) => {
-            console.error('[Service Worker Message] Direct load failed:', error);
-            console.error('[Service Worker Message] Error details:', error.message);
-            setError(`Failed to load conversation: ${error.message}`);
-          });
+          } catch (error: any) {
+            const isNotFound = error.message?.includes('not found') || error.response?.status === 404;
+            const isNetworkError = error.message?.includes('fetch') || error.message?.includes('network') || !error.response;
+
+            // Retry up to 8 times with exponential backoff
+            if ((isNotFound || isNetworkError) && retryCount < 8) {
+              const delay = retryCount === 0 ? 500 : Math.min((retryCount) * 1000, 7000);
+              console.warn(`[Service Worker Message] ${isNetworkError ? 'Network error' : 'Conversation not found'}, retrying in ${delay}ms (attempt ${retryCount + 1}/8)`);
+              setTimeout(() => attemptLoadFromSW(retryCount + 1), delay);
+            } else {
+              console.error('[Service Worker Message] Direct load failed after all retries:', error);
+              console.error('[Service Worker Message] Error details:', error.message);
+              setError(`Failed to load conversation: ${error.message}`);
+            }
+          }
+        };
+
+        attemptLoadFromSW();
       }
     };
 
@@ -212,6 +231,61 @@ export function AIChat() {
     // Only re-run when conversations list length changes, not the full array
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [conversations.length, activeConversationId]);
+
+  // Handle viewport resize (keyboard appearing/disappearing on mobile)
+  useEffect(() => {
+    let initialHeight = window.visualViewport?.height || window.innerHeight;
+
+    const handleViewportResize = () => {
+      const currentHeight = window.visualViewport?.height || window.innerHeight;
+      const heightDiff = initialHeight - currentHeight;
+
+      // If viewport height decreased by >150px, keyboard is likely appearing
+      if (heightDiff > 150) {
+        console.log('[Viewport Resize] Keyboard detected (height change:', heightDiff, 'px)');
+
+        // Scroll to bottom when keyboard appears
+        const scrollToBottom = () => {
+          const container = messagesContainerRef.current;
+          if (container && !isLoading) {
+            container.scrollTo({
+              top: container.scrollHeight,
+              behavior: 'auto'
+            });
+
+            // Also scroll window
+            requestAnimationFrame(() => {
+              window.scrollTo({
+                top: document.documentElement.scrollHeight,
+                behavior: 'auto'
+              });
+            });
+          }
+        };
+
+        // Multiple retries to handle animation
+        scrollToBottom();
+        setTimeout(scrollToBottom, 100);
+        setTimeout(scrollToBottom, 300);
+      }
+
+      // Update initial height for next comparison
+      initialHeight = currentHeight;
+    };
+
+    // Listen to both visualViewport (better for keyboard) and window resize
+    if (window.visualViewport) {
+      window.visualViewport.addEventListener('resize', handleViewportResize);
+    }
+    window.addEventListener('resize', handleViewportResize);
+
+    return () => {
+      if (window.visualViewport) {
+        window.visualViewport.removeEventListener('resize', handleViewportResize);
+      }
+      window.removeEventListener('resize', handleViewportResize);
+    };
+  }, [isLoading]);
 
   const loadConversation = async (conversationId: string) => {
     try {
@@ -886,18 +960,32 @@ export function AIChat() {
                   const scrollToBottom = () => {
                     const container = messagesContainerRef.current;
                     if (container) {
+                      // Use 'auto' instead of 'smooth' to prevent interruption
                       container.scrollTo({
                         top: container.scrollHeight,
-                        behavior: 'smooth'
+                        behavior: 'auto'
+                      });
+
+                      // Also scroll the window/body to ensure input is visible
+                      // This helps on iOS Safari where the keyboard can obscure content
+                      requestAnimationFrame(() => {
+                        window.scrollTo({
+                          top: document.documentElement.scrollHeight,
+                          behavior: 'auto'
+                        });
                       });
                     }
                   };
 
-                  // Try multiple times with increasing delays to handle keyboard animation on mobile
+                  // Aggressive retry schedule to handle keyboard animation delays
+                  // iOS keyboard can take 400-800ms to fully appear
                   scrollToBottom(); // Immediate
-                  setTimeout(scrollToBottom, 100);  // After 100ms
-                  setTimeout(scrollToBottom, 300);  // After 300ms
-                  setTimeout(scrollToBottom, 500);  // After 500ms (keyboard should be fully up)
+                  setTimeout(scrollToBottom, 50);   // Very fast retry
+                  setTimeout(scrollToBottom, 150);  // Early keyboard animation
+                  setTimeout(scrollToBottom, 300);  // Mid keyboard animation
+                  setTimeout(scrollToBottom, 500);  // Late keyboard animation
+                  setTimeout(scrollToBottom, 700);  // Keyboard fully visible
+                  setTimeout(scrollToBottom, 1000); // Final retry after any settling
                 } else {
                   console.log('[Input Focus] Skipping scroll (message is streaming)');
                 }
