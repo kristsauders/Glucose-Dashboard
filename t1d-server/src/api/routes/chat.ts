@@ -29,9 +29,9 @@ router.post('/stream', async (req, res, next) => {
     res.setHeader('X-Accel-Buffering', 'no'); // Disable nginx buffering
     res.flushHeaders(); // Flush headers immediately
 
-    // Get user context
+    // Get user context and preferences
     const userResult = await query<User>(
-      'SELECT email, diagnosis_type, diagnosis_date, timezone FROM users WHERE id = $1',
+      'SELECT email, diagnosis_type, diagnosis_date, timezone, preferences FROM users WHERE id = $1',
       [authReq.user!.id]
     );
 
@@ -42,6 +42,8 @@ router.post('/stream', async (req, res, next) => {
     }
 
     const user = userResult.rows[0];
+    const userPreferences = user.preferences || {};
+    const userModelConfig = userPreferences.modelConfig;
 
     // Get or create conversation
     let conversationId = providedConversationId;
@@ -331,8 +333,8 @@ router.post('/', async (req, res, next) => {
     const history = historyResult.rows.reverse();
     const isFirstMessage = history.length === 0;
 
-    // Create agent
-    const agent = createConfiguredAgentGraph();
+    // Create agent with user's model preferences
+    const agent = createConfiguredAgentGraph(undefined, 'chat', userModelConfig);
 
     // Prepare messages
     const messages = [

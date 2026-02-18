@@ -491,6 +491,36 @@ class APIService {
       body: JSON.stringify(request),
     });
   }
+
+  // Model configuration methods
+  async getModelConfig(): Promise<{
+    chat: {
+      smallModel: string;
+      largeModel: string;
+    };
+    proactive: {
+      smallModel: string;
+      largeModel: string;
+    };
+  }> {
+    return this.request('/settings/models');
+  }
+
+  async updateModelConfig(config: {
+    chat?: {
+      smallModel: string;
+      largeModel: string;
+    };
+    proactive?: {
+      smallModel: string;
+      largeModel: string;
+    };
+  }): Promise<void> {
+    await this.request('/settings/models', {
+      method: 'PUT',
+      body: JSON.stringify(config),
+    });
+  }
 }
 
 export const apiService = new APIService();

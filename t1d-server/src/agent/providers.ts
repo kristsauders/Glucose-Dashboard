@@ -55,21 +55,35 @@ export function getAIProvider(forceProvider?: 'ollama' | 'openrouter'): AIProvid
   }
 }
 
+export interface ModelConfig {
+  chat?: {
+    smallModel?: string;
+    largeModel?: string;
+  };
+  proactive?: {
+    smallModel?: string;
+    largeModel?: string;
+  };
+}
+
 /**
  * Get hybrid AI providers for cost optimization
  * - Small model for tool calling and analysis iteration (cheap)
  * - Large model for final message synthesis (expensive but high quality)
  *
  * @param mode - 'chat' for real-time chat (default), 'proactive' for background proactive messages
+ * @param userModelConfig - Optional user preferences for model configuration (overrides env vars)
  */
-export function getHybridAIProvider(mode: 'chat' | 'proactive' = 'chat'): HybridAIProvider {
-  // Small model for tool calling (can be Ollama local or OpenRouter cheap model)
+export function getHybridAIProvider(mode: 'chat' | 'proactive' = 'chat', userModelConfig?: ModelConfig): HybridAIProvider {
+  // Get model names from user preferences or fall back to environment variables
+  const smallModelName = mode === 'chat'
+    ? (userModelConfig?.chat?.smallModel || env.HYBRID_SMALL_MODEL || 'qwen2.5:32b')
+    : (userModelConfig?.proactive?.smallModel || env.PROACTIVE_SMALL_MODEL || env.HYBRID_SMALL_MODEL || 'qwen2.5:32b');
+
+  // Small model provider - use ollama if model doesn't start with provider prefix
   const smallModelProvider = mode === 'proactive' && env.PROACTIVE_SMALL_PROVIDER
     ? env.PROACTIVE_SMALL_PROVIDER
     : (env.HYBRID_SMALL_PROVIDER || 'ollama');
-  const smallModelName = mode === 'proactive' && env.PROACTIVE_SMALL_MODEL
-    ? env.PROACTIVE_SMALL_MODEL
-    : (env.HYBRID_SMALL_MODEL || 'qwen2.5:32b');
 
   let smallModel: any;
   if (smallModelProvider === 'ollama') {
@@ -101,9 +115,9 @@ export function getHybridAIProvider(mode: 'chat' | 'proactive' = 'chat'): Hybrid
   }
 
   // Large model for message synthesis (OpenRouter by default)
-  const largeModelName = mode === 'proactive' && env.PROACTIVE_LARGE_MODEL
-    ? env.PROACTIVE_LARGE_MODEL
-    : (env.HYBRID_LARGE_MODEL || 'anthropic/claude-sonnet-4-5');
+  const largeModelName = mode === 'chat'
+    ? (userModelConfig?.chat?.largeModel || env.HYBRID_LARGE_MODEL || 'anthropic/claude-sonnet-4-5')
+    : (userModelConfig?.proactive?.largeModel || env.PROACTIVE_LARGE_MODEL || env.HYBRID_LARGE_MODEL || 'anthropic/claude-sonnet-4-5');
   const largeModel = new ChatOpenAI({
     modelName: largeModelName,
     apiKey: env.OPENROUTER_API_KEY,

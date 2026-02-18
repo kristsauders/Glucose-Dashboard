@@ -372,4 +372,94 @@ router.post('/research/trigger', async (req, res, next) => {
   }
 });
 
+// Get model configuration preferences
+router.get('/models', async (req, res, next) => {
+  try {
+    const authReq = req as AuthRequest;
+
+    const result = await query(
+      `SELECT preferences FROM users WHERE id = $1`,
+      [authReq.user!.id]
+    );
+
+    if (result.rows.length === 0) {
+      return res.status(404).json({ error: 'User not found' });
+    }
+
+    const prefs = result.rows[0].preferences || {};
+    const modelConfig = prefs.modelConfig || {
+      chat: {
+        smallModel: process.env.HYBRID_SMALL_MODEL || 'qwen2.5:32b',
+        largeModel: process.env.HYBRID_LARGE_MODEL || 'anthropic/claude-sonnet-4.5',
+      },
+      proactive: {
+        smallModel: process.env.PROACTIVE_SMALL_MODEL || process.env.HYBRID_SMALL_MODEL || 'qwen2.5:32b',
+        largeModel: process.env.PROACTIVE_LARGE_MODEL || process.env.HYBRID_LARGE_MODEL || 'anthropic/claude-sonnet-4.5',
+      }
+    };
+
+    res.json(modelConfig);
+  } catch (error) {
+    next(error);
+  }
+});
+
+// Update model configuration preferences
+const modelConfigSchema = z.object({
+  chat: z.object({
+    smallModel: z.string().min(1),
+    largeModel: z.string().min(1),
+  }).optional(),
+  proactive: z.object({
+    smallModel: z.string().min(1),
+    largeModel: z.string().min(1),
+  }).optional(),
+});
+
+router.put('/models', async (req, res, next) => {
+  try {
+    const authReq = req as AuthRequest;
+    const updates = modelConfigSchema.parse(req.body);
+
+    // Get current preferences
+    const result = await query(
+      `SELECT preferences FROM users WHERE id = $1`,
+      [authReq.user!.id]
+    );
+
+    const currentPrefs = result.rows[0]?.preferences || {};
+    const currentModelConfig = currentPrefs.modelConfig || {
+      chat: {
+        smallModel: process.env.HYBRID_SMALL_MODEL || 'qwen2.5:32b',
+        largeModel: process.env.HYBRID_LARGE_MODEL || 'anthropic/claude-sonnet-4.5',
+      },
+      proactive: {
+        smallModel: process.env.PROACTIVE_SMALL_MODEL || process.env.HYBRID_SMALL_MODEL || 'qwen2.5:32b',
+        largeModel: process.env.PROACTIVE_LARGE_MODEL || process.env.HYBRID_LARGE_MODEL || 'anthropic/claude-sonnet-4.5',
+      }
+    };
+
+    // Merge updates with current config
+    const newModelConfig = {
+      chat: updates.chat || currentModelConfig.chat,
+      proactive: updates.proactive || currentModelConfig.proactive,
+    };
+
+    // Update preferences in database
+    const newPrefs = {
+      ...currentPrefs,
+      modelConfig: newModelConfig,
+    };
+
+    await query(
+      `UPDATE users SET preferences = $1 WHERE id = $2`,
+      [JSON.stringify(newPrefs), authReq.user!.id]
+    );
+
+    res.json(newModelConfig);
+  } catch (error) {
+    next(error);
+  }
+});
+
 export default router;

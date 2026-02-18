@@ -7,6 +7,7 @@ import { DiscordSettings } from './DiscordSettings';
 import { NotificationSettings } from './NotificationSettings';
 import { VoiceSettings } from './VoiceSettings';
 import { ResearchSettings } from './ResearchSettings';
+import { ModelSettings } from './ModelSettings';
 
 interface SettingsProps {
   onClose: () => void;
@@ -59,6 +60,11 @@ export function Settings({ onClose }: SettingsProps) {
             <div>
               <h3 className="text-sm font-semibold mb-3">Voice Mode</h3>
               <VoiceSettings />
+            </div>
+
+            <div>
+              <h3 className="text-sm font-semibold mb-3">AI Models</h3>
+              <ModelSettings />
             </div>
 
             <div>

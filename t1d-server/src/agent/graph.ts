@@ -178,12 +178,13 @@ export function createAgentGraph(forceProvider?: 'ollama' | 'openrouter') {
  */
 export function createConfiguredAgentGraph(
   forceProvider?: 'ollama' | 'openrouter' | 'hybrid',
-  mode: 'chat' | 'proactive' = 'chat'
+  mode: 'chat' | 'proactive' = 'chat',
+  userModelConfig?: any
 ) {
   const provider = forceProvider || env.AI_PROVIDER;
 
   if (provider === 'hybrid') {
-    return createHybridAgentGraph(mode);
+    return createHybridAgentGraph(mode, userModelConfig);
   } else {
     return createAgentGraph(provider as 'ollama' | 'openrouter');
   }
