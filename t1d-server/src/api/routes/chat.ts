@@ -85,8 +85,8 @@ router.post('/stream', async (req, res, next) => {
     const history = historyResult.rows.reverse();
     const isFirstMessage = history.length === 0;
 
-    // Create agent
-    const agent = createConfiguredAgentGraph();
+    // Create agent with user's model preferences
+    const agent = createConfiguredAgentGraph(undefined, 'chat', userModelConfig);
 
     // Prepare messages
     const messages = [
