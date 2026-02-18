@@ -5,21 +5,46 @@ import { allTools } from './tools.js';
 import { SYSTEM_PROMPT, USER_CONTEXT_PROMPT } from './prompts.js';
 
 /**
- * Log summary statistics for context size by iteration
+ * Global metrics store to track context sizes across all invocations
+ * Persists for the lifetime of the server process
  */
-function logContextSummary(metrics: Array<{ iteration: number; contextChars: number; contextTokens: number }>): void {
-  if (metrics.length === 0) {
+const globalContextMetrics: Array<{
+  iteration: number;
+  contextChars: number;
+  contextTokens: number;
+  timestamp: Date;
+}> = [];
+
+/**
+ * Log summary statistics for context size by iteration
+ * @param currentMetrics - Metrics from the current invocation
+ * @param showGlobalStats - Whether to show accumulated statistics across all invocations
+ */
+function logContextSummary(
+  currentMetrics: Array<{ iteration: number; contextChars: number; contextTokens: number }>,
+  showGlobalStats = true
+): void {
+  if (currentMetrics.length === 0) {
     return;
   }
 
+  // Add current metrics to global store with timestamps
+  const timestamp = new Date();
+  for (const metric of currentMetrics) {
+    globalContextMetrics.push({
+      ...metric,
+      timestamp,
+    });
+  }
+
   console.log('\n' + '='.repeat(80));
-  console.log('📊 CONTEXT SIZE SUMMARY STATISTICS');
+  console.log('📊 CONTEXT SIZE SUMMARY - CURRENT REQUEST');
   console.log('='.repeat(80));
 
-  // Group by iteration number
+  // Group by iteration number (for current request)
   const byIteration = new Map<number, { chars: number[]; tokens: number[] }>();
 
-  for (const metric of metrics) {
+  for (const metric of currentMetrics) {
     if (!byIteration.has(metric.iteration)) {
       byIteration.set(metric.iteration, { chars: [], tokens: [] });
     }
@@ -63,18 +88,18 @@ function logContextSummary(metrics: Array<{ iteration: number; contextChars: num
     console.log(`${iterStr} │ ${avgTokStr} │ ${maxTokStr} │ ${avgCharStr} │ ${maxCharStr} │ ${countStr}`);
   }
 
-  // Overall stats
-  const allTokens = metrics.map(m => m.contextTokens);
+  // Overall stats for current request
+  const allTokens = currentMetrics.map(m => m.contextTokens);
   const overallAvgTokens = Math.round(allTokens.reduce((sum, val) => sum + val, 0) / allTokens.length);
   const overallMaxTokens = Math.max(...allTokens);
-  const totalIterations = Math.max(...metrics.map(m => m.iteration));
+  const totalIterations = Math.max(...currentMetrics.map(m => m.iteration));
 
   console.log('─'.repeat(80));
-  console.log(`\n📈 Overall Statistics:`);
+  console.log(`\n📈 Current Request Statistics:`);
   console.log(`   Total iterations used: ${totalIterations}`);
   console.log(`   Average context size: ${overallAvgTokens.toLocaleString()} tokens`);
   console.log(`   Maximum context size: ${overallMaxTokens.toLocaleString()} tokens`);
-  console.log(`   Total samples: ${metrics.length}`);
+  console.log(`   Total samples: ${currentMetrics.length}`);
 
   // Provide recommendations
   console.log(`\n💡 Recommendations:`);
@@ -96,6 +121,42 @@ function logContextSummary(metrics: Array<{ iteration: number; contextChars: num
   console.log(`   GPT-4o (128K):               ${overallMaxTokens < 128000 ? '✓ Safe' : '⚠️  May exceed'}`);
   console.log(`   GPT-5 Nano (400K):           ${overallMaxTokens < 400000 ? '✓ Safe' : '⚠️  May exceed'}`);
   console.log(`   Gemini 3 Flash (1M):         ${overallMaxTokens < 1000000 ? '✓ Safe' : '⚠️  May exceed'}`);
+
+  // Show global cumulative statistics if requested
+  if (showGlobalStats && globalContextMetrics.length > 0) {
+    console.log('\n' + '─'.repeat(80));
+    console.log('📊 CUMULATIVE STATISTICS (All Requests Since Server Start)');
+    console.log('─'.repeat(80));
+
+    const globalTokens = globalContextMetrics.map(m => m.contextTokens);
+    const globalAvgTokens = Math.round(globalTokens.reduce((sum, val) => sum + val, 0) / globalTokens.length);
+    const globalMaxTokens = Math.max(...globalTokens);
+    const globalMinTokens = Math.min(...globalTokens);
+
+    // Group by iteration to show distribution
+    const globalByIteration = new Map<number, number[]>();
+    for (const metric of globalContextMetrics) {
+      if (!globalByIteration.has(metric.iteration)) {
+        globalByIteration.set(metric.iteration, []);
+      }
+      globalByIteration.get(metric.iteration)!.push(metric.contextTokens);
+    }
+
+    console.log(`\n🌐 Global Metrics:`);
+    console.log(`   Total requests tracked: ${new Set(globalContextMetrics.map(m => m.timestamp.getTime())).size}`);
+    console.log(`   Total samples collected: ${globalContextMetrics.length}`);
+    console.log(`   Average context size: ${globalAvgTokens.toLocaleString()} tokens`);
+    console.log(`   Maximum context size: ${globalMaxTokens.toLocaleString()} tokens`);
+    console.log(`   Minimum context size: ${globalMinTokens.toLocaleString()} tokens`);
+
+    // Show iteration distribution
+    console.log(`\n📈 Iteration Distribution (across all requests):`);
+    for (const [iteration, tokens] of Array.from(globalByIteration.entries()).sort((a, b) => a[0] - b[0])) {
+      const avg = Math.round(tokens.reduce((sum, val) => sum + val, 0) / tokens.length);
+      const max = Math.max(...tokens);
+      console.log(`   Iteration ${iteration}: ${tokens.length} samples, avg ${avg.toLocaleString()} tokens, max ${max.toLocaleString()} tokens`);
+    }
+  }
 
   console.log('='.repeat(80) + '\n');
 }
