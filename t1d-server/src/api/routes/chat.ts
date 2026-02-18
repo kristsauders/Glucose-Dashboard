@@ -45,6 +45,9 @@ router.post('/stream', async (req, res, next) => {
     const userPreferences = user.preferences || {};
     const userModelConfig = userPreferences.modelConfig;
 
+    // Debug: Log model config
+    console.log('[Chat] User model config:', JSON.stringify(userModelConfig, null, 2));
+
     // Get or create conversation
     let conversationId = providedConversationId;
     if (!conversationId) {
@@ -286,9 +289,9 @@ router.post('/', async (req, res, next) => {
     const authReq = req as AuthRequest;
     const { message, conversationId: providedConversationId } = chatSchema.parse(req.body);
 
-    // Get user context
+    // Get user context and preferences
     const userResult = await query<User>(
-      'SELECT email, diagnosis_type, diagnosis_date, timezone FROM users WHERE id = $1',
+      'SELECT email, diagnosis_type, diagnosis_date, timezone, preferences FROM users WHERE id = $1',
       [authReq.user!.id]
     );
 
@@ -297,6 +300,11 @@ router.post('/', async (req, res, next) => {
     }
 
     const user = userResult.rows[0];
+    const userPreferences = user.preferences || {};
+    const userModelConfig = userPreferences.modelConfig;
+
+    // Debug: Log model config
+    console.log('[Chat] User model config (non-streaming):', JSON.stringify(userModelConfig, null, 2));
 
     // Get or create conversation
     let conversationId = providedConversationId;

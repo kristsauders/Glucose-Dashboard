@@ -451,10 +451,21 @@ router.put('/models', async (req, res, next) => {
       modelConfig: newModelConfig,
     };
 
+    // Debug: Log what we're saving
+    console.log('[Settings] Saving model config for user', authReq.user!.id);
+    console.log('[Settings] New preferences:', JSON.stringify(newPrefs, null, 2));
+
     await query(
       `UPDATE users SET preferences = $1 WHERE id = $2`,
       [JSON.stringify(newPrefs), authReq.user!.id]
     );
+
+    // Debug: Verify what was saved
+    const verifyResult = await query(
+      `SELECT preferences FROM users WHERE id = $1`,
+      [authReq.user!.id]
+    );
+    console.log('[Settings] Verified saved preferences:', JSON.stringify(verifyResult.rows[0]?.preferences, null, 2));
 
     res.json(newModelConfig);
   } catch (error) {

@@ -75,10 +75,18 @@ export interface ModelConfig {
  * @param userModelConfig - Optional user preferences for model configuration (overrides env vars)
  */
 export function getHybridAIProvider(mode: 'chat' | 'proactive' = 'chat', userModelConfig?: ModelConfig): HybridAIProvider {
+  // Debug: Log what config we received
+  console.log('[Provider] Mode:', mode);
+  console.log('[Provider] User model config:', JSON.stringify(userModelConfig, null, 2));
+
   // Get model names from user preferences or fall back to environment variables
   const smallModelName = mode === 'chat'
     ? (userModelConfig?.chat?.smallModel || env.HYBRID_SMALL_MODEL || 'qwen2.5:32b')
     : (userModelConfig?.proactive?.smallModel || env.PROACTIVE_SMALL_MODEL || env.HYBRID_SMALL_MODEL || 'qwen2.5:32b');
+
+  // Debug: Log which model we're using
+  console.log('[Provider] Selected small model:', smallModelName);
+  console.log('[Provider] From user config?:', mode === 'chat' ? !!userModelConfig?.chat?.smallModel : !!userModelConfig?.proactive?.smallModel);
 
   // Small model provider - use ollama if model doesn't start with provider prefix
   const smallModelProvider = mode === 'proactive' && env.PROACTIVE_SMALL_PROVIDER
@@ -118,6 +126,10 @@ export function getHybridAIProvider(mode: 'chat' | 'proactive' = 'chat', userMod
   const largeModelName = mode === 'chat'
     ? (userModelConfig?.chat?.largeModel || env.HYBRID_LARGE_MODEL || 'anthropic/claude-sonnet-4-5')
     : (userModelConfig?.proactive?.largeModel || env.PROACTIVE_LARGE_MODEL || env.HYBRID_LARGE_MODEL || 'anthropic/claude-sonnet-4-5');
+
+  // Debug: Log which model we're using
+  console.log('[Provider] Selected large model:', largeModelName);
+  console.log('[Provider] From user config?:', mode === 'chat' ? !!userModelConfig?.chat?.largeModel : !!userModelConfig?.proactive?.largeModel);
   const largeModel = new ChatOpenAI({
     modelName: largeModelName,
     apiKey: env.OPENROUTER_API_KEY,
