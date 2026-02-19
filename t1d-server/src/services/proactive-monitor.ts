@@ -140,12 +140,35 @@ export class ProactiveMonitor {
    * Check if we should skip this user (cooldown)
    */
   private async shouldSkipUser(userId: string): Promise<boolean> {
-    const stateResult = await query(
-      `SELECT last_message_sent_at, last_daily_summary_at
-       FROM glucose_monitoring_state
-       WHERE user_id = $1`,
-      [userId]
-    );
+    // Fetch monitoring state AND notification preferences in parallel
+    const [stateResult, prefsResult] = await Promise.all([
+      query(
+        `SELECT last_message_sent_at, last_daily_summary_at
+         FROM glucose_monitoring_state
+         WHERE user_id = $1`,
+        [userId]
+      ),
+      query(
+        `SELECT notification_preferences FROM users WHERE id = $1`,
+        [userId]
+      ),
+    ]);
+
+    // Check if proactive notifications are disabled entirely
+    const notifPrefs = prefsResult.rows[0]?.notification_preferences || {};
+    if (notifPrefs.proactive_enabled === false) {
+      console.log(`  [shouldSkip] proactive_enabled=false — skipping`);
+      return true;
+    }
+
+    // Map frequency preference to minimum hours between messages
+    const frequency: string = notifPrefs.frequency || 'normal';
+    const minHoursBetweenMessages: Record<string, number> = {
+      low: 4,      // ~1-2 messages per active day
+      normal: 2,   // ~3-4 messages per active day
+      high: 1,     // ~5-6 messages per active day
+    };
+    const cooldownHours = minHoursBetweenMessages[frequency] ?? 2;
 
     if (stateResult.rows.length === 0) {
       return false; // New user, don't skip
@@ -154,13 +177,13 @@ export class ProactiveMonitor {
     const state = stateResult.rows[0];
     const now = new Date();
 
-    // Don't send more than 1 message per hour (allows 2-3 insights per day during active hours)
     if (state.last_message_sent_at) {
       const hoursSinceLastMessage =
         (now.getTime() - new Date(state.last_message_sent_at).getTime()) / (1000 * 60 * 60);
 
-      if (hoursSinceLastMessage < 1.0) {
-        return true; // Skip - too soon since last message
+      if (hoursSinceLastMessage < cooldownHours) {
+        console.log(`  [shouldSkip] frequency=${frequency}, cooldown=${cooldownHours}h, elapsed=${hoursSinceLastMessage.toFixed(1)}h — skipping`);
+        return true;
       }
     }
 
