@@ -64,6 +64,51 @@ export interface ModelConfig {
     smallModel?: string;
     largeModel?: string;
   };
+  voice?: {
+    model?: string; // Single fast model for Siri/Apple Watch voice queries
+  };
+}
+
+/**
+ * Get a single fast model for voice queries (Siri/Apple Watch)
+ * Defaults to the chat small model — one model is enough since responses must be short
+ */
+export function getVoiceModel(userModelConfig?: ModelConfig): { model: any; modelName: string } {
+  const modelName = userModelConfig?.voice?.model
+    || userModelConfig?.chat?.smallModel
+    || env.HYBRID_SMALL_MODEL
+    || 'qwen2.5:32b';
+
+  const provider = env.HYBRID_SMALL_PROVIDER || 'ollama';
+
+  let model: any;
+  if (provider === 'ollama') {
+    model = new ChatOllama({
+      baseUrl: env.OLLAMA_BASE_URL,
+      model: modelName,
+      temperature: 0.3,
+      streaming: false,
+      numCtx: 8192,
+    });
+  } else {
+    model = new ChatOpenAI({
+      modelName,
+      apiKey: env.OPENROUTER_API_KEY,
+      configuration: {
+        baseURL: 'https://openrouter.ai/api/v1',
+        defaultHeaders: {
+          'HTTP-Referer': 'https://t1d-dashboard.local',
+          'X-Title': 'T1D Voice Assistant',
+        },
+      },
+      temperature: 0.3,
+      streaming: false,
+      maxTokens: 200,
+    });
+    model.getNumTokens = async () => 0;
+  }
+
+  return { model, modelName: `${provider}:${modelName}` };
 }
 
 /**

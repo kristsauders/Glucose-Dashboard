@@ -414,6 +414,9 @@ const modelConfigSchema = z.object({
     smallModel: z.string().min(1),
     largeModel: z.string().min(1),
   }).optional(),
+  voice: z.object({
+    model: z.string().min(1),
+  }).optional(),
 });
 
 router.put('/models', async (req, res, next) => {
@@ -443,6 +446,7 @@ router.put('/models', async (req, res, next) => {
     const newModelConfig = {
       chat: updates.chat || currentModelConfig.chat,
       proactive: updates.proactive || currentModelConfig.proactive,
+      voice: updates.voice || currentModelConfig.voice,
     };
 
     // Update preferences in database

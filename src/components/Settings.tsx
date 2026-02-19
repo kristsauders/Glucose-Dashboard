@@ -8,6 +8,7 @@ import { NotificationSettings } from './NotificationSettings';
 import { VoiceSettings } from './VoiceSettings';
 import { ResearchSettings } from './ResearchSettings';
 import { ModelSettings } from './ModelSettings';
+import { VoiceQuerySettings } from './VoiceQuerySettings';
 
 interface SettingsProps {
   onClose: () => void;
@@ -70,6 +71,11 @@ export function Settings({ onClose }: SettingsProps) {
             <div>
               <h3 className="text-sm font-semibold mb-3">Research</h3>
               <ResearchSettings />
+            </div>
+
+            <div>
+              <h3 className="text-sm font-semibold mb-3">Siri & Apple Watch</h3>
+              <VoiceQuerySettings />
             </div>
 
             <div>

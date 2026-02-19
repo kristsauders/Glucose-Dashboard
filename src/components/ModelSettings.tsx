@@ -15,6 +15,9 @@ interface ModelConfig {
     smallModel: string;
     largeModel: string;
   };
+  voice?: {
+    model: string;
+  };
 }
 
 export function ModelSettings() {
@@ -76,6 +79,11 @@ export function ModelSettings() {
         [field]: value,
       },
     });
+  };
+
+  const handleVoiceModelChange = (value: string) => {
+    if (!config) return;
+    setConfig({ ...config, voice: { model: value } });
   };
 
   if (loading) {
@@ -181,6 +189,30 @@ export function ModelSettings() {
                   Used for generating proactive messages
                 </p>
               </div>
+            </div>
+          </div>
+
+          {/* Voice Model */}
+          <div className="pt-4 border-t">
+            <div className="flex items-center gap-2 mb-3">
+              <Brain className="h-4 w-4 text-muted-foreground" />
+              <h4 className="text-sm font-medium">Voice Model (Siri / Apple Watch)</h4>
+            </div>
+            <p className="text-xs text-muted-foreground mb-4">
+              Single fast model for Siri voice queries and Apple Watch logging. Defaults to the Chat small model if not set.
+            </p>
+            <div>
+              <Label htmlFor="voice-model">Voice Model</Label>
+              <Input
+                id="voice-model"
+                value={config.voice?.model ?? ''}
+                onChange={(e) => handleVoiceModelChange(e.target.value)}
+                placeholder={`Default: ${config.chat.smallModel}`}
+                className="mt-1.5"
+              />
+              <p className="text-xs text-muted-foreground mt-1">
+                Leave blank to use the Chat small model. For watch queries, a fast/cheap model is ideal.
+              </p>
             </div>
           </div>
 

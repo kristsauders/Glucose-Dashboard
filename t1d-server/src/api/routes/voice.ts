@@ -4,9 +4,12 @@ import multer from 'multer';
 import { authMiddleware } from '../middleware/auth.js';
 import { audioService } from '../../services/audio-service.js';
 import { createConfiguredAgentGraph } from '../../agent/graph.js';
-import { HumanMessage, AIMessage } from '@langchain/core/messages';
+import { HumanMessage, AIMessage, SystemMessage, ToolMessage } from '@langchain/core/messages';
 import type { AuthRequest } from '../../types/index.js';
 import { query } from '../../config/database.js';
+import { getVoiceModel } from '../../agent/providers.js';
+import { buildCurrentContext } from '../../utils/context-prefetch.js';
+import { logMealTool, logInsulinTool, logExerciseTool } from '../../agent/tools.js';
 
 const router = Router();
 
@@ -291,6 +294,172 @@ router.post('/chat', upload.single('audio'), async (req, res, next) => {
     });
   } catch (error) {
     console.error('[Voice API] Voice chat error:', error);
+    next(error);
+  }
+});
+
+// POST /api/voice/query - Text-in, text-out for Siri/Apple Watch Shortcuts
+// Accepts a spoken message (already transcribed by Shortcuts), returns a plain-text spoken response.
+// Supports queries about glucose/health data and logging meals, insulin, and exercise.
+const voiceQuerySchema = z.object({
+  message: z.string().min(1).max(500),
+  conversationId: z.string().uuid().optional(),
+});
+
+router.post('/query', async (req, res, next) => {
+  try {
+    const authReq = req as AuthRequest;
+    const { message, conversationId } = voiceQuerySchema.parse(req.body);
+    const userId = authReq.user!.id;
+    const startTime = Date.now();
+
+    // Load user context and preferences
+    const userResult = await query(
+      'SELECT email, diagnosis_type, diagnosis_date, timezone, preferences FROM users WHERE id = $1',
+      [userId]
+    );
+    const user = userResult.rows[0];
+    const userTimezone = user.timezone || 'America/New_York';
+    const userModelConfig = (user.preferences || {}).modelConfig;
+
+    // Pre-load current context (glucose, meals, insulin, exercise, memory)
+    const contextSummary = await buildCurrentContext(userId, userTimezone);
+
+    // Load recent conversation history for multi-turn context (last 3 exchanges)
+    let history: Array<{ role: string; content: string }> = [];
+    let activeConversationId = conversationId;
+
+    if (conversationId) {
+      const historyResult = await query(
+        `SELECT role, content FROM chat_messages
+         WHERE conversation_id = $1 AND role IN ('user', 'assistant')
+         ORDER BY created_at DESC LIMIT 6`,
+        [conversationId]
+      );
+      history = historyResult.rows.reverse();
+    }
+
+    const { model, modelName } = getVoiceModel(userModelConfig);
+    console.log(`[Voice Query] User: ${user.email}, Model: ${modelName}`);
+    console.log(`[Voice Query] Message: "${message}"`);
+
+    // Bind logging tools — the only tools needed for voice (no heavy analysis)
+    const modelWithTools = model.bindTools([logMealTool, logInsulinTool, logExerciseTool]);
+
+    // Build time context string
+    const localTime = new Date(new Date().toLocaleString('en-US', { timeZone: userTimezone }));
+    const timeStr = localTime.toLocaleString('en-US', {
+      weekday: 'long', hour: 'numeric', minute: '2-digit', hour12: true,
+    });
+
+    const systemMsg = new SystemMessage(
+      `You are Sage, a T1D assistant responding to a voice query from an Apple Watch via Siri.\n\n` +
+      `CRITICAL RULES FOR VOICE RESPONSES:\n` +
+      `- Respond in 1 to 3 spoken sentences MAXIMUM — this will be read aloud\n` +
+      `- Plain conversational text ONLY — no markdown, no bullets, no headers, no asterisks\n` +
+      `- Be specific with numbers (exact values, not approximations)\n` +
+      `- If the user wants to log something (insulin, meal, exercise), call the appropriate tool first, then confirm what was logged in your spoken response\n\n` +
+      `Current time: ${timeStr}\n\n` +
+      `## Current Health Status (pre-loaded, covers last 2 hours of glucose):\n` +
+      `${contextSummary}\n\n` +
+      `If the user asks about something older than 2 hours, note that you can only see recent data in voice mode.`
+    );
+
+    const messages: any[] = [
+      systemMsg,
+      ...history.map(h => h.role === 'user' ? new HumanMessage(h.content) : new AIMessage(h.content)),
+      new HumanMessage(message),
+    ];
+
+    // First model call — may include a tool call (logging intent)
+    let response = await modelWithTools.invoke(messages);
+    let logged: { type: string; summary: string } | undefined;
+
+    if (response.tool_calls && response.tool_calls.length > 0) {
+      const toolCall = response.tool_calls[0];
+      console.log(`[Voice Query] Tool call: ${toolCall.name}`, toolCall.args);
+
+      let toolResult: string;
+      try {
+        const toolArgs = { ...toolCall.args, userId, timezone: userTimezone };
+        if (toolCall.name === 'log_meal') {
+          toolResult = await logMealTool.invoke(toolArgs);
+        } else if (toolCall.name === 'log_insulin') {
+          toolResult = await logInsulinTool.invoke(toolArgs);
+        } else if (toolCall.name === 'log_exercise') {
+          toolResult = await logExerciseTool.invoke(toolArgs);
+        } else {
+          toolResult = JSON.stringify({ success: false, error: 'Unknown tool' });
+        }
+
+        const parsed = JSON.parse(toolResult);
+        if (parsed.success !== false) {
+          logged = {
+            type: toolCall.name.replace('log_', ''),
+            summary: toolCall.args.description || toolCall.args.insulinType
+              ? `${toolCall.args.units}u ${toolCall.args.insulinType}`
+              : toolCall.name,
+          };
+        }
+      } catch (e: any) {
+        toolResult = JSON.stringify({ success: false, error: e.message });
+      }
+
+      // Add the assistant tool-call message + tool result, then get final spoken response
+      messages.push(response as any);
+      messages.push(new ToolMessage({ tool_call_id: toolCall.id, content: toolResult! }));
+      response = await model.invoke(messages);
+    }
+
+    const spoken = typeof response.content === 'string' ? response.content.trim() : '';
+    if (!spoken) {
+      return res.status(500).json({ error: 'No response generated' });
+    }
+
+    console.log(`[Voice Query] Done in ${Date.now() - startTime}ms: "${spoken.substring(0, 80)}..."`);
+
+    // Find or create a "Voice Queries" conversation for history
+    if (!activeConversationId) {
+      const existingConv = await query(
+        `SELECT id FROM conversations WHERE user_id = $1 AND title = 'Voice Queries'
+         ORDER BY updated_at DESC LIMIT 1`,
+        [userId]
+      );
+      if (existingConv.rows.length > 0) {
+        activeConversationId = existingConv.rows[0].id;
+      } else {
+        const newConv = await query(
+          `INSERT INTO conversations (user_id, title) VALUES ($1, 'Voice Queries') RETURNING id`,
+          [userId]
+        );
+        activeConversationId = newConv.rows[0].id;
+      }
+    }
+
+    // Save user message and response
+    await query(
+      `INSERT INTO chat_messages (conversation_id, user_id, role, content, metadata)
+       VALUES ($1, $2, 'user', $3, $4)`,
+      [activeConversationId, userId, message, JSON.stringify({ voiceQuery: true })]
+    );
+    await query(
+      `INSERT INTO chat_messages (conversation_id, user_id, role, content, metadata)
+       VALUES ($1, $2, 'assistant', $3, $4)`,
+      [activeConversationId, userId, spoken, JSON.stringify({ voiceQuery: true, model: modelName, logged })]
+    );
+    await query(
+      `UPDATE conversations SET updated_at = NOW() WHERE id = $1`,
+      [activeConversationId]
+    );
+
+    res.json({
+      spoken,
+      conversationId: activeConversationId,
+      ...(logged && { logged }),
+      duration: Date.now() - startTime,
+    });
+  } catch (error) {
+    console.error('[Voice Query] Error:', error);
     next(error);
   }
 });
