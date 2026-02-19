@@ -4053,8 +4053,13 @@ Common query patterns:
   }),
 
   func: async ({ query: sqlQuery, description, userId }) => {
+    console.log(`[execute_sql_query] Running: ${description}`);
+    console.log(`[execute_sql_query] SQL: ${sqlQuery.trim().replace(/\s+/g, ' ')}`);
     try {
-      return await executeSafeReadOnlyQuery(userId!, sqlQuery, description);
+      const result = await executeSafeReadOnlyQuery(userId!, sqlQuery, description);
+      const parsed = JSON.parse(result);
+      console.log(`[execute_sql_query] Returned ${parsed.rowCount ?? 0} rows`);
+      return result;
     } catch (error) {
       console.error('[execute_sql_query] Error:', error);
       return JSON.stringify({

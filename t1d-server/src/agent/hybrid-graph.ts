@@ -271,7 +271,8 @@ Do NOT rely on the pre-loaded snapshot for questions about specific past events 
 Example: "What was my low during my workout this morning?"
 → The pre-loaded glucose won't have readings from 4+ hours ago
 → REQUIRED: execute_sql to query glucose around the workout time
-→ execute_sql("SELECT timestamp, glucose_value FROM glucose_readings WHERE user_id = '...' AND timestamp >= NOW() - INTERVAL '8 hours' ORDER BY glucose_value ASC LIMIT 10")
+→ execute_sql("SELECT timestamp, glucose FROM user_glucose_readings WHERE timestamp >= NOW() - INTERVAL '12 hours' ORDER BY glucose ASC LIMIT 10")
+   ⚠️ Table alias is user_glucose_readings (not glucose_readings), column is glucose (not glucose_value), no user_id filter needed
 
 ═══════════════════════════════════════════════════════════════
 🚨 MANDATORY: CALL MULTIPLE TOOLS IN PARALLEL 🚨
@@ -314,7 +315,7 @@ Request: "How's my glucose control this week?"
 
 Request: "What was my low after my workout this morning?"
 → Pre-loaded glucose only covers last 2 hours — workout was 4+ hours ago
-→ FIRST MESSAGE: execute_sql(query glucose readings last 8 hours, sorted by value ASC) + get_exercise_history(days=1)
+→ FIRST MESSAGE: execute_sql("SELECT timestamp, glucose FROM user_glucose_readings WHERE timestamp >= NOW() - INTERVAL '12 hours' ORDER BY glucose ASC LIMIT 10") + get_exercise_history(days=1)
 → SECOND MESSAGE: correlate the low reading with workout timing or "Analysis complete"
 
 Request: "How was dinner last Tuesday?"
