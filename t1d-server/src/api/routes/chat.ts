@@ -252,15 +252,8 @@ router.post('/stream', async (req, res, next) => {
           if ((msgType === 'AIMessage' || msgType === 'ai') && content.length > 10 && !hasToolCalls) {
             fullResponse = content;
             res.write(`data: ${JSON.stringify({ type: 'status', content: 'Responding...' })}\n\n`);
+            res.write(`data: ${JSON.stringify({ type: 'content', content: fullResponse })}\n\n`);
             if (typeof (res as any).flush === 'function') (res as any).flush();
-
-            // Stream word-by-word (each word + its trailing whitespace as one token)
-            const tokens = content.match(/\S+\s*/g) || [content];
-            for (const token of tokens) {
-              res.write(`data: ${JSON.stringify({ type: 'content', content: token })}\n\n`);
-              if (typeof (res as any).flush === 'function') (res as any).flush();
-              await new Promise(r => setTimeout(r, 5));
-            }
             break;
           }
         }

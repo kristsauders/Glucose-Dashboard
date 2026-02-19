@@ -60,8 +60,8 @@
 }
 
 @keyframes thinking-shimmer {
-  0%   { background-position: 100% 50%; }
-  100% { background-position: 0%   50%; }
+  0%   { background-position: 0% center; }
+  100% { background-position: 100% center; }
 }
 
 .thinking-shimmer {
@@ -69,14 +69,14 @@
   font-style: italic;
   background: linear-gradient(90deg,
     hsl(var(--muted-foreground)) 0%,
-    hsl(var(--primary))          40%,
-    hsl(var(--muted-foreground)) 80%
+    hsl(var(--primary))          50%,
+    hsl(var(--muted-foreground)) 100%
   );
   background-size: 200% auto;
   -webkit-background-clip: text;
   background-clip: text;
   -webkit-text-fill-color: transparent;
-  animation: thinking-shimmer 2.4s linear infinite;
+  animation: thinking-shimmer 1.8s ease-in-out alternate infinite;
 }
 
 @layer base {
@@ -167,19 +167,60 @@
 }
 
 .prose h1, .prose h2, .prose h3, .prose h4 {
-  margin: 1em 0 0.5em 0;
+  margin: 1.1em 0 0.4em 0;
+}
+
+.prose h1 {
+  font-size: 1.55em;
+  font-weight: 700;
+  padding-bottom: 0.25em;
+  border-bottom: 1px solid hsl(var(--border));
+}
+
+.prose h2 {
+  font-size: 1.3em;
+  font-weight: 700;
+  padding-bottom: 0.2em;
+  border-bottom: 1px solid hsl(var(--border) / 0.5);
+}
+
+.prose h3 {
+  font-size: 1.12em;
   font-weight: 600;
 }
 
-.prose h1 { font-size: 1.25em; }
-.prose h2 { font-size: 1.125em; }
-.prose h3 { font-size: 1em; }
+.prose h4 {
+  font-size: 1em;
+  font-weight: 600;
+  letter-spacing: 0.01em;
+}
+
+.prose strong {
+  font-weight: 700;
+}
+
+.prose hr {
+  border: none;
+  border-top: 1px solid hsl(var(--border));
+  margin: 1.1em 0;
+}
+
+.prose a {
+  color: hsl(var(--primary));
+  text-decoration: underline;
+  text-underline-offset: 2px;
+}
+
+.prose tr:nth-child(even) td {
+  background: hsl(var(--muted) / 0.4);
+}
 
 .prose blockquote {
   border-left: 3px solid hsl(var(--primary));
-  padding-left: 1em;
+  padding: 0.1em 0 0.1em 1em;
   margin: 0.75em 0;
   font-style: italic;
+  color: hsl(var(--muted-foreground));
 }
 
 .prose table {

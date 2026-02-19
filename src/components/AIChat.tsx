@@ -36,6 +36,17 @@ export function AIChat() {
   const inputRef = useRef<HTMLInputElement>(null);
   const messagesContainerRef = useRef<HTMLDivElement>(null);
   const deepLinkAttemptedRef = useRef<string | null>(null);
+  // Char-by-char reveal: queue holds pending characters, timer drives reveal, done callback signals completion
+  const charQueueRef = useRef('');
+  const charTimerRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  const charRevealDoneRef = useRef<(() => void) | null>(null);
+
+  // Clean up the reveal interval on unmount
+  useEffect(() => {
+    return () => {
+      if (charTimerRef.current) clearInterval(charTimerRef.current);
+    };
+  }, []);
 
   // Only render recent messages for performance (paginated)
   const visibleMessages = useMemo(() => {
@@ -562,6 +573,28 @@ export function AIChat() {
       let fullContent = '';
       let metadata: any = {};
 
+      // Reset char-reveal state from any previous send
+      charQueueRef.current = '';
+      if (charTimerRef.current) { clearInterval(charTimerRef.current); charTimerRef.current = null; }
+      charRevealDoneRef.current = null;
+
+      // Start (or ensure) the char-by-char reveal interval
+      const startReveal = () => {
+        if (charTimerRef.current) return;
+        charTimerRef.current = setInterval(() => {
+          if (charQueueRef.current.length === 0) {
+            clearInterval(charTimerRef.current!);
+            charTimerRef.current = null;
+            charRevealDoneRef.current?.();
+            charRevealDoneRef.current = null;
+            return;
+          }
+          const ch = charQueueRef.current[0];
+          charQueueRef.current = charQueueRef.current.slice(1);
+          setStreamingMessage(prev => prev + ch);
+        }, 7); // ~143 chars/sec — feels like natural typing
+      };
+
       while (true) {
         const { done, value } = await reader.read();
         if (done) break;
@@ -580,7 +613,8 @@ export function AIChat() {
               setThinkingMessage(data.content);
             } else if (data.type === 'content') {
               fullContent += data.content;
-              setStreamingMessage(fullContent);
+              charQueueRef.current += data.content;
+              startReveal();
             } else if (data.type === 'done') {
               metadata = data.metadata;
             } else if (data.type === 'error') {
@@ -588,6 +622,14 @@ export function AIChat() {
             }
           }
         }
+      }
+
+      // Wait for the char-by-char reveal to finish before swapping to the final message
+      if (charQueueRef.current.length > 0 || charTimerRef.current) {
+        await new Promise<void>(resolve => {
+          charRevealDoneRef.current = resolve;
+          startReveal(); // ensure it's running (queue may have grown since last check)
+        });
       }
 
       // If a new conversation was created, update state
@@ -633,6 +675,10 @@ export function AIChat() {
       setError(errorMessage);
       // Remove optimistic user message on error
       setMessages((prev) => prev.slice(0, -1));
+      // Stop any in-progress char reveal
+      if (charTimerRef.current) { clearInterval(charTimerRef.current); charTimerRef.current = null; }
+      charQueueRef.current = '';
+      charRevealDoneRef.current = null;
       setStreamingMessage('');
       setThinkingMessage('');
       setStatus('');
