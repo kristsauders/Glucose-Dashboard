@@ -59,6 +59,26 @@
   }
 }
 
+@keyframes thinking-shimmer {
+  0%   { background-position: 100% 50%; }
+  100% { background-position: 0%   50%; }
+}
+
+.thinking-shimmer {
+  font-size: 0.7rem;
+  font-style: italic;
+  background: linear-gradient(90deg,
+    hsl(var(--muted-foreground)) 0%,
+    hsl(var(--primary))          40%,
+    hsl(var(--muted-foreground)) 80%
+  );
+  background-size: 200% auto;
+  -webkit-background-clip: text;
+  background-clip: text;
+  -webkit-text-fill-color: transparent;
+  animation: thinking-shimmer 2.4s linear infinite;
+}
+
 @layer base {
   * {
     @apply border-border;

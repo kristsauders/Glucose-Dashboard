@@ -426,6 +426,7 @@ The synthesis model will create the user-facing message — your job is to gathe
       if (finalMsg) {
         const content = typeof finalMsg.content === 'string' ? finalMsg.content : '';
         console.log('[synthesisNode] Same-model shortcut: reusing analysis response directly');
+        logContextSummary(state.contextMetrics || []);
         return { messages: [new AIMessage({ content })] };
       }
       console.log('[synthesisNode] Same-model shortcut: no suitable message found, falling through to synthesis');

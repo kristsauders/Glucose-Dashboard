@@ -941,7 +941,7 @@ export function AIChat() {
                   </div>
                 )}
                 {thinkingMessage && (
-                  <p className="text-sm text-muted-foreground italic mb-3">{thinkingMessage}</p>
+                  <p className="thinking-shimmer mb-3">{thinkingMessage}</p>
                 )}
                 {streamingMessage ? (
                   <div className="w-full py-2 font-libre-baskerville" style={{ maxWidth: '100%', overflowX: 'auto' }}>

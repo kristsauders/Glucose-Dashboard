@@ -240,6 +240,8 @@ router.post('/stream', async (req, res, next) => {
 
       // Same-model optimization: synthesis skipped the LLM call and returned the analysis
       // message directly. It won't appear in the messages stream, so capture from values state.
+      // We can't get real token-by-token output (the model already finished), so we simulate
+      // streaming word-by-word to keep the UI experience consistent.
       if ((!fullResponse || fullResponse.trim().length === 0) && lastValuesState?.messages) {
         const stateMessages = lastValuesState.messages as any[];
         for (let i = stateMessages.length - 1; i >= 0; i--) {
@@ -250,9 +252,14 @@ router.post('/stream', async (req, res, next) => {
           if ((msgType === 'AIMessage' || msgType === 'ai') && content.length > 10 && !hasToolCalls) {
             fullResponse = content;
             res.write(`data: ${JSON.stringify({ type: 'status', content: 'Responding...' })}\n\n`);
-            res.write(`data: ${JSON.stringify({ type: 'content', content: fullResponse })}\n\n`);
-            if (typeof (res as any).flush === 'function') {
-              (res as any).flush();
+            if (typeof (res as any).flush === 'function') (res as any).flush();
+
+            // Stream word-by-word (each word + its trailing whitespace as one token)
+            const tokens = content.match(/\S+\s*/g) || [content];
+            for (const token of tokens) {
+              res.write(`data: ${JSON.stringify({ type: 'content', content: token })}\n\n`);
+              if (typeof (res as any).flush === 'function') (res as any).flush();
+              await new Promise(r => setTimeout(r, 5));
             }
             break;
           }
