@@ -16,6 +16,7 @@ export interface Message {
     duration?: number;
     toolCalls?: number;
     toolNames?: string[];
+    thinkingMessage?: string;
   };
   created_at: string;
 }
