@@ -1,11 +1,12 @@
 import { Router } from 'express';
-import { HumanMessage, AIMessage } from '@langchain/core/messages';
+import { HumanMessage, AIMessage, SystemMessage } from '@langchain/core/messages';
 import { z } from 'zod';
 import { authMiddleware } from '../middleware/auth.js';
 import { createConfiguredAgentGraph } from '../../agent/graph.js';
 import { query } from '../../config/database.js';
 import type { AuthRequest, User } from '../../types/index.js';
 import { logContextSize } from '../../utils/token-counter.js';
+import { buildCurrentContext } from '../../utils/context-prefetch.js';
 
 const router = Router();
 
@@ -88,6 +89,19 @@ router.post('/stream', async (req, res, next) => {
     // Create agent with user's model preferences
     const agent = createConfiguredAgentGraph(undefined, 'chat', userModelConfig);
 
+    // Pre-fetch current context (glucose, meals, insulin, exercise today)
+    // Injected as a SystemMessage so Sage skips these common tool calls
+    const userTimezone = user.timezone || 'America/New_York';
+    let contextMessage: SystemMessage | null = null;
+    try {
+      const contextSummary = await buildCurrentContext(authReq.user!.id, userTimezone);
+      contextMessage = new SystemMessage(
+        `## Current Status (pre-loaded — do NOT re-fetch with retrieve_user_memory, get_recent_glucose, get_meal_history, get_insulin_history, or get_exercise_history for today)\n\n${contextSummary}`
+      );
+    } catch (err) {
+      console.error('[chat] Failed to build current context:', err);
+    }
+
     // Prepare messages
     const messages = [
       ...history.map(h =>
@@ -95,6 +109,7 @@ router.post('/stream', async (req, res, next) => {
           ? new HumanMessage(h.content)
           : new AIMessage(h.content)
       ),
+      ...(contextMessage ? [contextMessage] : []),
       new HumanMessage(message),
     ];
 
@@ -344,6 +359,18 @@ router.post('/', async (req, res, next) => {
     // Create agent with user's model preferences
     const agent = createConfiguredAgentGraph(undefined, 'chat', userModelConfig);
 
+    // Pre-fetch current context
+    const userTimezone = user.timezone || 'America/New_York';
+    let contextMessage: SystemMessage | null = null;
+    try {
+      const contextSummary = await buildCurrentContext(authReq.user!.id, userTimezone);
+      contextMessage = new SystemMessage(
+        `## Current Status (pre-loaded — do NOT re-fetch with retrieve_user_memory, get_recent_glucose, get_meal_history, get_insulin_history, or get_exercise_history for today)\n\n${contextSummary}`
+      );
+    } catch (err) {
+      console.error('[chat] Failed to build current context:', err);
+    }
+
     // Prepare messages
     const messages = [
       ...history.map(h =>
@@ -351,6 +378,7 @@ router.post('/', async (req, res, next) => {
           ? new HumanMessage(h.content)
           : new AIMessage(h.content)
       ),
+      ...(contextMessage ? [contextMessage] : []),
       new HumanMessage(message),
     ];
 

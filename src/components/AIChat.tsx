@@ -131,9 +131,21 @@ export function AIChat() {
     // Retry logic for race conditions and network delays (e.g., VPN connection)
     const attemptLoad = async (retryCount = 0): Promise<void> => {
       try {
-        await loadConversation(conversationId);
-        console.log('[Deep-Link] Direct load successful');
-        // Only clear search params after conversation loads successfully
+        const messageCount = await loadConversation(conversationId);
+
+        // Retry if conversation loaded but has no messages - this happens when the
+        // push notification fires before the DB transaction for messages is committed.
+        // Proactive conversations are created, messages inserted, then notification sent —
+        // but 1s may not always be enough on a loaded server.
+        if (messageCount === 0 && retryCount < 8) {
+          const delay = retryCount === 0 ? 1000 : Math.min((retryCount + 1) * 1000, 7000);
+          console.warn(`[Deep-Link] Conversation loaded but empty, retrying in ${delay}ms (attempt ${retryCount + 1}/8)`);
+          setTimeout(() => attemptLoad(retryCount + 1), delay);
+          return;
+        }
+
+        console.log('[Deep-Link] Direct load successful with', messageCount, 'messages');
+        // Only clear search params after conversation loads successfully with messages
         setTimeout(() => setSearchParams({}), 500);
         // Refresh conversation list to include the new one
         fetchConversations();
@@ -287,7 +299,7 @@ export function AIChat() {
     };
   }, [isLoading]);
 
-  const loadConversation = async (conversationId: string) => {
+  const loadConversation = async (conversationId: string): Promise<number> => {
     try {
       console.log('[Load Conversation] Loading conversation:', conversationId);
       const conversation = await apiService.getConversation(conversationId);
@@ -333,6 +345,8 @@ export function AIChat() {
           }
         }, 600);
       }
+
+      return conversation.messages.length;
     } catch (err: any) {
       console.error('[Load Conversation] Failed to load conversation:', err);
       console.error('[Load Conversation] Error details:', {

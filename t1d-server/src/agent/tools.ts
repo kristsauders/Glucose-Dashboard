@@ -1036,9 +1036,9 @@ export const sendProactiveMessageTool = new DynamicStructuredTool({
 
       if (preferences.proactive_enabled) {
         // 6. Send push notification with deep-link and action buttons
-        // Add a small delay to ensure database transaction is fully committed
-        // This prevents race condition where user clicks notification before conversation is visible
-        await new Promise(resolve => setTimeout(resolve, 100));
+        // Add delay to ensure database transaction is fully committed before notifying user
+        // 100ms was too short - user could click notification before messages are visible
+        await new Promise(resolve => setTimeout(resolve, 1000));
 
         // Format actions for Web Push Notifications API (max 2 for mobile UX)
         const formattedActions = actions?.slice(0, 2).map(a => ({
