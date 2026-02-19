@@ -139,6 +139,7 @@ router.post('/stream', async (req, res, next) => {
     let isFirstTokenChunk = true;
     let seenToolCallIds = new Set<string>(); // Track unique tool call IDs across iterations
     let tokenCount = 0;
+    let lastValuesState: any = null; // Track last values state for same-model fallback
 
     try {
       // Use both 'values' and 'messages' modes for tool tracking AND token streaming
@@ -165,8 +166,9 @@ router.post('/stream', async (req, res, next) => {
         if (Array.isArray(chunk) && chunk.length === 2) {
           const [mode, data] = chunk;
 
-          // Handle 'values' mode - for tool tracking
+          // Handle 'values' mode - for tool tracking and same-model fallback
           if (mode === 'values' && data && typeof data === 'object' && 'messages' in data) {
+            lastValuesState = data; // Always capture for same-model fallback
             const messages = data.messages;
 
             if (Array.isArray(messages) && messages.length > 0) {
@@ -177,6 +179,15 @@ router.post('/stream', async (req, res, next) => {
                 const newToolCalls = lastMessage.tool_calls.filter((tc: any) => !seenToolCallIds.has(tc.id));
 
                 if (newToolCalls.length > 0) {
+                  // If the model included a thinking message alongside tool calls, send it
+                  const thinkingContent = typeof lastMessage.content === 'string' ? lastMessage.content.trim() : '';
+                  if (thinkingContent) {
+                    res.write(`data: ${JSON.stringify({ type: 'thinking', content: thinkingContent })}\n\n`);
+                    if (typeof (res as any).flush === 'function') {
+                      (res as any).flush();
+                    }
+                  }
+
                   newToolCalls.forEach((tc: any) => {
                     seenToolCallIds.add(tc.id);
                     toolNames.push(tc.name);
@@ -223,6 +234,27 @@ router.post('/stream', async (req, res, next) => {
                 }
               }
             }
+          }
+        }
+      }
+
+      // Same-model optimization: synthesis skipped the LLM call and returned the analysis
+      // message directly. It won't appear in the messages stream, so capture from values state.
+      if ((!fullResponse || fullResponse.trim().length === 0) && lastValuesState?.messages) {
+        const stateMessages = lastValuesState.messages as any[];
+        for (let i = stateMessages.length - 1; i >= 0; i--) {
+          const msg = stateMessages[i];
+          const msgType = msg?.constructor?.name || msg?._getType?.();
+          const content = typeof msg?.content === 'string' ? msg.content.trim() : '';
+          const hasToolCalls = msg?.tool_calls && msg.tool_calls.length > 0;
+          if ((msgType === 'AIMessage' || msgType === 'ai') && content.length > 10 && !hasToolCalls) {
+            fullResponse = content;
+            res.write(`data: ${JSON.stringify({ type: 'status', content: 'Responding...' })}\n\n`);
+            res.write(`data: ${JSON.stringify({ type: 'content', content: fullResponse })}\n\n`);
+            if (typeof (res as any).flush === 'function') {
+              (res as any).flush();
+            }
+            break;
           }
         }
       }

@@ -402,9 +402,34 @@ The synthesis model will create the user-facing message — your job is to gathe
     };
   }
 
+  // Pre-compute once — true when user configured the same model for both roles
+  const modelsIdentical = providers.smallModelName === providers.largeModelName;
+  if (modelsIdentical) {
+    console.log(`[graph] Small and large models are identical (${providers.smallModelName}), synthesis will reuse analysis response`);
+  }
+
   // Define the synthesis node (uses large model for final message)
   async function synthesisNode(state: AgentState): Promise<Partial<AgentState>> {
     const { messages, userContext } = state;
+
+    // If the user configured the same model for both roles, skip the redundant synthesis call.
+    // The analysis model's final message is already the answer.
+    if (modelsIdentical) {
+      const finalMsg = [...messages].reverse().find(m => {
+        if (m.constructor.name !== 'AIMessage') return false;
+        const content = typeof m.content === 'string' ? m.content.trim() : '';
+        if (content.length < 20) return false;
+        const toolCalls = (m as any).tool_calls;
+        return !toolCalls || toolCalls.length === 0;
+      });
+
+      if (finalMsg) {
+        const content = typeof finalMsg.content === 'string' ? finalMsg.content : '';
+        console.log('[synthesisNode] Same-model shortcut: reusing analysis response directly');
+        return { messages: [new AIMessage({ content })] };
+      }
+      console.log('[synthesisNode] Same-model shortcut: no suitable message found, falling through to synthesis');
+    }
 
     // Transform the conversation for the synthesis model
     // Convert tool_calls + tool_results into a natural format (SystemMessage with context)

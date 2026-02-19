@@ -25,6 +25,7 @@ export function AIChat() {
   const [conversationsError, setConversationsError] = useState('');
   const [error, setError] = useState('');
   const [streamingMessage, setStreamingMessage] = useState('');
+  const [thinkingMessage, setThinkingMessage] = useState('');
   const [status, setStatus] = useState('');
   const [showSidebar, setShowSidebar] = useState(true);
   const [editingTitleId, setEditingTitleId] = useState<string | null>(null);
@@ -465,6 +466,7 @@ export function AIChat() {
     setError('');
     setIsLoading(true);
     setStreamingMessage('');
+    setThinkingMessage('');
     setStatus('');
 
     // Add user message optimistically
@@ -574,6 +576,8 @@ export function AIChat() {
 
             if (data.type === 'status') {
               setStatus(data.content);
+            } else if (data.type === 'thinking') {
+              setThinkingMessage(data.content);
             } else if (data.type === 'content') {
               fullContent += data.content;
               setStreamingMessage(fullContent);
@@ -615,6 +619,7 @@ export function AIChat() {
 
       setMessages((prev) => [...prev, assistantMessage]);
       setStreamingMessage('');
+      setThinkingMessage('');
       setStatus('');
     } catch (err: any) {
       let errorMessage = 'Failed to send message';
@@ -629,6 +634,7 @@ export function AIChat() {
       // Remove optimistic user message on error
       setMessages((prev) => prev.slice(0, -1));
       setStreamingMessage('');
+      setThinkingMessage('');
       setStatus('');
     } finally {
       setIsLoading(false);
@@ -933,6 +939,9 @@ export function AIChat() {
                     <Loader2 className="h-3 w-3 animate-spin" />
                     {status}
                   </div>
+                )}
+                {thinkingMessage && (
+                  <p className="text-sm text-muted-foreground italic mb-3">{thinkingMessage}</p>
                 )}
                 {streamingMessage ? (
                   <div className="w-full py-2 font-libre-baskerville" style={{ maxWidth: '100%', overflowX: 'auto' }}>
