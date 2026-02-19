@@ -655,14 +655,17 @@ export function AIChat() {
           duration: metadata.duration,
           toolCalls: metadata.toolCalls,
           toolNames: metadata.toolNames || [],
+          thinkingMessage: thinkingMessage || undefined,
         },
         created_at: new Date().toISOString(),
       };
 
       setMessages((prev) => [...prev, assistantMessage]);
       setStreamingMessage('');
-      setThinkingMessage('');
       setStatus('');
+      // Don't clear thinkingMessage here — it's captured in the message metadata above
+      // and will be cleared at the start of the next send. This prevents a layout shift
+      // where content jumps up when the thinking text disappears.
     } catch (err: any) {
       let errorMessage = 'Failed to send message';
       if (err.name === 'AbortError') {
@@ -932,6 +935,9 @@ export function AIChat() {
                     </>
                   ) : (
                     <div className="w-full">
+                      {message.metadata.thinkingMessage && (
+                        <p className="text-xs text-muted-foreground/60 italic mb-2">{message.metadata.thinkingMessage}</p>
+                      )}
                       <div className="w-full py-2 font-libre-baskerville">
                         <div className="text-base leading-relaxed prose prose-base dark:prose-invert max-w-none">
                           <ReactMarkdown remarkPlugins={[remarkGfm]}>
@@ -989,17 +995,13 @@ export function AIChat() {
                 {thinkingMessage && (
                   <p className="thinking-shimmer mb-3">{thinkingMessage}</p>
                 )}
-                {streamingMessage ? (
+                {streamingMessage && (
                   <div className="w-full py-2 font-libre-baskerville" style={{ maxWidth: '100%', overflowX: 'auto' }}>
                     <div className="text-base leading-relaxed prose prose-base dark:prose-invert max-w-none overflow-x-auto">
                       <ReactMarkdown remarkPlugins={[remarkGfm]}>
                         {streamingMessage}
                       </ReactMarkdown>
                     </div>
-                  </div>
-                ) : (
-                  <div className="py-2">
-                    <Loader2 className="h-4 w-4 animate-spin" />
                   </div>
                 )}
               </div>
