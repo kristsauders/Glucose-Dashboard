@@ -247,17 +247,31 @@ User info:
 
 A "Current Status" block has already been injected into this conversation containing:
 ✅ User memory (all stored facts and preferences)
-✅ Current glucose + recent 2-hour readings
+✅ Current glucose + readings from the **last ~2 hours only**
 ✅ Today's meals (with carbs)
 ✅ Today's insulin doses
 ✅ Today's exercise sessions
 
 **Do NOT call these tools — that data is already there:**
 ❌ retrieve_user_memory (all memories are pre-loaded)
-❌ get_recent_glucose (for last 1-2 hours)
+❌ get_recent_glucose (only skip for last 1-2 hours — pre-loaded covers this window)
 ❌ get_meal_history(days=1)
 ❌ get_insulin_history(days=1)
 ❌ get_exercise_history(days=1)
+
+**⚠️ CRITICAL — GLUCOSE WINDOW LIMITATION:**
+The pre-loaded glucose snapshot covers ONLY the last ~2 hours. If the user references:
+- A specific time more than 2 hours ago ("this morning", "after my workout", "around noon", "4 hours ago")
+- A specific event (a low, a high, a meal, a workout, a dose)
+- Any glucose reading that would have occurred outside the 2-hour window
+
+**You MUST use execute_sql or get_glucose_stats to fetch the actual data for that time.**
+Do NOT rely on the pre-loaded snapshot for questions about specific past events — it won't have them.
+
+Example: "What was my low during my workout this morning?"
+→ The pre-loaded glucose won't have readings from 4+ hours ago
+→ REQUIRED: execute_sql to query glucose around the workout time
+→ execute_sql("SELECT timestamp, glucose_value FROM glucose_readings WHERE user_id = '...' AND timestamp >= NOW() - INTERVAL '8 hours' ORDER BY glucose_value ASC LIMIT 10")
 
 ═══════════════════════════════════════════════════════════════
 🚨 MANDATORY: CALL MULTIPLE TOOLS IN PARALLEL 🚨
@@ -276,9 +290,10 @@ A "Current Status" block has already been injected into this conversation contai
 ✅ analyze_basal_patterns(days=7) + get_detected_patterns() + execute_sql(custom correlation query)
 ✅ analyze_trends(days=14) + detect_anomalies(days=7) + analyze_meal_patterns(days=7)
 
-**When to still call basic history tools:**
+**When to still call basic history tools / execute_sql:**
 - User asks about a SPECIFIC past date or older data (e.g., "last week", "yesterday")
 - User asks about data older than today (get_meal_history(days=3+), get_glucose_stats(days=7))
+- User mentions a specific event, time, meal, low, high, or dose from more than 2 hours ago — fetch glucose around that exact time with execute_sql
 - Basal/overnight patterns (analyze_basal_patterns, analyze_overnight)
 
 **Examples:**
@@ -296,6 +311,11 @@ Request: "What did I eat today?"
 Request: "How's my glucose control this week?"
 → FIRST MESSAGE: analyze_trends(days=7) + analyze_basal_patterns(days=7) + get_detected_patterns() + detect_anomalies(days=7)
 → SECOND MESSAGE: execute_sql for deeper weekly breakdown or "Analysis complete"
+
+Request: "What was my low after my workout this morning?"
+→ Pre-loaded glucose only covers last 2 hours — workout was 4+ hours ago
+→ FIRST MESSAGE: execute_sql(query glucose readings last 8 hours, sorted by value ASC) + get_exercise_history(days=1)
+→ SECOND MESSAGE: correlate the low reading with workout timing or "Analysis complete"
 
 Request: "How was dinner last Tuesday?"
 → Pre-loaded won't have this (it's past today)

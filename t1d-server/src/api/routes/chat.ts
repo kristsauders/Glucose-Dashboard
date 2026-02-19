@@ -96,7 +96,7 @@ router.post('/stream', async (req, res, next) => {
     try {
       const contextSummary = await buildCurrentContext(authReq.user!.id, userTimezone);
       contextMessage = new SystemMessage(
-        `## Current Status (pre-loaded — do NOT re-fetch with retrieve_user_memory, get_recent_glucose, get_meal_history, get_insulin_history, or get_exercise_history for today)\n\n${contextSummary}`
+        `## Current Status (pre-loaded snapshot — do NOT re-fetch with retrieve_user_memory, get_recent_glucose, get_meal_history, get_insulin_history, or get_exercise_history for today)\n\n⚠️ GLUCOSE WINDOW: Only the most recent ~2 hours of glucose readings are included below. Readings from earlier today or previous days are NOT in this snapshot — use execute_sql or get_glucose_stats to fetch them.\n\n${contextSummary}`
       );
     } catch (err) {
       console.error('[chat] Failed to build current context:', err);
@@ -397,7 +397,7 @@ router.post('/', async (req, res, next) => {
     try {
       const contextSummary = await buildCurrentContext(authReq.user!.id, userTimezone);
       contextMessage = new SystemMessage(
-        `## Current Status (pre-loaded — do NOT re-fetch with retrieve_user_memory, get_recent_glucose, get_meal_history, get_insulin_history, or get_exercise_history for today)\n\n${contextSummary}`
+        `## Current Status (pre-loaded snapshot — do NOT re-fetch with retrieve_user_memory, get_recent_glucose, get_meal_history, get_insulin_history, or get_exercise_history for today)\n\n⚠️ GLUCOSE WINDOW: Only the most recent ~2 hours of glucose readings are included below. Readings from earlier today or previous days are NOT in this snapshot — use execute_sql or get_glucose_stats to fetch them.\n\n${contextSummary}`
       );
     } catch (err) {
       console.error('[chat] Failed to build current context:', err);
