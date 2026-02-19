@@ -136,81 +136,97 @@ app.use(errorHandler);
 
 export function startServer() {
   const port = parseInt(env.PORT);
+  const httpPort = parseInt(env.HTTP_PORT);
   const httpsConfig = getHttpsConfig();
 
   return new Promise<any>((resolve) => {
-    const server = httpsConfig
-      ? https.createServer(httpsConfig, app)
-      : app;
+    if (httpsConfig) {
+      // HTTPS on primary port + HTTP on secondary port (for clients that can't trust the self-signed CA, e.g. Apple Watch)
+      const httpsServer = https.createServer(httpsConfig, app);
 
-    const serverInstance = httpsConfig
-      ? server.listen(port, '0.0.0.0', async () => {
-          console.log('');
-          console.log('╔════════════════════════════════════════════════════════╗');
-          console.log('║                                                        ║');
-          console.log('║              T1D AI Assistant Server                  ║');
-          console.log('║                                                        ║');
-          console.log('╚════════════════════════════════════════════════════════╝');
-          console.log('');
-          console.log('✓ HTTPS enabled with local certificates');
-          console.log(`✓ Server running on https://localhost:${port}`);
-          console.log(`✓ Health check: https://localhost:${port}/api/health`);
-          console.log(`✓ Environment: ${env.NODE_ENV}`);
-          console.log(`✓ AI Provider: ${env.AI_PROVIDER}`);
-          console.log('');
+      httpsServer.listen(port, '0.0.0.0', async () => {
+        console.log('');
+        console.log('╔════════════════════════════════════════════════════════╗');
+        console.log('║                                                        ║');
+        console.log('║              T1D AI Assistant Server                  ║');
+        console.log('║                                                        ║');
+        console.log('╚════════════════════════════════════════════════════════╝');
+        console.log('');
+        console.log('✓ HTTPS enabled with local certificates');
+        console.log(`✓ HTTPS server running on https://localhost:${port}`);
+        console.log(`✓ HTTP  server running on http://localhost:${httpPort}  (for Apple Watch / non-CA-trusted clients)`);
+        console.log(`✓ Health check: https://localhost:${port}/api/health`);
+        console.log(`✓ Environment: ${env.NODE_ENV}`);
+        console.log(`✓ AI Provider: ${env.AI_PROVIDER}`);
+        console.log('');
 
-          // Resume LibreView polling for users with saved credentials
-          await libreViewPoller.resumeAllPolling();
+        // Resume LibreView polling for users with saved credentials
+        await libreViewPoller.resumeAllPolling();
 
-          // Start research monitoring
-          researchMonitor.start();
+        // Start research monitoring
+        researchMonitor.start();
 
-          console.log('Press Ctrl+C to stop');
-          console.log('════════════════════════════════════════════════════════');
-          console.log('');
-          resolve(server);
-        })
-      : (server as any).listen(port, '0.0.0.0', async () => {
-          console.log('');
-          console.log('╔════════════════════════════════════════════════════════╗');
-          console.log('║                                                        ║');
-          console.log('║              T1D AI Assistant Server                  ║');
-          console.log('║                                                        ║');
-          console.log('╚════════════════════════════════════════════════════════╝');
-          console.log('');
-          console.log('ℹ HTTPS certificates not found, running in HTTP mode');
-          console.log(`✓ Server running on http://localhost:${port}`);
-          console.log(`✓ Health check: http://localhost:${port}/api/health`);
-          console.log(`✓ Environment: ${env.NODE_ENV}`);
-          console.log(`✓ AI Provider: ${env.AI_PROVIDER}`);
-          console.log('');
-
-          // Resume LibreView polling for users with saved credentials
-          await libreViewPoller.resumeAllPolling();
-
-          // Start research monitoring
-          researchMonitor.start();
-
-          console.log('Press Ctrl+C to stop');
-          console.log('════════════════════════════════════════════════════════');
-          console.log('');
-          resolve(server);
-        });
-
-    // Track connections for forceful shutdown
-    serverInstance.on('connection', (conn) => {
-      connections.add(conn);
-      conn.on('close', () => {
-        connections.delete(conn);
+        console.log('Press Ctrl+C to stop');
+        console.log('════════════════════════════════════════════════════════');
+        console.log('');
+        resolve(httpsServer);
       });
-    });
 
-    // Add method to forcefully close all connections
-    (serverInstance as any).closeAllConnections = () => {
-      for (const conn of connections) {
-        conn.destroy();
-      }
-      connections.clear();
-    };
+      httpsServer.on('connection', (conn) => {
+        connections.add(conn);
+        conn.on('close', () => connections.delete(conn));
+      });
+
+      // Plain HTTP server on secondary port (same Express app)
+      const httpServer = app.listen(httpPort, '0.0.0.0');
+
+      httpServer.on('connection', (conn) => {
+        connections.add(conn);
+        conn.on('close', () => connections.delete(conn));
+      });
+
+      (httpsServer as any).closeAllConnections = () => {
+        for (const conn of connections) conn.destroy();
+        connections.clear();
+      };
+    } else {
+      // No certs — plain HTTP only
+      const serverInstance = app.listen(port, '0.0.0.0', async () => {
+        console.log('');
+        console.log('╔════════════════════════════════════════════════════════╗');
+        console.log('║                                                        ║');
+        console.log('║              T1D AI Assistant Server                  ║');
+        console.log('║                                                        ║');
+        console.log('╚════════════════════════════════════════════════════════╝');
+        console.log('');
+        console.log('ℹ HTTPS certificates not found, running in HTTP mode');
+        console.log(`✓ Server running on http://localhost:${port}`);
+        console.log(`✓ Health check: http://localhost:${port}/api/health`);
+        console.log(`✓ Environment: ${env.NODE_ENV}`);
+        console.log(`✓ AI Provider: ${env.AI_PROVIDER}`);
+        console.log('');
+
+        // Resume LibreView polling for users with saved credentials
+        await libreViewPoller.resumeAllPolling();
+
+        // Start research monitoring
+        researchMonitor.start();
+
+        console.log('Press Ctrl+C to stop');
+        console.log('════════════════════════════════════════════════════════');
+        console.log('');
+        resolve(serverInstance);
+      });
+
+      serverInstance.on('connection', (conn) => {
+        connections.add(conn);
+        conn.on('close', () => connections.delete(conn));
+      });
+
+      (serverInstance as any).closeAllConnections = () => {
+        for (const conn of connections) conn.destroy();
+        connections.clear();
+      };
+    }
   });
 }

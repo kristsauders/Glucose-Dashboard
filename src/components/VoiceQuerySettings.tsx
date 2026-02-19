@@ -6,10 +6,13 @@ import { Alert, AlertDescription } from '@/components/ui/alert';
 
 const TOKEN_KEY = 't1d_auth_token';
 const API_URL = import.meta.env.VITE_API_URL || 'https://your-server.com';
+// Plain HTTP URL for Apple Watch shortcuts (watchOS can't trust self-signed CAs)
+const HTTP_API_URL = import.meta.env.VITE_HTTP_API_URL || API_URL;
 
 export function VoiceQuerySettings() {
   const [tokenCopied, setTokenCopied] = useState(false);
   const [urlCopied, setUrlCopied] = useState(false);
+  const [watchUrlCopied, setWatchUrlCopied] = useState(false);
   const [showGuide, setShowGuide] = useState(false);
 
   const copyToken = () => {
@@ -26,7 +29,14 @@ export function VoiceQuerySettings() {
     setTimeout(() => setUrlCopied(false), 2500);
   };
 
+  const copyWatchUrl = () => {
+    navigator.clipboard.writeText(`${HTTP_API_URL}/api/voice/query`);
+    setWatchUrlCopied(true);
+    setTimeout(() => setWatchUrlCopied(false), 2500);
+  };
+
   const hasToken = !!localStorage.getItem(TOKEN_KEY);
+  const hasSeperateHttpUrl = HTTP_API_URL !== API_URL;
 
   return (
     <Card>
@@ -69,10 +79,24 @@ export function VoiceQuerySettings() {
               {urlCopied ? (
                 <><Check className="h-3 w-3 mr-2" />Copied!</>
               ) : (
-                <><Copy className="h-3 w-3 mr-2" />Copy Endpoint URL</>
+                <><Copy className="h-3 w-3 mr-2" />Copy URL (iPhone)</>
               )}
             </Button>
           </div>
+          {hasSeperateHttpUrl && (
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={copyWatchUrl}
+              className="w-full"
+            >
+              {watchUrlCopied ? (
+                <><Check className="h-3 w-3 mr-2" />Copied!</>
+              ) : (
+                <><Copy className="h-3 w-3 mr-2" />Copy URL (Apple Watch — HTTP)</>
+              )}
+            </Button>
+          )}
           {!hasToken && (
             <p className="text-xs text-destructive">Not signed in — token unavailable.</p>
           )}
@@ -92,8 +116,8 @@ export function VoiceQuerySettings() {
             <div className="px-3 pb-3 space-y-4 text-xs text-muted-foreground border-t pt-3">
               <Alert>
                 <AlertDescription className="text-xs">
-                  You'll create two iOS Shortcuts — one for asking questions, one for logging. Both use the
-                  same endpoint. They work from iPhone, AirPods, and Apple Watch via Siri or the Shortcuts app.
+                  One shortcut handles everything — questions and logging both go to the same endpoint.
+                  Sage figures out intent from what you say. Works from iPhone, AirPods, and Apple Watch.
                 </AlertDescription>
               </Alert>
 
@@ -101,27 +125,32 @@ export function VoiceQuerySettings() {
               <div>
                 <p className="font-semibold text-foreground mb-1">Before you start (once)</p>
                 <ol className="list-decimal list-inside space-y-1 pl-1">
-                  <li>Tap <strong>Copy Auth Token</strong> above and paste it somewhere safe (Notes, etc.)</li>
-                  <li>Tap <strong>Copy Endpoint URL</strong> and paste it alongside the token</li>
+                  <li>Tap <strong>Copy Auth Token</strong> above and save it somewhere (Notes, etc.)</li>
+                  <li>Tap the appropriate URL button above:
+                    <ul className="list-disc list-inside pl-4 mt-0.5 space-y-0.5">
+                      <li><strong>iPhone / Siri / AirPods</strong> → Copy URL (iPhone)</li>
+                      <li><strong>Apple Watch</strong> → Copy URL (Apple Watch — HTTP)</li>
+                    </ul>
+                  </li>
                 </ol>
               </div>
 
-              {/* Shortcut 1 */}
+              {/* Single shortcut */}
               <div>
-                <p className="font-semibold text-foreground mb-1">Shortcut 1 — "Ask Sage" (questions)</p>
+                <p className="font-semibold text-foreground mb-1">Create the "Sage" Shortcut</p>
                 <ol className="list-decimal list-inside space-y-1 pl-1">
                   <li>Open the <strong>Shortcuts</strong> app → tap <strong>+</strong></li>
-                  <li>Name it <strong>Ask Sage</strong></li>
+                  <li>Name it <strong>Sage</strong></li>
                   <li>Add action: <strong>Ask for Input</strong>
                     <ul className="list-disc list-inside pl-4 mt-0.5 space-y-0.5">
                       <li>Input Type: <strong>Text</strong></li>
-                      <li>Prompt: <em>What would you like to ask Sage?</em></li>
+                      <li>Prompt: <em>Ask or log something</em></li>
                       <li>Toggle <strong>Allow Speech</strong> on</li>
                     </ul>
                   </li>
                   <li>Add action: <strong>Get Contents of URL</strong>
                     <ul className="list-disc list-inside pl-4 mt-0.5 space-y-0.5">
-                      <li>URL: paste the endpoint URL</li>
+                      <li>URL: paste the endpoint URL you copied</li>
                       <li>Method: <strong>POST</strong></li>
                       <li>Headers: add <code>Authorization</code> → <code>Bearer YOUR_TOKEN</code></li>
                       <li>Headers: add <code>Content-Type</code> → <code>application/json</code></li>
@@ -136,20 +165,9 @@ export function VoiceQuerySettings() {
                     </ul>
                   </li>
                   <li>Add action: <strong>Speak Text</strong> → input: <em>Dictionary Value</em></li>
-                  <li>Tap the Shortcut name → <strong>Add to Home Screen</strong> or add as a Watch complication</li>
+                  <li>Tap the shortcut name → <strong>Add to Home Screen</strong> or pin as a Watch complication</li>
                 </ol>
-              </div>
-
-              {/* Shortcut 2 */}
-              <div>
-                <p className="font-semibold text-foreground mb-1">Shortcut 2 — "Log with Sage" (logging)</p>
-                <p className="mb-1">Same steps as above, but:</p>
-                <ul className="list-disc list-inside pl-1 space-y-0.5">
-                  <li>Name it <strong>Log with Sage</strong></li>
-                  <li>Ask for Input prompt: <em>What would you like to log?</em></li>
-                  <li>Everything else is identical</li>
-                </ul>
-                <p className="mt-1 italic">Example: say "4 units Humalog, meal bolus" — Sage logs it and confirms by voice.</p>
+                <p className="mt-2 italic">Examples: "What's my glucose trend?" · "4 units Humalog, meal bolus" · "Log a 30-minute run, moderate intensity"</p>
               </div>
 
               {/* Multi-turn tip */}
@@ -168,8 +186,7 @@ export function VoiceQuerySettings() {
               <div>
                 <p className="font-semibold text-foreground mb-1">Triggering via Siri</p>
                 <ul className="list-disc list-inside pl-1 space-y-0.5">
-                  <li>Say: <em>"Hey Siri, Ask Sage"</em> — Siri runs the shortcut and prompts for your question</li>
-                  <li>Say: <em>"Hey Siri, Log with Sage"</em> — Siri prompts for what to log</li>
+                  <li>Say: <em>"Hey Siri, Sage"</em> — Siri runs the shortcut and prompts for your question</li>
                   <li>Works from iPhone, AirPods, and Apple Watch</li>
                 </ul>
               </div>
