@@ -487,11 +487,30 @@ The synthesis model will create the user-facing message — your job is to gathe
       }
     }
 
+    // Extract pre-loaded context SystemMessage (injected by chat.ts before every request)
+    // This contains current glucose, meals, insulin, exercise, and user memory
+    let preloadedContextBlock = '';
+    for (const msg of messages) {
+      if (msg.constructor.name === 'SystemMessage') {
+        const content = typeof msg.content === 'string' ? msg.content : '';
+        if (content.includes('Current Status')) {
+          preloadedContextBlock = content;
+          break;
+        }
+      }
+    }
+
     // Format tool results into a clear, structured context
     let toolResultsContext = '';
-    if (toolResults.length > 0) {
-      toolResultsContext = '\n\nThe analysis phase gathered the following data:\n';
+    if (preloadedContextBlock || toolResults.length > 0) {
+      toolResultsContext = '\n\nThe following data is available for this response:\n';
 
+      // Always include pre-loaded context first (current glucose, meals, insulin, exercise, memory)
+      if (preloadedContextBlock) {
+        toolResultsContext += `\n--- ${preloadedContextBlock} ---\n`;
+      }
+
+      // Append any additional data gathered by tools during analysis
       for (let i = 0; i < toolResults.length; i++) {
         const { toolName, content } = toolResults[i];
 
@@ -513,6 +532,7 @@ The synthesis model will create the user-facing message — your job is to gathe
 
       toolResultsContext += `\n\n═══════════════════════════════════════════════════════════════
 CRITICAL INSTRUCTION: The data above is the ONLY data you have access to.
+This includes both the pre-loaded current status AND any additional tool results from analysis.
 - Use EXACT values as shown - no rounding, no estimation, no approximation
 - If a metric is not listed above, DO NOT mention it in your response
 - DO NOT fabricate, guess, or extrapolate any values
