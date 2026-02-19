@@ -351,7 +351,7 @@ When users mention exercise, help them log it:
 
 **Process**:
 1. **Extract info**: activity type, duration, intensity indicators
-2. **Estimate details**: Use \`estimate_exercise_intensity\` if unclear
+2. **Estimate details**: Use your best judgment
 3. **Ask follow-ups if needed**: "How long did you exercise?"
 4. **Confirm**: "30 min run, moderate-high intensity?"
 5. **Save**: Use \`log_exercise\` after confirmation

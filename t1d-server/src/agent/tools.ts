@@ -2523,125 +2523,6 @@ const comparePeriodsStatisticalTool = new DynamicStructuredTool({
  */
 
 /**
- * Tool: Estimate meal carbs from description
- */
-export const estimateMealCarbsTool = new DynamicStructuredTool({
-  name: 'estimate_meal_carbs',
-  description: 'Estimate carbohydrates and nutrition from a meal description. Uses food database and AI knowledge to estimate portions.',
-  schema: z.object({
-    userId: z.string().optional().describe('The user ID (automatically provided)'),
-    description: z.string().describe('Meal description (e.g., "noodles and sausage", "bagel with cream cheese")'),
-    portionHints: z.string().optional().describe('Optional portion hints (e.g., "large bowl", "2 cups", "small")'),
-    mealType: z.enum(['breakfast', 'lunch', 'dinner', 'snack']).optional()
-      .describe('Optional meal type'),
-  }),
-  func: async ({ userId, description, portionHints, mealType }) => {
-    try {
-      // Search food database for matching items
-      const searchTerms = description.toLowerCase().split(/\s+/);
-      const foodMatches = [];
-
-      for (const term of searchTerms) {
-        const result = await query(
-          `SELECT name, serving_size, carbs_per_serving, protein_per_serving, fat_per_serving, calories_per_serving
-           FROM food_database
-           WHERE LOWER(name) LIKE $1
-           LIMIT 3`,
-          [`%${term}%`]
-        );
-
-        if (result.rows.length > 0) {
-          foodMatches.push(...result.rows);
-        }
-      }
-
-      // Estimate totals from matched foods
-      let totalCarbs = 0;
-      let totalProtein = 0;
-      let totalFat = 0;
-      let totalCalories = 0;
-      let confidence = 0.5; // Base confidence
-      const breakdown = [];
-
-      if (foodMatches.length > 0) {
-        // Found matches in database
-        for (const food of foodMatches) {
-          const portionMultiplier = portionHints?.toLowerCase().includes('large') ? 1.5 :
-                                   portionHints?.toLowerCase().includes('small') ? 0.75 : 1.0;
-
-          const carbs = parseFloat(food.carbs_per_serving || 0) * portionMultiplier;
-          const protein = parseFloat(food.protein_per_serving || 0) * portionMultiplier;
-          const fat = parseFloat(food.fat_per_serving || 0) * portionMultiplier;
-          const calories = parseFloat(food.calories_per_serving || 0) * portionMultiplier;
-
-          totalCarbs += carbs;
-          totalProtein += protein;
-          totalFat += fat;
-          totalCalories += calories;
-
-          breakdown.push({
-            name: food.name,
-            serving: food.serving_size,
-            carbsEstimate: Math.round(carbs),
-          });
-        }
-
-        confidence = portionHints ? 0.75 : 0.65;
-      } else {
-        // No database matches - use heuristic estimates
-        // This is a simple fallback - in production would use LLM here
-        const hasCarbs = /bread|rice|pasta|noodle|potato|bagel|cereal|oat|pizza|taco|burrito/i.test(description);
-        const hasProtein = /meat|chicken|beef|fish|egg|sausage|bacon|tofu/i.test(description);
-
-        if (hasCarbs) {
-          totalCarbs = 45; // Rough estimate for typical carb portion
-          confidence = 0.4;
-        }
-        if (hasProtein) {
-          totalProtein = 25;
-          totalCarbs += 5; // Small carbs from protein source
-        }
-
-        breakdown.push({
-          name: 'Estimated from description',
-          carbsEstimate: Math.round(totalCarbs),
-        });
-
-        confidence = 0.3; // Low confidence without database match
-      }
-
-      const needsMoreInfo = confidence < 0.6 || breakdown.length === 0;
-
-      return JSON.stringify({
-        success: true,
-        description,
-        portionHints,
-        mealType,
-        estimates: {
-          carbs: Math.round(totalCarbs),
-          protein: Math.round(totalProtein),
-          fat: Math.round(totalFat),
-          calories: Math.round(totalCalories),
-        },
-        confidence,
-        breakdown,
-        needsMoreInfo,
-        suggestedQuestions: needsMoreInfo ? [
-          'How large was the portion?',
-          'Can you describe the serving size?',
-          'Was this a full meal or a snack?',
-        ] : [],
-      });
-    } catch (error) {
-      return JSON.stringify({
-        success: false,
-        error: error instanceof Error ? error.message : 'Unknown error',
-      });
-    }
-  },
-});
-
-/**
  * Tool: Log a meal
  */
 export const logMealTool = new DynamicStructuredTool({
@@ -2929,81 +2810,6 @@ export const getMealHistoryTool = new DynamicStructuredTool({
  * ============================================================================
  */
 
-/**
- * Tool: Estimate exercise intensity from description
- */
-export const estimateExerciseIntensityTool = new DynamicStructuredTool({
-  name: 'estimate_exercise_intensity',
-  description: 'Estimate exercise type, intensity, and duration from description',
-  schema: z.object({
-    userId: z.string().optional().describe('The user ID (automatically provided)'),
-    description: z.string().describe('Exercise description (e.g., "30 min run", "played basketball")'),
-  }),
-  func: async ({ userId, description }) => {
-    const lower = description.toLowerCase();
-
-    // Extract duration if mentioned
-    let durationMinutes = null;
-    const durationMatch = lower.match(/(\d+)\s*(min|minute|hour|hr)/i);
-    if (durationMatch) {
-      const value = parseInt(durationMatch[1]);
-      const unit = durationMatch[2];
-      durationMinutes = unit.startsWith('h') ? value * 60 : value;
-    }
-
-    // Estimate activity type
-    let activityType = 'cardio'; // default
-    if (/walk|jog|run|elliptical|bike|cycle|swim/i.test(lower)) {
-      activityType = 'cardio';
-    } else if (/weight|lift|strength|gym/i.test(lower)) {
-      activityType = 'strength';
-    } else if (/yoga|stretch|flexibility/i.test(lower)) {
-      activityType = 'flexibility';
-    } else if (/basketball|soccer|tennis|sport|game/i.test(lower)) {
-      activityType = 'sports';
-    }
-
-    // Estimate intensity
-    let intensity: 'low' | 'moderate' | 'high' | 'intense' = 'moderate';
-    if (/light|easy|gentle|slow/i.test(lower)) {
-      intensity = 'low';
-    } else if (/intense|hard|vigorous|sprint/i.test(lower)) {
-      intensity = 'intense';
-    } else if (/moderate|normal|regular/i.test(lower)) {
-      intensity = 'moderate';
-    } else if (/high|fast|quick/i.test(lower)) {
-      intensity = 'high';
-    }
-
-    // If duration not specified, estimate based on activity
-    if (!durationMinutes) {
-      if (/quick|short/i.test(lower)) {
-        durationMinutes = 15;
-      } else if (/long/i.test(lower)) {
-        durationMinutes = 60;
-      } else {
-        durationMinutes = 30; // Default estimate
-      }
-    }
-
-    const needsMoreInfo = !durationMatch; // If duration wasn't explicitly stated
-
-    return JSON.stringify({
-      success: true,
-      description,
-      estimates: {
-        activityType,
-        durationMinutes,
-        intensity,
-      },
-      needsMoreInfo,
-      suggestedQuestions: needsMoreInfo ? [
-        'How long did you exercise?',
-        'Was it a short or long session?',
-      ] : [],
-    });
-  },
-});
 
 /**
  * Tool: Log exercise
@@ -4276,14 +4082,12 @@ export const allTools = [
   deleteMemoryTool,
 
   // Meal logging tools
-  estimateMealCarbsTool,
   logMealTool,
   updateMealTool,
   deleteMealTool,
   getMealHistoryTool,
 
   // Exercise logging tools
-  estimateExerciseIntensityTool,
   logExerciseTool,
   updateExerciseTool,
   deleteExerciseTool,
