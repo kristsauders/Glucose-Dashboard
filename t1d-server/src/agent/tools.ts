@@ -32,14 +32,15 @@ export const getRecentGlucoseTool = new DynamicStructuredTool({
   name: 'get_recent_glucose',
   description: `Get glucose readings for the user. Glucose history is NOT pre-loaded in context — call this tool whenever you need past readings.
 
-Use hoursBack for event-specific queries (e.g. hoursBack=8 to see the last 8 hours, covering a morning workout).
-Use startDate/endDate for a specific calendar day or range.
+Use hoursBack for recent event queries (e.g. hoursBack=8 covers the last 8 hours).
+Use startDate/endDate (YYYY-MM-DD) to get a full calendar day in the user's local timezone — date boundaries are automatically adjusted to midnight in their timezone, not UTC.
 Default returns the 50 most recent readings (~4 hours at 5-min intervals).
 
 Examples:
 - User asks about a low during their workout 3 hours ago → hoursBack=6, limit=100
 - User asks about this morning → hoursBack=12
-- User asks about yesterday → startDate and endDate set to yesterday's date`,
+- User asks about yesterday → startDate="YYYY-MM-DD" endDate="YYYY-MM-DD" (yesterday's date, same for both)
+- User asks about breakfast yesterday → startDate/endDate set to yesterday, limit=50`,
   schema: z.object({
     userId: z.string().optional().describe('The user ID (automatically provided)'),
     limit: z.number().default(50).describe('Number of readings to return (default 50, max 1000). Use a higher value when covering a long time window.'),
@@ -60,12 +61,14 @@ Examples:
       dateFilter += ` AND timestamp >= NOW() - INTERVAL '${Math.ceil(hoursBack)} hours'`;
     } else {
       if (startDate) {
-        dateFilter += ` AND timestamp >= $${paramIndex}::date`;
+        // Interpret the date as midnight in the user's local timezone, not UTC
+        dateFilter += ` AND timestamp >= ($${paramIndex}::date::timestamp) AT TIME ZONE '${timezone}'`;
         queryParams.push(startDate);
         paramIndex++;
       }
       if (endDate) {
-        dateFilter += ` AND timestamp <= $${paramIndex}::date + INTERVAL '1 day'`;
+        // End of day in user's local timezone (exclusive upper bound)
+        dateFilter += ` AND timestamp < ($${paramIndex}::date::timestamp + INTERVAL '1 day') AT TIME ZONE '${timezone}'`;
         queryParams.push(endDate);
         paramIndex++;
       }
