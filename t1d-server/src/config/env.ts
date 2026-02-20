@@ -33,6 +33,10 @@ const envSchema = z.object({
   VAPID_EMAIL: z.string().optional(), // Format: mailto:email@example.com
   // Voice/Audio configuration (OpenAI for Whisper STT and TTS)
   OPENAI_API_KEY: z.string().optional(),
+  // Pattern detection interval (ms); 300000=5min for testing, 1800000=30min production
+  PATTERN_DETECTION_INTERVAL: z.string().default('1800000'),
+  // Path to Python 3 executable for execute_python tool
+  PYTHON_PATH: z.string().default('python3'),
 });
 
 export const env = envSchema.parse(process.env);

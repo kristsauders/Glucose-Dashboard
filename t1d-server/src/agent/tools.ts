@@ -21,6 +21,7 @@ import { researchService } from '../services/research-service.js';
 import { researchMonitor } from '../services/research-monitor.js';
 import { ReportGenerator } from '../services/report-generator.js';
 import { executeSafeReadOnlyQuery } from '../utils/safe-sql-executor.js';
+import { executePython } from '../services/python-executor.js';
 
 // Helper to construct API URL using the correct port
 const getApiUrl = () => `http://localhost:${env.PORT}`;
@@ -4121,6 +4122,190 @@ Common query patterns:
   },
 });
 
+/**
+ * Side-channel storage for charts produced by execute_python.
+ * Charts are large base64 strings that shouldn't appear in the LLM context.
+ * chat.ts calls collectPendingCharts() after graph execution to emit them as SSE events.
+ */
+const _pendingChartsByUser = new Map<string, string[]>();
+
+export function collectPendingCharts(userId: string): string[] {
+  const charts = _pendingChartsByUser.get(userId) ?? [];
+  _pendingChartsByUser.delete(userId);
+  return charts;
+}
+
+/**
+ * Tool: Execute Python
+ *
+ * Runs arbitrary Python analysis code in a sandboxed subprocess.
+ * Data is pre-injected as pandas DataFrames — no DB credentials reach Python.
+ */
+export const executePythonTool = new DynamicStructuredTool({
+  name: 'execute_python',
+  description: `Run Python for statistical analysis or chart generation. Data is pre-loaded as pandas DataFrames.
+
+IMPORTANT: Do NOT use import statements in your code — all libraries are already available:
+- pd (pandas), np (numpy), plt (matplotlib.pyplot), mdates (matplotlib.dates), mticker (matplotlib.ticker)
+- stats (scipy.stats), math, statistics, datetime, json
+
+Pre-loaded DataFrames (timestamps in user's local timezone):
+- df_glucose: timestamp, glucose (mg/dL), trend, device
+- df_meals: timestamp, description, carbs (g), meal_type
+- df_insulin: timestamp, insulin_type, units, type
+- df_exercise: timestamp, activity_type, description, duration_minutes, intensity
+- df_sleep: timestamp, duration_minutes, quality
+- user_tz: timezone string (e.g. "America/New_York")
+
+Chart generation: call plt.show() after creating a figure — charts appear inline below your response.
+
+Use this tool for:
+- Statistical correlations (e.g. sleep duration vs next-morning glucose)
+- Rolling averages, variability profiles, coefficient of variation
+- Regression analysis (scipy.stats.linregress)
+- Any visualization (time series, scatter plots, histograms, heatmaps)
+- Complex analysis that execute_sql can't express as a single query
+
+Example:
+  mean = df_glucose['glucose'].mean()
+  std = df_glucose['glucose'].std()
+  print(f"Mean: {mean:.1f}, CV: {std/mean*100:.1f}%")
+
+  fig, ax = plt.subplots(figsize=(10, 4))
+  ax.plot(df_glucose['timestamp'], df_glucose['glucose'])
+  plt.tight_layout()
+  plt.show()`,
+
+  schema: z.object({
+    code: z.string().describe('Python code to execute. Do not use import statements.'),
+    lookbackDays: z.number().default(60).describe('Days of history to load (max 180)'),
+    userId: z.string().optional().describe('Injected automatically'),
+    userTimezone: z.string().optional().describe('Injected automatically'),
+  }),
+
+  func: async ({ code, lookbackDays, userId, userTimezone }) => {
+    const timezone = userTimezone ?? 'America/New_York';
+    console.log(`[execute_python] User=${userId?.slice(0, 8)} lookbackDays=${lookbackDays} codeLines=${code.split('\n').length}`);
+
+    try {
+      const result = await executePython(userId!, timezone, code, { lookbackDays });
+
+      // Store charts in side-channel — don't include base64 in LLM context
+      if (result.charts.length > 0 && userId) {
+        const existing = _pendingChartsByUser.get(userId) ?? [];
+        _pendingChartsByUser.set(userId, [...existing, ...result.charts]);
+        console.log(`[execute_python] Stored ${result.charts.length} chart(s) for user ${userId.slice(0, 8)}`);
+      }
+
+      return JSON.stringify({
+        output: result.output,
+        executionMs: result.executionMs,
+        chartsGenerated: result.charts.length,
+        error: result.error ?? null,
+      });
+    } catch (error) {
+      console.error('[execute_python] Unexpected error:', error);
+      return JSON.stringify({
+        output: '',
+        executionMs: 0,
+        chartsGenerated: 0,
+        error: error instanceof Error ? error.message : 'Unknown error',
+      });
+    }
+  },
+});
+
+/**
+ * Tool: Get Cached Analysis
+ *
+ * Retrieves pre-computed extended pattern analysis results from the analysis_cache table.
+ * Results are refreshed by the background pattern detector on a configurable schedule.
+ */
+const getCachedAnalysisTool = new DynamicStructuredTool({
+  name: 'get_cached_analysis',
+  description: `Retrieve pre-computed deep analysis results from the background pattern detector.
+
+Available analysis types (computed from last 30-60 days of data):
+- "dawn_phenomenon"      — Whether glucose rises consistently 3–6am (even without food/insulin)
+- "somogyi_rebound"      — Nocturnal lows followed by morning hyperglycemia rebounds
+- "hourly_variability"   — Per-hour mean, std, CV, TIR across all 24 hours of the day
+- "tir_by_period"        — TIR/TAR/TBR split by overnight/morning/afternoon/evening + overall GMI
+- "insulin_sensitivity"  — Estimated ISF (mg/dL per unit) from correction bolus events
+- "glucose_momentum"     — 7/14/30-day average glucose and trend slope comparison
+- "day_of_week_patterns" — Glucose by day of week, weekday vs. weekend comparison
+- "rapid_glucose_changes"— Episodes of >50 mg/dL change within 60 minutes (rises and drops)
+
+Use this tool for questions like:
+- "Do I have dawn phenomenon?" → get_cached_analysis(analysisType="dawn_phenomenon")
+- "What's my insulin sensitivity?" → get_cached_analysis(analysisType="insulin_sensitivity")
+- "When is my glucose most variable?" → get_cached_analysis(analysisType="hourly_variability")
+- "How is my glucose trending?" → get_cached_analysis(analysisType="glucose_momentum")
+- "What's my GMI / estimated A1c?" → get_cached_analysis(analysisType="tir_by_period")
+
+To get ALL analysis types at once, call without specifying analysisType.`,
+
+  schema: z.object({
+    analysisType: z.string().optional().describe(
+      'Which analysis to fetch. Omit to get all cached analyses at once.'
+    ),
+    userId: z.string().optional().describe('Injected automatically'),
+  }),
+
+  func: async ({ analysisType, userId }) => {
+    console.log(`[get_cached_analysis] user=${userId?.slice(0, 8)} type=${analysisType ?? 'all'}`);
+    try {
+      let result;
+      if (analysisType) {
+        result = await query(
+          `SELECT analysis_type, computed_at, data_window_start, data_window_end, results, metadata
+           FROM analysis_cache
+           WHERE user_id = $1 AND analysis_type = $2`,
+          [userId, analysisType]
+        );
+      } else {
+        result = await query(
+          `SELECT analysis_type, computed_at, data_window_start, data_window_end, results, metadata
+           FROM analysis_cache
+           WHERE user_id = $1
+           ORDER BY computed_at DESC`,
+          [userId]
+        );
+      }
+
+      if (result.rows.length === 0) {
+        return JSON.stringify({
+          success: false,
+          message: analysisType
+            ? `No cached analysis found for type "${analysisType}". The background detector may not have run yet.`
+            : 'No cached analyses found. The background detector may not have run yet.',
+          availableTypes: [
+            'dawn_phenomenon', 'somogyi_rebound', 'hourly_variability', 'tir_by_period',
+            'insulin_sensitivity', 'glucose_momentum', 'day_of_week_patterns', 'rapid_glucose_changes',
+          ],
+        });
+      }
+
+      const analyses = result.rows.map(row => ({
+        analysisType: row.analysis_type,
+        computedAt: row.computed_at,
+        windowStart: row.data_window_start,
+        windowEnd: row.data_window_end,
+        results: row.results,
+        metadata: row.metadata,
+      }));
+
+      console.log(`[get_cached_analysis] Returned ${analyses.length} result(s)`);
+      return JSON.stringify({ success: true, analyses });
+    } catch (error) {
+      console.error('[get_cached_analysis] Error:', error);
+      return JSON.stringify({
+        success: false,
+        error: error instanceof Error ? error.message : 'Unknown error',
+      });
+    }
+  },
+});
+
 export const allTools = [
   // Glucose analysis tools
   getRecentGlucoseTool,
@@ -4190,4 +4375,8 @@ export const allTools = [
 
   // Advanced query tools
   executeSqlQueryTool,
+  executePythonTool,
+
+  // Extended cached analysis
+  getCachedAnalysisTool,
 ];

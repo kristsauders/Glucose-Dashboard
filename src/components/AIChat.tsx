@@ -25,6 +25,7 @@ export function AIChat() {
   const [conversationsError, setConversationsError] = useState('');
   const [error, setError] = useState('');
   const [streamingMessage, setStreamingMessage] = useState('');
+  const [streamingCharts, setStreamingCharts] = useState<string[]>([]);
   const [thinkingMessage, setThinkingMessage] = useState('');
   const [status, setStatus] = useState('');
   const [showSidebar, setShowSidebar] = useState(true);
@@ -477,6 +478,7 @@ export function AIChat() {
     setError('');
     setIsLoading(true);
     setStreamingMessage('');
+    setStreamingCharts([]);
     setThinkingMessage('');
     setStatus('');
 
@@ -625,6 +627,8 @@ export function AIChat() {
               fullContent += data.content;
               charQueueRef.current += data.content;
               startReveal();
+            } else if (data.type === 'chart') {
+              setStreamingCharts(prev => [...prev, data.data]);
             } else if (data.type === 'done') {
               metadata = data.metadata;
             } else if (data.type === 'error') {
@@ -666,12 +670,14 @@ export function AIChat() {
           toolCalls: metadata.toolCalls,
           toolNames: metadata.toolNames || [],
           thinkingMessage: lastThinkingMessage || undefined,
+          charts: streamingCharts.length > 0 ? streamingCharts : undefined,
         },
         created_at: new Date().toISOString(),
       };
 
       setMessages((prev) => [...prev, assistantMessage]);
       setStreamingMessage('');
+      setStreamingCharts([]);
       setStatus('');
     } catch (err: any) {
       let errorMessage = 'Failed to send message';
@@ -690,6 +696,7 @@ export function AIChat() {
       charQueueRef.current = '';
       charRevealDoneRef.current = null;
       setStreamingMessage('');
+      setStreamingCharts([]);
       setThinkingMessage('');
       setStatus('');
     } finally {
@@ -980,6 +987,19 @@ export function AIChat() {
                             </div>
                           )}
                       </div>
+                      {message.metadata.charts && message.metadata.charts.length > 0 && (
+                        <div className="mt-3 space-y-2">
+                          {message.metadata.charts.map((b64: string, i: number) => (
+                            <div key={i} className="rounded-lg overflow-hidden border border-border">
+                              <img
+                                src={`data:image/png;base64,${b64}`}
+                                alt={`Analysis chart ${i + 1}`}
+                                className="w-full"
+                              />
+                            </div>
+                          ))}
+                        </div>
+                      )}
                     </div>
                   )}
                 </div>
@@ -1011,6 +1031,15 @@ export function AIChat() {
                     </div>
                   </div>
                 )}
+                {streamingCharts.map((b64, i) => (
+                  <div key={i} className="mt-3 rounded-lg overflow-hidden border border-border">
+                    <img
+                      src={`data:image/png;base64,${b64}`}
+                      alt={`Analysis chart ${i + 1}`}
+                      className="w-full"
+                    />
+                  </div>
+                ))}
               </div>
             </div>
           )}

@@ -9,15 +9,17 @@
  */
 
 import { query } from '../config/database.js';
+import { env } from '../config/env.js';
 import {
   detectMealResponse,
   detectExerciseResponse,
   detectBasalAdequacy,
   calculatePatternConfidence,
 } from './pattern-algorithms.js';
+import { runAllExtendedAnalyses } from './pattern-algorithms-extended.js';
 
 export class PatternDetector {
-  private checkInterval = 30 * 60 * 1000; // 30 minutes
+  private checkInterval = Number(env.PATTERN_DETECTION_INTERVAL); // configurable via env
   private intervalId: NodeJS.Timeout | null = null;
   private isRunning = false;
 
@@ -30,7 +32,8 @@ export class PatternDetector {
       return;
     }
 
-    console.log('🔍 Starting pattern detector service (30-minute intervals)');
+    const intervalMin = Math.round(this.checkInterval / 60000);
+    console.log(`🔍 Starting pattern detector service (${intervalMin}-minute intervals)`);
 
     // Run after 2 minutes to avoid startup congestion (staggered from proactive monitor at 5 min)
     setTimeout(() => {
@@ -110,6 +113,9 @@ export class PatternDetector {
           // 5. Prune weak patterns
           const patternsPruned = await this.pruneWeakPatterns(userId);
           totalPatternsPruned += patternsPruned;
+
+          // 6. Run extended analysis algorithms (caches to analysis_cache table)
+          await runAllExtendedAnalyses(userId);
         } catch (error) {
           console.error(`  ❌ Error processing user ${userId}:`, error);
         }

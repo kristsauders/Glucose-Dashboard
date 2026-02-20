@@ -413,11 +413,18 @@ export class ProactiveMonitor {
 - get_insulin_history(days=2)
 - analyze_basal_patterns(days=7)
 - detect_anomalies(days=7, limit=10)
+- get_cached_analysis() — retrieves ALL pre-computed deep analysis (dawn phenomenon, momentum, TIR by period, insulin sensitivity, etc.)
 
 **THIRD MESSAGE (if needed) - Call based on findings:**
 - get_missing_logs_suggestions() if you see gaps
 - analyze_meal_patterns() if meal patterns are relevant
+- execute_python(code="...") if statistical analysis or a chart would add value
 - Any other specific tools for deeper analysis
+
+**execute_python guidance:**
+- Libraries pre-loaded: pd, np, plt, mdates, mticker, stats, math, statistics — NO import statements
+- DataFrames: df_glucose, df_meals, df_insulin, df_exercise, df_sleep (timestamps in user's timezone)
+- Call plt.show() to generate charts; they appear inline below the message
 
 **CRITICAL RULES:**
 - FIRST message MUST have 5+ tool calls
