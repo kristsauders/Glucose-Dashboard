@@ -419,12 +419,12 @@ export const detectPatternsTool = new DynamicStructuredTool({
     userId: z.string().optional().describe('The user ID (automatically provided)'),
     userTimezone: z.string().optional().describe('The user timezone (automatically provided)'),
     days: z.number().default(14).describe('Number of days to analyze'),
-    dawnStart: z.number().min(0).max(23).optional().describe('Start hour for dawn phenomenon detection (default 4am)'),
-    dawnEnd: z.number().min(0).max(23).optional().describe('End hour for dawn phenomenon detection (default 8am)'),
+    dawnStart: z.number().min(0).max(23).optional().describe('Start hour for dawn phenomenon detection (default 3am)'),
+    dawnEnd: z.number().min(0).max(23).optional().describe('End hour for dawn phenomenon detection (default 7am)'),
     overnightStart: z.number().min(0).max(23).optional().describe('Start hour for overnight lows detection (default 0 midnight)'),
     overnightEnd: z.number().min(0).max(23).optional().describe('End hour for overnight lows detection (default 6am)'),
   }),
-  func: async ({ userId, userTimezone, days, dawnStart = 4, dawnEnd = 8, overnightStart = 0, overnightEnd = 6 }) => {
+  func: async ({ userId, userTimezone, days, dawnStart = 3, dawnEnd = 7, overnightStart = 0, overnightEnd = 6 }) => {
     const tz = userTimezone || 'America/New_York';
     const patterns: string[] = [];
 
@@ -881,7 +881,7 @@ export const checkAlertConditionsTool = new DynamicStructuredTool({
        FROM glucose_readings
        WHERE user_id = $1
          AND timestamp >= NOW() - INTERVAL '7 days'
-         AND EXTRACT(HOUR FROM timezone($2, timestamp)) BETWEEN 5 AND 8`,
+         AND EXTRACT(HOUR FROM timezone($2, timestamp)) BETWEEN 3 AND 7`,
       [userId, tz]
     );
 
@@ -4230,7 +4230,7 @@ const getCachedAnalysisTool = new DynamicStructuredTool({
   description: `Retrieve pre-computed deep analysis results from the background pattern detector.
 
 Available analysis types (computed from last 30-60 days of data):
-- "dawn_phenomenon"      — Whether glucose rises consistently 3–6am (even without food/insulin)
+- "dawn_phenomenon"      — Whether glucose rises consistently 3–7am (even without food/insulin)
 - "somogyi_rebound"      — Nocturnal lows followed by morning hyperglycemia rebounds
 - "hourly_variability"   — Per-hour mean, std, CV, TIR across all 24 hours of the day
 - "tir_by_period"        — TIR/TAR/TBR split by overnight/morning/afternoon/evening + overall GMI

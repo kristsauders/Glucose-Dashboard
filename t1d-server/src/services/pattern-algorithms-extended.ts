@@ -6,7 +6,7 @@
  * meal/exercise/basal algorithms in pattern-algorithms.ts.
  *
  * Algorithms:
- *   1. dawn_phenomenon        — Consistent early-morning glucose rise 3-6am
+ *   1. dawn_phenomenon        — Consistent early-morning glucose rise 3-7am
  *   2. somogyi_rebound        — Nocturnal low followed by morning rebound high
  *   3. hourly_variability     — Per-hour mean/std/CV/TIR across 30 days
  *   4. tir_by_period          — TIR/TAR/TBR split by morning/afternoon/evening/overnight
@@ -100,15 +100,15 @@ async function upsertCache(
 // ─── Algorithm 1: Dawn Phenomenon ─────────────────────────────────────────────
 
 /**
- * Dawn phenomenon: persistent glucose rise between 3–6am without bolus insulin.
+ * Dawn phenomenon: persistent glucose rise between 3–7am without bolus insulin.
  * Looks at nights where no rapid insulin was taken 10pm–3am and measures
- * average glucose rise rate from the 3am trough to the 6am level.
+ * average glucose rise rate from the 3am trough to the 7am level.
  */
 export async function analyzeDawnPhenomenon(userId: string): Promise<void> {
   const lookbackDays = 30;
   const windowStart = new Date(Date.now() - lookbackDays * 86400000);
 
-  // Fetch 3am–7am glucose readings for the last 30 days
+  // Fetch 3am–8am glucose readings for the last 30 days (window 3–7 inclusive)
   const result = await query(
     `SELECT DATE(timestamp AT TIME ZONE 'UTC') as day,
             EXTRACT(HOUR FROM timestamp AT TIME ZONE 'UTC') as hour,
@@ -119,7 +119,7 @@ export async function analyzeDawnPhenomenon(userId: string): Promise<void> {
      FROM glucose_readings
      WHERE user_id = $1
        AND timestamp >= $2
-       AND EXTRACT(HOUR FROM timestamp AT TIME ZONE 'UTC') BETWEEN 3 AND 6
+       AND EXTRACT(HOUR FROM timestamp AT TIME ZONE 'UTC') BETWEEN 3 AND 7
      GROUP BY day, hour
      ORDER BY day, hour`,
     [userId, windowStart.toISOString()]
@@ -134,8 +134,8 @@ export async function analyzeDawnPhenomenon(userId: string): Promise<void> {
     return;
   }
 
-  // Group by day — get 3am and 6am averages for each day
-  const byDay = new Map<string, { h3?: number; h4?: number; h5?: number; h6?: number }>();
+  // Group by day — get 3am and 7am averages for each day
+  const byDay = new Map<string, { h3?: number; h4?: number; h5?: number; h6?: number; h7?: number }>();
   for (const row of result.rows) {
     const day = row.day;
     if (!byDay.has(day)) byDay.set(day, {});
@@ -145,13 +145,14 @@ export async function analyzeDawnPhenomenon(userId: string): Promise<void> {
     if (h === 4) entry.h4 = Number(row.avg_glucose);
     if (h === 5) entry.h5 = Number(row.avg_glucose);
     if (h === 6) entry.h6 = Number(row.avg_glucose);
+    if (h === 7) entry.h7 = Number(row.avg_glucose);
   }
 
-  // Calculate rise from 3am to 6am for each day with both data points
+  // Calculate rise from 3am to 7am for each day with both data points
   const rises: number[] = [];
   for (const [, d] of byDay) {
-    if (d.h3 !== undefined && d.h6 !== undefined) {
-      rises.push(d.h6 - d.h3);
+    if (d.h3 !== undefined && d.h7 !== undefined) {
+      rises.push(d.h7 - d.h3);
     }
   }
 
@@ -175,7 +176,7 @@ export async function analyzeDawnPhenomenon(userId: string): Promise<void> {
     daysAnalyzed: rises.length,
     severity: avgRise > 40 ? 'significant' : avgRise > 20 ? 'moderate' : 'mild',
     interpretation: detected
-      ? `Glucose rises an average of ${Math.round(avgRise)} mg/dL between 3–6am on ${Math.round(pctDaysWithRise)}% of nights.`
+      ? `Glucose rises an average of ${Math.round(avgRise)} mg/dL between 3–7am on ${Math.round(pctDaysWithRise)}% of nights.`
       : `No consistent dawn phenomenon detected (avg rise: ${Math.round(avgRise)} mg/dL).`,
   }, windowStart, new Date(), { daysAnalyzed: rises.length });
 
@@ -669,9 +670,15 @@ export async function analyzeRapidGlucoseChanges(userId: string): Promise<void> 
   const rapidRises: Array<{ timestamp: string; change: number; durationMinutes: number; startGlucose: number; endGlucose: number }> = [];
   const rapidDrops: Array<{ timestamp: string; change: number; durationMinutes: number; startGlucose: number; endGlucose: number }> = [];
 
-  for (let i = 0; i < readings.length - 1; i++) {
+  // With high-frequency sensors (Libre 3 = ~1 reading/min), a single spike produces dozens
+  // of consecutive start points that all qualify. Fix: once an episode is found ending at
+  // index j, jump i to j+1 so the next search starts after the episode completes.
+  let i = 0;
+  while (i < readings.length - 1) {
     const start = readings[i];
-    // Look ahead up to 60 minutes
+    let foundEvent = false;
+
+    // Look ahead up to 65 minutes for a ≥50 mg/dL change
     for (let j = i + 1; j < readings.length; j++) {
       const end = readings[j];
       const minutesDiff = (end.timestamp.getTime() - start.timestamp.getTime()) / 60000;
@@ -687,18 +694,17 @@ export async function analyzeRapidGlucoseChanges(userId: string): Promise<void> 
           endGlucose: Math.round(end.glucose),
         };
         if (change > 0) {
-          // Avoid double-counting by checking if we already logged this start
-          if (!rapidRises.some(r => r.timestamp === event.timestamp)) {
-            rapidRises.push(event);
-          }
+          rapidRises.push(event);
         } else {
-          if (!rapidDrops.some(r => r.timestamp === event.timestamp)) {
-            rapidDrops.push(event);
-          }
+          rapidDrops.push(event);
         }
-        break; // Don't look further for this start point
+        i = j + 1; // Skip past the end of this episode — don't re-detect overlapping windows
+        foundEvent = true;
+        break;
       }
     }
+
+    if (!foundEvent) i++;
   }
 
   // Sort by magnitude

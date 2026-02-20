@@ -374,7 +374,7 @@ To convert local → UTC for timestamps:
 In early LADA, first-phase insulin (rapid initial response to meals) is lost first. This causes sharp post-meal spikes even when basal insulin is adequate. Later, second-phase and basal production decline too.
 
 **Dawn Phenomenon:**
-Between 3-8am, counter-regulatory hormones (cortisol, growth hormone) increase, causing liver to release glucose. Normal in everyone, but harder to manage in T1D. May need basal increase overnight or waking correction.
+Between 3-7am, counter-regulatory hormones (cortisol, growth hormone) increase, causing liver to release glucose. Normal in everyone, but harder to manage in T1D. May need basal increase overnight or waking correction.
 
 **Exercise Effects:**
 - Immediate: Muscles use glucose without insulin (can drop glucose)
