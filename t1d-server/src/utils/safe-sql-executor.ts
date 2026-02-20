@@ -92,7 +92,10 @@ export async function executeSafeReadOnlyQuery(
     await client.query('BEGIN');
 
     if (userTimezone) {
-      await client.query(`SET LOCAL timezone = $1`, [userTimezone]);
+      // SET does not support parameterized queries in PostgreSQL.
+      // Timezone comes from the user's stored profile — validate before interpolating.
+      const safeTz = userTimezone.replace(/[^A-Za-z0-9/_+\-]/g, '');
+      await client.query(`SET LOCAL timezone = '${safeTz}'`);
     }
 
     const result = await client.query(safeQuery, [userId]);

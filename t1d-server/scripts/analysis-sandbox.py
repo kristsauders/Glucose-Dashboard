@@ -157,6 +157,27 @@ def _capture_show():
 if HAS_MATPLOTLIB:
     plt.show = _capture_show
 
+# ── Safe __import__ ──────────────────────────────────────────────────────────
+# Allow import statements for whitelisted modules only.
+# The model often writes "import pandas as pd" — this handles it gracefully
+# instead of crashing with "ImportError: __import__ not found".
+_real_import = __import__
+
+_ALLOWED_IMPORT_ROOTS = {
+    'pandas', 'numpy', 'matplotlib', 'scipy', 'math', 'statistics',
+    'datetime', 'json', 'io', 'base64', 're', 'itertools', 'functools',
+    'collections', 'operator', 'typing',
+}
+
+def _safe_import(name, globals=None, locals=None, fromlist=(), level=0):
+    root = name.split('.')[0]
+    if root in _ALLOWED_IMPORT_ROOTS:
+        return _real_import(name, globals, locals, fromlist, level)
+    raise ImportError(
+        f"Import of '{name}' is not allowed in the analysis sandbox. "
+        f"Available: pd, np, plt, mdates, mticker, stats, math, statistics, datetime, json"
+    )
+
 # ── Restricted builtins ──────────────────────────────────────────────────────
 SAFE_BUILTINS = {
     # Type constructors
@@ -195,6 +216,7 @@ SAFE_BUILTINS = {
     'NotImplemented': NotImplemented,
     'object': object, 'callable': callable, 'vars': vars,
     'slice': slice, 'complex': complex,
+    '__import__': _safe_import,
 }
 
 # ── Execute user code ────────────────────────────────────────────────────────
