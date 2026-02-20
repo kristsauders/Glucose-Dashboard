@@ -13,7 +13,7 @@
  * 5. Audit Logging - All queries tracked
  */
 
-import { query } from '../config/database.js';
+import { pool, query } from '../config/database.js';
 
 /**
  * Execute a read-only SQL query with strict security controls
@@ -27,7 +27,8 @@ import { query } from '../config/database.js';
 export async function executeSafeReadOnlyQuery(
   userId: string,
   sqlQuery: string,
-  description: string
+  description: string,
+  userTimezone?: string
 ): Promise<string> {
 
   // Layer 1: Query Type Validation
@@ -83,8 +84,19 @@ export async function executeSafeReadOnlyQuery(
   `;
 
   // Layer 4: Execution with limits
+  // Use a client so we can SET LOCAL timezone for the duration of the query,
+  // ensuring bare timestamp literals (e.g. '2026-02-14 07:00') are interpreted
+  // in the user's local timezone rather than UTC.
+  const client = await pool.connect();
   try {
-    const result = await query(safeQuery, [userId]);
+    await client.query('BEGIN');
+
+    if (userTimezone) {
+      await client.query(`SET LOCAL timezone = $1`, [userTimezone]);
+    }
+
+    const result = await client.query(safeQuery, [userId]);
+    await client.query('COMMIT');
 
     // Enforce row limit to prevent resource abuse
     const maxRows = 1000;
@@ -107,6 +119,7 @@ export async function executeSafeReadOnlyQuery(
     });
 
   } catch (error: any) {
+    await client.query('ROLLBACK').catch(() => {});
     console.error('[SQL Query Tool] Error:', error);
 
     // Log errors for security monitoring and debugging
@@ -122,5 +135,7 @@ export async function executeSafeReadOnlyQuery(
     }
 
     throw new Error(`Query failed: ${error.message}`);
+  } finally {
+    client.release();
   }
 }

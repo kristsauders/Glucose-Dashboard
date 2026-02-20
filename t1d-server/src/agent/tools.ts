@@ -4092,8 +4092,11 @@ Available tables (all prefixed with user_):
 - user_glucose_correlations: id, factor_type, correlation_strength, confidence, last_updated
 - user_sage_messages: id, type, title, content, sent_at
 
+TIMEZONE: Bare timestamp literals (e.g. '2026-02-14 07:00') are automatically interpreted in the user's local timezone — you do NOT need to add UTC offsets or AT TIME ZONE clauses.
+
 Common query patterns:
 - Glucose during custom window: SELECT * FROM user_glucose_readings WHERE timestamp BETWEEN '2026-02-10' AND '2026-02-11'
+- Glucose for a specific local time window: SELECT * FROM user_glucose_readings WHERE timestamp BETWEEN '2026-02-14 07:00' AND '2026-02-14 10:00'
 - Meal impact correlation: SELECT m.*, AVG(gr.glucose) FROM user_meals m JOIN user_glucose_readings gr ON gr.timestamp BETWEEN m.timestamp AND m.timestamp + INTERVAL '2 hours' GROUP BY m.id
 - Hourly averages: SELECT DATE_TRUNC('hour', timestamp) AS hour, AVG(glucose) AS avg_glucose FROM user_glucose_readings GROUP BY hour ORDER BY hour`,
 
@@ -4101,13 +4104,14 @@ Common query patterns:
     query: z.string().describe('The SQL SELECT query to execute. Reference tables with user_ prefix (e.g., user_glucose_readings)'),
     description: z.string().describe('Human-readable description of what this query analyzes'),
     userId: z.string().optional().describe('User ID (automatically provided)'),
+    userTimezone: z.string().optional().describe('User timezone (automatically provided). Bare timestamp literals in your query (e.g. \'2026-02-14 07:00\') will be interpreted in this timezone.'),
   }),
 
-  func: async ({ query: sqlQuery, description, userId }) => {
-    console.log(`[execute_sql_query] Running: ${description}`);
+  func: async ({ query: sqlQuery, description, userId, userTimezone }) => {
+    console.log(`[execute_sql_query] Running: ${description}${userTimezone ? ` [tz=${userTimezone}]` : ''}`);
     console.log(`[execute_sql_query] SQL: ${sqlQuery.trim().replace(/\s+/g, ' ')}`);
     try {
-      const result = await executeSafeReadOnlyQuery(userId!, sqlQuery, description);
+      const result = await executeSafeReadOnlyQuery(userId!, sqlQuery, description, userTimezone);
       const parsed = JSON.parse(result);
       console.log(`[execute_sql_query] Returned ${parsed.rowCount ?? 0} rows`);
       return result;
