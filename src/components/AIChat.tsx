@@ -542,6 +542,9 @@ export function AIChat() {
       const controller = new AbortController();
       const timeoutId = setTimeout(() => controller.abort(), 60000); // 60 second timeout
 
+      let lastThinkingMessage = '';  // local tracker — avoids stale closure on thinkingMessage state
+      let hasStartedStreaming = false;
+
       const response = await fetch(`${apiUrl}/api/chat/stream`, {
         method: 'POST',
         headers: {
@@ -610,8 +613,15 @@ export function AIChat() {
             if (data.type === 'status') {
               setStatus(data.content);
             } else if (data.type === 'thinking') {
+              lastThinkingMessage = data.content;
               setThinkingMessage(data.content);
             } else if (data.type === 'content') {
+              // Clear thinking text the moment content starts — avoids layout shift at completion
+              if (!hasStartedStreaming) {
+                hasStartedStreaming = true;
+                setThinkingMessage('');
+                setStatus('');
+              }
               fullContent += data.content;
               charQueueRef.current += data.content;
               startReveal();
@@ -655,7 +665,7 @@ export function AIChat() {
           duration: metadata.duration,
           toolCalls: metadata.toolCalls,
           toolNames: metadata.toolNames || [],
-          thinkingMessage: thinkingMessage || undefined,
+          thinkingMessage: lastThinkingMessage || undefined,
         },
         created_at: new Date().toISOString(),
       };
@@ -663,9 +673,6 @@ export function AIChat() {
       setMessages((prev) => [...prev, assistantMessage]);
       setStreamingMessage('');
       setStatus('');
-      // Don't clear thinkingMessage here — it's captured in the message metadata above
-      // and will be cleared at the start of the next send. This prevents a layout shift
-      // where content jumps up when the thinking text disappears.
     } catch (err: any) {
       let errorMessage = 'Failed to send message';
       if (err.name === 'AbortError') {
