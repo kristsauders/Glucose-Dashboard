@@ -30,27 +30,38 @@ const getApiUrl = () => `http://localhost:${env.PORT}`;
  */
 export const getRecentGlucoseTool = new DynamicStructuredTool({
   name: 'get_recent_glucose',
-  description: `Get glucose readings for the user. Glucose history is NOT pre-loaded in context — call this tool whenever you need past readings.
+  description: `Get glucose readings for the user. Glucose history is NOT pre-loaded — always call this for past readings. All results returned oldest→newest.
 
-Use hoursBack for recent event queries (e.g. hoursBack=8 covers the last 8 hours).
-Use startDate/endDate (YYYY-MM-DD) to get a full calendar day in the user's local timezone — date boundaries are automatically adjusted to midnight in their timezone, not UTC.
-Default returns the 50 most recent readings (~4 hours at 5-min intervals).
+Readings are stored at the sensor's native interval (up to 1/min for Libre 3 = ~60/hour, ~1440/day).
+
+Two modes:
+1. hoursBack — simple recent window. limit should be hoursBack * 60 to cover all readings.
+2. startDate / endDate — time range in the user's local timezone:
+   - "YYYY-MM-DD" covers the full calendar day; use limit=1440 for a full day
+   - "YYYY-MM-DD HH:MM" (24h, NO timezone suffix) for an exact local time — use this for meal windows
+   - A 3-hour meal window needs limit=180+
+
+If this tool doesn't return the data you need on the first try, use execute_sql directly — do NOT retry with different arguments.
 
 Examples:
-- User asks about a low during their workout 3 hours ago → hoursBack=6, limit=100
-- User asks about this morning → hoursBack=12
-- User asks about yesterday → startDate="YYYY-MM-DD" endDate="YYYY-MM-DD" (yesterday's date, same for both)
-- User asks about breakfast yesterday → startDate/endDate set to yesterday, limit=50`,
+- Last 2 hours → hoursBack=2, limit=120
+- This morning overall → hoursBack=10, limit=600
+- Yesterday's breakfast (7am-10am) → startDate="2026-02-19 07:00" endDate="2026-02-19 10:00" limit=200
+- Yesterday's dinner (6pm-9pm) → startDate="2026-02-19 18:00" endDate="2026-02-19 21:00" limit=200
+- All of yesterday → startDate="2026-02-19" endDate="2026-02-19" limit=1440`,
   schema: z.object({
     userId: z.string().optional().describe('The user ID (automatically provided)'),
-    limit: z.number().default(50).describe('Number of readings to return (default 50, max 1000). Use a higher value when covering a long time window.'),
-    hoursBack: z.number().optional().describe('Fetch readings from the last N hours (e.g. 6 for last 6 hours). Takes precedence over limit when set.'),
+    limit: z.number().default(120).describe('Number of readings to return (default 120 = ~2 hours, max 1440). Set to hoursBack*60 for hoursBack queries, or time-window-minutes for date range queries.'),
+    hoursBack: z.number().optional().describe('Fetch readings from the last N hours. Takes precedence over startDate/endDate.'),
     userTimezone: z.string().optional().describe('User timezone (automatically provided)'),
-    startDate: z.string().optional().describe('Start date for date range filter (YYYY-MM-DD format)'),
-    endDate: z.string().optional().describe('End date for date range filter (YYYY-MM-DD format)'),
+    startDate: z.string().optional().describe('Start of time range in user\'s local timezone. "YYYY-MM-DD" = midnight, "YYYY-MM-DD HH:MM" = exact time (no timezone suffix).'),
+    endDate: z.string().optional().describe('End of time range in user\'s local timezone. "YYYY-MM-DD" = end of day, "YYYY-MM-DD HH:MM" = exact time (exclusive, no timezone suffix).'),
   }),
   func: async ({ userId, limit, hoursBack, userTimezone, startDate, endDate }) => {
     const timezone = userTimezone || 'America/New_York';
+
+    // Detect if a date string includes a time component (length > 10 means "YYYY-MM-DD HH:MM" or similar)
+    const hasTime = (s: string) => s.trim().length > 10;
 
     const queryParams: any[] = [userId];
     let paramIndex = 2;
@@ -61,34 +72,50 @@ Examples:
       dateFilter += ` AND timestamp >= NOW() - INTERVAL '${Math.ceil(hoursBack)} hours'`;
     } else {
       if (startDate) {
-        // Interpret the date as midnight in the user's local timezone, not UTC
-        dateFilter += ` AND timestamp >= ($${paramIndex}::date::timestamp) AT TIME ZONE '${timezone}'`;
+        if (hasTime(startDate)) {
+          // Exact local datetime — treat as wall-clock time in user's timezone
+          dateFilter += ` AND timestamp >= ($${paramIndex}::timestamp) AT TIME ZONE '${timezone}'`;
+        } else {
+          // Date only — use midnight of that day in user's local timezone
+          dateFilter += ` AND timestamp >= ($${paramIndex}::date::timestamp) AT TIME ZONE '${timezone}'`;
+        }
         queryParams.push(startDate);
         paramIndex++;
       }
       if (endDate) {
-        // End of day in user's local timezone (exclusive upper bound)
-        dateFilter += ` AND timestamp < ($${paramIndex}::date::timestamp + INTERVAL '1 day') AT TIME ZONE '${timezone}'`;
+        if (hasTime(endDate)) {
+          // Exact local datetime — exclusive upper bound, no day offset needed
+          dateFilter += ` AND timestamp < ($${paramIndex}::timestamp) AT TIME ZONE '${timezone}'`;
+        } else {
+          // Date only — end of that calendar day (midnight of next day) in user's local timezone
+          dateFilter += ` AND timestamp < ($${paramIndex}::date::timestamp + INTERVAL '1 day') AT TIME ZONE '${timezone}'`;
+        }
         queryParams.push(endDate);
         paramIndex++;
       }
     }
 
-    const effectiveLimit = Math.min(limit, 1000);
+    const effectiveLimit = Math.min(limit, 1440);
     queryParams.push(effectiveLimit);
+
+    // Date-range queries use ASC order so the limit cuts off the END of the period,
+    // not the beginning — ensuring morning data (e.g. breakfast) is always included.
+    // hoursBack and default queries use DESC + reverse to get most-recent-first then flip.
+    const dateRangeMode = !hoursBack && (startDate || endDate);
+    const orderDir = dateRangeMode ? 'ASC' : 'DESC';
 
     const result = await query(
       `SELECT timestamp, glucose, device, trend
        FROM glucose_readings
        WHERE user_id = $1
        ${dateFilter}
-       ORDER BY timestamp DESC
+       ORDER BY timestamp ${orderDir}
        LIMIT $${paramIndex}`,
       queryParams
     );
 
-    // Return in chronological order so the model can read the trend naturally
-    const rows = [...result.rows].reverse();
+    // Date-range results are already chronological (ASC). Other queries need reversal.
+    const rows = dateRangeMode ? result.rows : [...result.rows].reverse();
 
     return JSON.stringify({
       count: rows.length,

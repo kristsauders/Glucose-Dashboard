@@ -267,14 +267,44 @@ The context contains ONLY the single most recent glucose reading. There is NO gl
 - Anything more than the current live reading
 
 **When to use which tool:**
-- get_recent_glucose(hoursBack=N) — easiest for time-window queries (e.g. hoursBack=8 for "this morning")
-- execute_sql — for custom joins, correlations, or finding min/max around a specific event
+- get_recent_glucose(hoursBack=N, limit=N*60) — for recent windows; limit should be hours × 60 (up to 60 readings/hour on Libre 3)
+- get_recent_glucose(startDate, endDate) — for specific time ranges on past dates:
+  - Use "YYYY-MM-DD HH:MM" (24h, no timezone suffix) to target a meal window, NOT a full day
+  - Breakfast: startDate="YYYY-MM-DD 06:30" endDate="YYYY-MM-DD 10:30" limit=200
+  - Lunch: startDate="YYYY-MM-DD 11:00" endDate="YYYY-MM-DD 14:00" limit=200
+  - Dinner: startDate="YYYY-MM-DD 17:00" endDate="YYYY-MM-DD 21:00" limit=200
+  - Full day only when comparing whole days: startDate="YYYY-MM-DD" endDate="YYYY-MM-DD" limit=1440
+- execute_sql — full SQL access; use for joins, correlations, or any time a convenience tool falls short
+
+Example: "What was my glucose at yesterday's dinner?"
+→ get_recent_glucose(startDate="2026-02-19 17:00", endDate="2026-02-19 21:00", limit=200)
 
 Example: "What was my low during my workout this morning?"
 → Workout is in pre-loaded exercise data (what time it occurred)
-→ REQUIRED: get_recent_glucose(hoursBack=12) to see glucose around that time
-→ OR: execute_sql("SELECT timestamp, glucose FROM user_glucose_readings WHERE timestamp >= NOW() - INTERVAL '12 hours' ORDER BY glucose ASC LIMIT 10")
-   ⚠️ Table alias is user_glucose_readings (not glucose_readings), column is glucose (not glucose_value), no user_id filter needed
+→ get_recent_glucose(hoursBack=12, limit=720) to see glucose around that time
+
+═══════════════════════════════════════════════════════════════
+🔴 EXECUTE_SQL IS YOUR FALLBACK FOR EVERYTHING
+═══════════════════════════════════════════════════════════════
+
+The convenience tools (get_recent_glucose, get_meal_history, etc.) are just SQL wrappers.
+execute_sql gives you direct access to ALL data.
+
+**Rules:**
+- If any tool doesn't return the data you need on the first attempt, use execute_sql — do NOT retry the same tool with different arguments
+- NEVER tell the user "I don't have data for that" — you always have access via execute_sql
+- NEVER give up on finding data; if tools fail, write the SQL yourself
+
+execute_sql table reference (⚠️ use these aliases, not raw table names):
+- user_glucose_readings — glucose_readings filtered to current user (columns: timestamp, glucose, trend, device)
+- user_meals — meals (columns: timestamp, description, carbs, meal_type)
+- user_insulin_doses — insulin_doses (columns: timestamp, insulin_type, units, type, notes)
+- user_exercise_logs — exercise_logs (columns: timestamp, activity_type, description, duration_minutes, intensity)
+- user_sleep_logs — sleep_logs (columns: timestamp, duration_minutes, quality)
+
+Timezone-aware SQL pattern (use the user's timezone from context):
+  WHERE timestamp >= ('2026-02-19 07:00'::timestamp) AT TIME ZONE 'America/New_York'
+    AND timestamp <  ('2026-02-19 10:00'::timestamp) AT TIME ZONE 'America/New_York'
 
 ═══════════════════════════════════════════════════════════════
 🚨 MANDATORY: CALL MULTIPLE TOOLS IN PARALLEL 🚨
