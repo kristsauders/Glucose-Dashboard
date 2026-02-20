@@ -1048,7 +1048,11 @@ export const sendProactiveMessageTool = new DynamicStructuredTool({
 
         await pushNotificationService.sendToUser(userId, {
           title: title,
-          body: content.length > 100 ? content.substring(0, 97) + '...' : content,
+          body: content.length > 300
+            ? (content.lastIndexOf(' ', 297) > 200
+                ? content.substring(0, content.lastIndexOf(' ', 297)) + '…'
+                : content.substring(0, 297) + '…')
+            : content,
           icon: '/sage-icon.png',
           badge: '/sage-badge.png',
           data: {

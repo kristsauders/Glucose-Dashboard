@@ -227,7 +227,11 @@ router.post('/test', async (req, res, next) => {
     // Send push notification
     const notificationPayload: any = {
       title: rich ? 'Test Rich Notification' : 'Test Notification',
-      body: testMessage.length > 100 ? testMessage.substring(0, 97) + '...' : testMessage,
+      body: testMessage.length > 300
+        ? (testMessage.lastIndexOf(' ', 297) > 200
+            ? testMessage.substring(0, testMessage.lastIndexOf(' ', 297)) + '…'
+            : testMessage.substring(0, 297) + '…')
+        : testMessage,
       icon: '/sage-icon.png',
       badge: '/sage-badge.png',
       data: {
