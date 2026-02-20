@@ -26,6 +26,8 @@ export function AIChat() {
   const [error, setError] = useState('');
   const [streamingMessage, setStreamingMessage] = useState('');
   const [streamingCharts, setStreamingCharts] = useState<string[]>([]);
+  const streamingChartsRef = useRef<string[]>([]);
+  const [lightboxChart, setLightboxChart] = useState<string | null>(null);
   const [thinkingMessage, setThinkingMessage] = useState('');
   const [status, setStatus] = useState('');
   const [showSidebar, setShowSidebar] = useState(true);
@@ -48,6 +50,14 @@ export function AIChat() {
       if (charTimerRef.current) clearInterval(charTimerRef.current);
     };
   }, []);
+
+  // Close lightbox on ESC
+  useEffect(() => {
+    if (!lightboxChart) return;
+    const onKey = (e: KeyboardEvent) => { if (e.key === 'Escape') setLightboxChart(null); };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, [lightboxChart]);
 
   // Only render recent messages for performance (paginated)
   const visibleMessages = useMemo(() => {
@@ -478,6 +488,7 @@ export function AIChat() {
     setError('');
     setIsLoading(true);
     setStreamingMessage('');
+    streamingChartsRef.current = [];
     setStreamingCharts([]);
     setThinkingMessage('');
     setStatus('');
@@ -628,7 +639,8 @@ export function AIChat() {
               charQueueRef.current += data.content;
               startReveal();
             } else if (data.type === 'chart') {
-              setStreamingCharts(prev => [...prev, data.data]);
+              streamingChartsRef.current = [...streamingChartsRef.current, data.data];
+              setStreamingCharts(streamingChartsRef.current);
             } else if (data.type === 'done') {
               metadata = data.metadata;
             } else if (data.type === 'error') {
@@ -670,13 +682,14 @@ export function AIChat() {
           toolCalls: metadata.toolCalls,
           toolNames: metadata.toolNames || [],
           thinkingMessage: lastThinkingMessage || undefined,
-          charts: streamingCharts.length > 0 ? streamingCharts : undefined,
+          charts: streamingChartsRef.current.length > 0 ? [...streamingChartsRef.current] : undefined,
         },
         created_at: new Date().toISOString(),
       };
 
       setMessages((prev) => [...prev, assistantMessage]);
       setStreamingMessage('');
+      streamingChartsRef.current = [];
       setStreamingCharts([]);
       setStatus('');
     } catch (err: any) {
@@ -696,6 +709,7 @@ export function AIChat() {
       charQueueRef.current = '';
       charRevealDoneRef.current = null;
       setStreamingMessage('');
+      streamingChartsRef.current = [];
       setStreamingCharts([]);
       setThinkingMessage('');
       setStatus('');
@@ -994,7 +1008,8 @@ export function AIChat() {
                               <img
                                 src={`data:image/png;base64,${b64}`}
                                 alt={`Analysis chart ${i + 1}`}
-                                className="w-full"
+                                className="w-full cursor-zoom-in"
+                                onClick={() => setLightboxChart(b64)}
                               />
                             </div>
                           ))}
@@ -1036,7 +1051,8 @@ export function AIChat() {
                     <img
                       src={`data:image/png;base64,${b64}`}
                       alt={`Analysis chart ${i + 1}`}
-                      className="w-full"
+                      className="w-full cursor-zoom-in"
+                      onClick={() => setLightboxChart(b64)}
                     />
                   </div>
                 ))}
@@ -1112,6 +1128,31 @@ export function AIChat() {
         </div>
       </CardContent>
     </Card>
+
+    {/* Chart lightbox */}
+    {lightboxChart && (
+      <div
+        className="fixed inset-0 z-50 flex items-center justify-center bg-black/85 backdrop-blur-sm p-4 md:p-8"
+        onClick={() => setLightboxChart(null)}
+      >
+        <div
+          className="relative w-full max-w-4xl max-h-full flex flex-col"
+          onClick={e => e.stopPropagation()}
+        >
+          <button
+            className="absolute -top-9 right-0 text-white/70 hover:text-white text-sm flex items-center gap-1 transition-colors"
+            onClick={() => setLightboxChart(null)}
+          >
+            ✕ Close
+          </button>
+          <img
+            src={`data:image/png;base64,${lightboxChart}`}
+            alt="Analysis chart"
+            className="w-full h-auto rounded-lg object-contain max-h-[90vh]"
+          />
+        </div>
+      </div>
+    )}
     </div>
   );
 }
