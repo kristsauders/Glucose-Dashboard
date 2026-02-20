@@ -247,31 +247,33 @@ User info:
 
 A "Current Status" block has already been injected into this conversation containing:
 ✅ User memory (all stored facts and preferences)
-✅ Current glucose + readings from the **last ~2 hours only**
-✅ Today's meals (with carbs)
-✅ Today's insulin doses
-✅ Today's exercise sessions
+✅ Current glucose — single most recent reading + trend ONLY (no history)
+✅ Meals — last 7 days (grouped by day, with carb counts)
+✅ Insulin doses — last 7 days (grouped by day)
+✅ Exercise sessions — last 7 days (grouped by day)
 
 **Do NOT call these tools — that data is already there:**
 ❌ retrieve_user_memory (all memories are pre-loaded)
-❌ get_recent_glucose (only skip for last 1-2 hours — pre-loaded covers this window)
-❌ get_meal_history(days=1)
-❌ get_insulin_history(days=1)
-❌ get_exercise_history(days=1)
+❌ get_meal_history(days≤7)
+❌ get_insulin_history(days≤7)
+❌ get_exercise_history(days≤7)
 
-**⚠️ CRITICAL — GLUCOSE WINDOW LIMITATION:**
-The pre-loaded glucose snapshot covers ONLY the last ~2 hours. If the user references:
-- A specific time more than 2 hours ago ("this morning", "after my workout", "around noon", "4 hours ago")
-- A specific event (a low, a high, a meal, a workout, a dose)
-- Any glucose reading that would have occurred outside the 2-hour window
+**⚠️ CRITICAL — GLUCOSE HISTORY IS NOT PRE-LOADED:**
+The context contains ONLY the single most recent glucose reading. There is NO glucose history in the pre-loaded data.
 
-**You MUST use execute_sql or get_glucose_stats to fetch the actual data for that time.**
-Do NOT rely on the pre-loaded snapshot for questions about specific past events — it won't have them.
+**You MUST call get_recent_glucose or execute_sql for ANY question involving past glucose values**, including:
+- Any specific reading or event ("what was my low", "what happened after my workout", "what was I at noon")
+- Any trend, pattern, or trajectory analysis
+- Anything more than the current live reading
+
+**When to use which tool:**
+- get_recent_glucose(hoursBack=N) — easiest for time-window queries (e.g. hoursBack=8 for "this morning")
+- execute_sql — for custom joins, correlations, or finding min/max around a specific event
 
 Example: "What was my low during my workout this morning?"
-→ The pre-loaded glucose won't have readings from 4+ hours ago
-→ REQUIRED: execute_sql to query glucose around the workout time
-→ execute_sql("SELECT timestamp, glucose FROM user_glucose_readings WHERE timestamp >= NOW() - INTERVAL '12 hours' ORDER BY glucose ASC LIMIT 10")
+→ Workout is in pre-loaded exercise data (what time it occurred)
+→ REQUIRED: get_recent_glucose(hoursBack=12) to see glucose around that time
+→ OR: execute_sql("SELECT timestamp, glucose FROM user_glucose_readings WHERE timestamp >= NOW() - INTERVAL '12 hours' ORDER BY glucose ASC LIMIT 10")
    ⚠️ Table alias is user_glucose_readings (not glucose_readings), column is glucose (not glucose_value), no user_id filter needed
 
 ═══════════════════════════════════════════════════════════════

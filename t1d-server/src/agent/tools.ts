@@ -30,35 +30,47 @@ const getApiUrl = () => `http://localhost:${env.PORT}`;
  */
 export const getRecentGlucoseTool = new DynamicStructuredTool({
   name: 'get_recent_glucose',
-  description: 'Get glucose readings for the user. By default returns most recent readings, but you can specify a date range. Returns up to the specified limit.',
+  description: `Get glucose readings for the user. Glucose history is NOT pre-loaded in context — call this tool whenever you need past readings.
+
+Use hoursBack for event-specific queries (e.g. hoursBack=8 to see the last 8 hours, covering a morning workout).
+Use startDate/endDate for a specific calendar day or range.
+Default returns the 50 most recent readings (~4 hours at 5-min intervals).
+
+Examples:
+- User asks about a low during their workout 3 hours ago → hoursBack=6, limit=100
+- User asks about this morning → hoursBack=12
+- User asks about yesterday → startDate and endDate set to yesterday's date`,
   schema: z.object({
     userId: z.string().optional().describe('The user ID (automatically provided)'),
-    limit: z.number().default(20).describe('Number of readings to return (default 20, max 1000)'),
+    limit: z.number().default(50).describe('Number of readings to return (default 50, max 1000). Use a higher value when covering a long time window.'),
+    hoursBack: z.number().optional().describe('Fetch readings from the last N hours (e.g. 6 for last 6 hours). Takes precedence over limit when set.'),
     userTimezone: z.string().optional().describe('User timezone (automatically provided)'),
     startDate: z.string().optional().describe('Start date for date range filter (YYYY-MM-DD format)'),
     endDate: z.string().optional().describe('End date for date range filter (YYYY-MM-DD format)'),
   }),
-  func: async ({ userId, limit, userTimezone, startDate, endDate }) => {
+  func: async ({ userId, limit, hoursBack, userTimezone, startDate, endDate }) => {
     const timezone = userTimezone || 'America/New_York';
 
-    // Build date filter if startDate or endDate provided
-    let dateFilter = '';
     const queryParams: any[] = [userId];
     let paramIndex = 2;
+    let dateFilter = '';
 
-    if (startDate) {
-      dateFilter += ` AND timestamp >= $${paramIndex}::date`;
-      queryParams.push(startDate);
-      paramIndex++;
+    if (hoursBack) {
+      // hoursBack takes priority — fetch a specific recent window
+      dateFilter += ` AND timestamp >= NOW() - INTERVAL '${Math.ceil(hoursBack)} hours'`;
+    } else {
+      if (startDate) {
+        dateFilter += ` AND timestamp >= $${paramIndex}::date`;
+        queryParams.push(startDate);
+        paramIndex++;
+      }
+      if (endDate) {
+        dateFilter += ` AND timestamp <= $${paramIndex}::date + INTERVAL '1 day'`;
+        queryParams.push(endDate);
+        paramIndex++;
+      }
     }
 
-    if (endDate) {
-      dateFilter += ` AND timestamp <= $${paramIndex}::date + INTERVAL '1 day'`;
-      queryParams.push(endDate);
-      paramIndex++;
-    }
-
-    // Enforce max limit
     const effectiveLimit = Math.min(limit, 1000);
     queryParams.push(effectiveLimit);
 
@@ -72,11 +84,15 @@ export const getRecentGlucoseTool = new DynamicStructuredTool({
       queryParams
     );
 
+    // Return in chronological order so the model can read the trend naturally
+    const rows = [...result.rows].reverse();
+
     return JSON.stringify({
-      count: result.rows.length,
+      count: rows.length,
+      hoursBack: hoursBack || null,
       startDate: startDate || null,
       endDate: endDate || null,
-      readings: result.rows.map(r => ({
+      readings: rows.map(r => ({
         timestamp: convertToUserTimezone(r.timestamp, timezone),
         glucose: parseFloat(r.glucose),
         device: r.device,

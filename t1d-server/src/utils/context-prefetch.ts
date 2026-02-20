@@ -20,10 +20,40 @@ function formatTime(ts: Date | string, timezone: string): string {
   });
 }
 
+/** Returns the local date string "YYYY-MM-DD" for a timestamp in the given timezone. */
+function localDateKey(ts: Date | string, timezone: string): string {
+  return new Date(ts).toLocaleDateString('en-CA', { timeZone: timezone }); // "YYYY-MM-DD"
+}
+
+/** Human-readable day label relative to today. */
+function dayLabel(dateKey: string, todayKey: string, timezone: string): string {
+  if (dateKey === todayKey) return 'Today';
+  const date = new Date(`${dateKey}T12:00:00`); // noon avoids DST edge cases
+  const today = new Date(`${todayKey}T12:00:00`);
+  const diffDays = Math.round((today.getTime() - date.getTime()) / 86400000);
+  if (diffDays === 1) return 'Yesterday';
+  return date.toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' });
+}
+
+/** Group an array of rows by local date (newest day first). */
+function groupByDay<T extends { timestamp: Date | string }>(
+  rows: T[],
+  timezone: string
+): Map<string, T[]> {
+  const map = new Map<string, T[]>();
+  for (const row of rows) {
+    const key = localDateKey(row.timestamp, timezone);
+    if (!map.has(key)) map.set(key, []);
+    map.get(key)!.push(row);
+  }
+  // Sort days descending (newest first)
+  return new Map([...map.entries()].sort((a, b) => b[0].localeCompare(a[0])));
+}
+
 /**
  * Pre-fetch commonly needed context data for Sage.
  * Returns a formatted string summarizing user memories, current glucose,
- * today's meals, insulin, and exercise. Runs all queries in parallel for speed.
+ * and the last 7 days of meals, insulin, and exercise.
  *
  * This is injected as a SystemMessage at the start of every chat request
  * so Sage can skip re-fetching this data and focus on deeper analysis.
@@ -32,41 +62,40 @@ export async function buildCurrentContext(userId: string, timezone: string): Pro
   const tz = timezone || 'America/New_York';
 
   const [glucoseResult, mealsResult, insulinResult, exerciseResult, memoryResult] = await Promise.all([
-    // Recent glucose - last 2 hours
+    // Most recent glucose reading only — history is intentionally excluded so the model
+    // always queries for specific values rather than anchoring on a stale snapshot
     query(
       `SELECT timestamp, glucose, trend
        FROM glucose_readings
-       WHERE user_id = $1 AND timestamp >= NOW() - INTERVAL '2 hours'
-       ORDER BY timestamp ASC`,
+       WHERE user_id = $1
+       ORDER BY timestamp DESC
+       LIMIT 1`,
       [userId]
     ),
-    // Today's meals
+    // Last 7 days of meals
     query(
       `SELECT timestamp, description, carbs, meal_type
        FROM meals
        WHERE user_id = $1
-         AND timestamp >= DATE_TRUNC('day', NOW() AT TIME ZONE '${tz}')
-         AND timestamp <= NOW()
+         AND timestamp >= NOW() - INTERVAL '7 days'
        ORDER BY timestamp ASC`,
       [userId]
     ),
-    // Today's insulin
+    // Last 7 days of insulin
     query(
       `SELECT timestamp, insulin_type, units, type as purpose, notes
        FROM insulin_doses
        WHERE user_id = $1
-         AND timestamp >= DATE_TRUNC('day', NOW() AT TIME ZONE '${tz}')
-         AND timestamp <= NOW()
+         AND timestamp >= NOW() - INTERVAL '7 days'
        ORDER BY timestamp ASC`,
       [userId]
     ),
-    // Today's exercise
+    // Last 7 days of exercise
     query(
       `SELECT timestamp, description, activity_type, duration_minutes, intensity
        FROM exercise_logs
        WHERE user_id = $1
-         AND timestamp >= DATE_TRUNC('day', NOW() AT TIME ZONE '${tz}')
-         AND timestamp <= NOW()
+         AND timestamp >= NOW() - INTERVAL '7 days'
        ORDER BY timestamp ASC`,
       [userId]
     ),
@@ -80,6 +109,7 @@ export async function buildCurrentContext(userId: string, timezone: string): Pro
     ),
   ]);
 
+  const todayKey = localDateKey(new Date(), tz);
   const lines: string[] = [];
 
   // --- User memory section ---
@@ -88,7 +118,6 @@ export async function buildCurrentContext(userId: string, timezone: string): Pro
     lines.push(`User memory (${memories.length} stored facts):`);
     memories.forEach(m => {
       const val = m.value;
-      // value is a JSONB object — render the meaningful fields, skip metadata
       const summary = typeof val === 'object' && val !== null
         ? Object.entries(val)
             .filter(([k]) => k !== 'updated_at' && k !== 'timestamp')
@@ -104,23 +133,19 @@ export async function buildCurrentContext(userId: string, timezone: string): Pro
   lines.push('');
 
   // --- Glucose section ---
+  // Only the single most recent reading is included. All glucose history must be
+  // fetched via tools (get_recent_glucose / execute_sql) to avoid the model
+  // anchoring on stale snapshot values when answering event-specific questions.
   const readings = glucoseResult.rows;
   if (readings.length > 0) {
-    const latest = readings[readings.length - 1];
+    const latest = readings[0];
     const latestGlucose = Math.round(parseFloat(latest.glucose));
     const trendStr = TREND_ARROWS[latest.trend] || '→ Flat';
-    lines.push(`Current glucose: ${latestGlucose} mg/dL — ${trendStr}`);
-
-    if (readings.length > 1) {
-      // Show trajectory as a compact timeline (value every ~15min)
-      const sampled = readings.filter((_, i) => i % 3 === 0 || i === readings.length - 1);
-      const timeline = sampled
-        .map(r => `${formatTime(r.timestamp, tz)} ${Math.round(parseFloat(r.glucose))}`)
-        .join(' → ');
-      lines.push(`Recent readings: ${timeline}`);
-    }
+    const readingAge = Math.round((Date.now() - new Date(latest.timestamp).getTime()) / 60000);
+    lines.push(`Current glucose: ${latestGlucose} mg/dL — ${trendStr} (${readingAge} min ago)`);
+    lines.push(`⚠️ Glucose history is NOT pre-loaded. Use get_recent_glucose or execute_sql for any past readings.`);
   } else {
-    lines.push(`Current glucose: No readings in the last 2 hours`);
+    lines.push(`Current glucose: No recent readings available`);
   }
 
   lines.push('');
@@ -128,13 +153,17 @@ export async function buildCurrentContext(userId: string, timezone: string): Pro
   // --- Meals section ---
   const meals = mealsResult.rows;
   if (meals.length > 0) {
-    lines.push(`Today's meals (${meals.length}):`);
-    meals.forEach(m => {
-      const carbStr = m.carbs ? `, ${Math.round(parseFloat(m.carbs))}g carbs` : '';
-      lines.push(`  ${formatTime(m.timestamp, tz)}: ${m.description || m.meal_type || 'Meal'}${carbStr}`);
-    });
+    lines.push(`Meals — last 7 days (${meals.length} entries):`);
+    const byDay = groupByDay(meals, tz);
+    for (const [dateKey, dayMeals] of byDay) {
+      lines.push(`  ${dayLabel(dateKey, todayKey, tz)}:`);
+      for (const m of dayMeals) {
+        const carbStr = m.carbs ? `, ${Math.round(parseFloat(m.carbs))}g carbs` : '';
+        lines.push(`    ${formatTime(m.timestamp, tz)}: ${m.description || m.meal_type || 'Meal'}${carbStr}`);
+      }
+    }
   } else {
-    lines.push(`Today's meals: None logged yet`);
+    lines.push(`Meals — last 7 days: None logged`);
   }
 
   lines.push('');
@@ -142,16 +171,20 @@ export async function buildCurrentContext(userId: string, timezone: string): Pro
   // --- Insulin section ---
   const insulin = insulinResult.rows;
   if (insulin.length > 0) {
-    lines.push(`Today's insulin (${insulin.length} dose${insulin.length > 1 ? 's' : ''}):`);
-    insulin.forEach(d => {
-      const units = parseFloat(d.units);
-      const type = d.insulin_type || 'insulin';
-      const purpose = d.purpose || '';
-      const purposeStr = purpose ? ` (${purpose})` : '';
-      lines.push(`  ${formatTime(d.timestamp, tz)}: ${units}u ${type}${purposeStr}`);
-    });
+    lines.push(`Insulin — last 7 days (${insulin.length} dose${insulin.length > 1 ? 's' : ''}):`);
+    const byDay = groupByDay(insulin, tz);
+    for (const [dateKey, dayDoses] of byDay) {
+      lines.push(`  ${dayLabel(dateKey, todayKey, tz)}:`);
+      for (const d of dayDoses) {
+        const units = parseFloat(d.units);
+        const type = d.insulin_type || 'insulin';
+        const purpose = d.purpose || '';
+        const purposeStr = purpose ? ` (${purpose})` : '';
+        lines.push(`    ${formatTime(d.timestamp, tz)}: ${units}u ${type}${purposeStr}`);
+      }
+    }
   } else {
-    lines.push(`Today's insulin: None logged yet`);
+    lines.push(`Insulin — last 7 days: None logged`);
   }
 
   lines.push('');
@@ -159,15 +192,19 @@ export async function buildCurrentContext(userId: string, timezone: string): Pro
   // --- Exercise section ---
   const exercise = exerciseResult.rows;
   if (exercise.length > 0) {
-    lines.push(`Today's exercise (${exercise.length} session${exercise.length > 1 ? 's' : ''}):`);
-    exercise.forEach(e => {
-      const durationStr = e.duration_minutes ? ` ${e.duration_minutes}min` : '';
-      const intensityStr = e.intensity ? ` (${e.intensity})` : '';
-      const label = e.description || e.activity_type || 'Exercise';
-      lines.push(`  ${formatTime(e.timestamp, tz)}:${durationStr} ${label}${intensityStr}`);
-    });
+    lines.push(`Exercise — last 7 days (${exercise.length} session${exercise.length > 1 ? 's' : ''}):`);
+    const byDay = groupByDay(exercise, tz);
+    for (const [dateKey, daySessions] of byDay) {
+      lines.push(`  ${dayLabel(dateKey, todayKey, tz)}:`);
+      for (const e of daySessions) {
+        const durationStr = e.duration_minutes ? ` ${e.duration_minutes}min` : '';
+        const intensityStr = e.intensity ? ` (${e.intensity})` : '';
+        const label = e.description || e.activity_type || 'Exercise';
+        lines.push(`    ${formatTime(e.timestamp, tz)}:${durationStr} ${label}${intensityStr}`);
+      }
+    }
   } else {
-    lines.push(`Today's exercise: None logged today`);
+    lines.push(`Exercise — last 7 days: None logged`);
   }
 
   return lines.join('\n');

@@ -96,7 +96,7 @@ router.post('/stream', async (req, res, next) => {
     try {
       const contextSummary = await buildCurrentContext(authReq.user!.id, userTimezone);
       contextMessage = new SystemMessage(
-        `## Current Status (pre-loaded snapshot — do NOT re-fetch with retrieve_user_memory, get_recent_glucose, get_meal_history, get_insulin_history, or get_exercise_history for today)\n\n⚠️ GLUCOSE WINDOW: Only the most recent ~2 hours of glucose readings are included below. Readings from earlier today or previous days are NOT in this snapshot — use execute_sql or get_glucose_stats to fetch them.\n\n${contextSummary}`
+        `## Current Status (pre-loaded snapshot)\nMemory, current glucose, and the last 7 days of meals/insulin/exercise are below. Do NOT re-fetch with retrieve_user_memory, get_meal_history, get_insulin_history, or get_exercise_history for the past 7 days.\n⚠️ Glucose history is NOT included — call get_recent_glucose or execute_sql for any past readings.\n\n${contextSummary}`
       );
     } catch (err) {
       console.error('[chat] Failed to build current context:', err);
@@ -397,7 +397,7 @@ router.post('/', async (req, res, next) => {
     try {
       const contextSummary = await buildCurrentContext(authReq.user!.id, userTimezone);
       contextMessage = new SystemMessage(
-        `## Current Status (pre-loaded snapshot — do NOT re-fetch with retrieve_user_memory, get_recent_glucose, get_meal_history, get_insulin_history, or get_exercise_history for today)\n\n⚠️ GLUCOSE WINDOW: Only the most recent ~2 hours of glucose readings are included below. Readings from earlier today or previous days are NOT in this snapshot — use execute_sql or get_glucose_stats to fetch them.\n\n${contextSummary}`
+        `## Current Status (pre-loaded snapshot)\nMemory, current glucose, and the last 7 days of meals/insulin/exercise are below. Do NOT re-fetch with retrieve_user_memory, get_meal_history, get_insulin_history, or get_exercise_history for the past 7 days.\n⚠️ Glucose history is NOT included — call get_recent_glucose or execute_sql for any past readings.\n\n${contextSummary}`
       );
     } catch (err) {
       console.error('[chat] Failed to build current context:', err);
