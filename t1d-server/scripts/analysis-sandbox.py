@@ -176,13 +176,25 @@ SAFE_BUILTINS = {
     'pow': pow, 'divmod': divmod,
     # Output
     'print': print, 'repr': repr, 'format': format,
-    # Error handling
-    'Exception': Exception, 'ValueError': ValueError, 'TypeError': TypeError,
-    'KeyError': KeyError, 'IndexError': IndexError, 'ZeroDivisionError': ZeroDivisionError,
+    # Error handling — include all common exception types so except clauses work
+    'Exception': Exception, 'BaseException': BaseException,
+    'ValueError': ValueError, 'TypeError': TypeError,
+    'KeyError': KeyError, 'IndexError': IndexError,
+    'AttributeError': AttributeError, 'NameError': NameError,
+    'ZeroDivisionError': ZeroDivisionError, 'ArithmeticError': ArithmeticError,
+    'OverflowError': OverflowError, 'FloatingPointError': FloatingPointError,
     'RuntimeError': RuntimeError, 'StopIteration': StopIteration,
+    'LookupError': LookupError, 'OSError': OSError, 'IOError': IOError,
+    'MemoryError': MemoryError, 'RecursionError': RecursionError,
+    'NotImplementedError': NotImplementedError, 'AssertionError': AssertionError,
+    'ImportError': ImportError, 'ModuleNotFoundError': ModuleNotFoundError,
+    'UnicodeError': UnicodeError, 'UnicodeDecodeError': UnicodeDecodeError,
+    'TimeoutError': TimeoutError, 'GeneratorExit': GeneratorExit,
     # Other safe builtins
     'None': None, 'True': True, 'False': False,
     'NotImplemented': NotImplemented,
+    'object': object, 'callable': callable, 'vars': vars,
+    'slice': slice, 'complex': complex,
 }
 
 # ── Execute user code ────────────────────────────────────────────────────────

@@ -215,7 +215,7 @@ export async function executePython(
       console.log(
         `[python-executor] Done: time=${executionMs}ms exit=${exitCode} ` +
         `outputLen=${result.output.length} charts=${result.charts.length}` +
-        (result.error ? ` error=${result.error.slice(0, 100)}` : '')
+        (result.error ? `\n[python-executor] Error:\n${result.error}` : '')
       );
 
       resolve({ ...result, executionMs });
