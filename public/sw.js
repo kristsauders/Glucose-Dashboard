@@ -173,12 +173,12 @@ self.addEventListener('notificationclick', async (event) => {
     }
   }
 
-  // Open or focus the chat window
+  // URL used only for cold-start (no existing clients)
   const urlToOpen = conversationId
     ? `/chat?conversation=${conversationId}`
     : '/chat';
 
-  console.log('[Service Worker] URL to open:', urlToOpen);
+  console.log('[Service Worker] URL to open (cold start fallback):', urlToOpen);
   debugLog('Notification Click', 'URL to open', { url: urlToOpen });
 
   event.waitUntil(
@@ -186,49 +186,43 @@ self.addEventListener('notificationclick', async (event) => {
       .matchAll({ type: 'window', includeUncontrolled: true })
       .then((clientList) => {
         console.log('[Service Worker] Found', clientList.length, 'client windows');
+        debugLog('Notification Click', 'Client windows found', { count: clientList.length });
 
-        // Try to navigate existing client, or open new window
-        let targetClient = null;
+        if (clientList.length === 0) {
+          // Cold start: no existing clients — open a new window with the URL parameter.
+          // The app's deep-link useEffect will pick up the ?conversation= param on load.
+          console.log('[Service Worker] Cold start: opening new window at:', urlToOpen);
+          debugLog('Notification Click', 'Cold start: opening new window', { url: urlToOpen });
+          return clients.openWindow(urlToOpen);
+        }
 
-        // Find any existing client (prefer /chat, but any will do)
+        // Hot start: app is already running (possibly backgrounded).
+        // Send postMessage to ALL clients — this is the reliable path on iOS PWA.
+        // navigate() is unreliable when the app is suspended; postMessage works as
+        // long as the app process is alive.
         for (const client of clientList) {
-          const clientUrl = new URL(client.url);
-          if (clientUrl.pathname === '/chat') {
-            targetClient = client;
-            break;
-          }
-        }
-
-        // If no /chat client, use any client
-        if (!targetClient && clientList.length > 0) {
-          targetClient = clientList[0];
-        }
-
-        if (targetClient && 'navigate' in targetClient) {
-          // Navigate existing window to conversation URL
-          console.log('[Service Worker] Navigating existing client to:', urlToOpen);
-          debugLog('Notification Click', 'Navigating existing client', {
-            url: urlToOpen,
-            currentUrl: targetClient.url
+          console.log('[Service Worker] Sending OPEN_CONVERSATION to client:', client.url);
+          client.postMessage({
+            type: 'OPEN_CONVERSATION',
+            conversationId: conversationId,
           });
+        }
 
-          return targetClient.navigate(urlToOpen).then(client => {
-            if (client) {
-              return client.focus();
+        // Focus the best available window (/chat path preferred)
+        let targetClient = null;
+        for (const client of clientList) {
+          try {
+            if (new URL(client.url).pathname === '/chat') {
+              targetClient = client;
+              break;
             }
-          });
-        } else {
-          // No existing client or navigate not supported, open new window
-          console.log('[Service Worker] Opening new window at:', urlToOpen);
-          debugLog('Notification Click', 'Opening new window', {
-            url: urlToOpen,
-            reason: targetClient ? 'navigate not supported' : 'no existing client'
-          });
-
-          if (clients.openWindow) {
-            return clients.openWindow(urlToOpen);
-          }
+          } catch (_) {}
         }
+        if (!targetClient) targetClient = clientList[0];
+
+        console.log('[Service Worker] Focusing client:', targetClient.url);
+        debugLog('Notification Click', 'Focusing client', { url: targetClient.url });
+        return targetClient.focus();
       })
   );
 });

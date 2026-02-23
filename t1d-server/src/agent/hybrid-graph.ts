@@ -592,26 +592,35 @@ The synthesis model will create the user-facing message — your job is to gathe
     }
 
     // Extract pre-loaded context SystemMessage (injected by chat.ts before every request)
-    // This contains current glucose, meals, insulin, exercise, and user memory
+    // Also collect any extra context blocks (e.g. research paper content injected by research-monitor)
     let preloadedContextBlock = '';
+    const extraContextBlocks: string[] = [];
     for (const msg of messages) {
       if (msg.constructor.name === 'SystemMessage') {
         const content = typeof msg.content === 'string' ? msg.content : '';
         if (content.includes('Current Status')) {
           preloadedContextBlock = content;
-          break;
+        } else if (content.length > 0) {
+          // Any other SystemMessage is treated as extra reference context
+          // (e.g. research paper details passed in by research-monitor)
+          extraContextBlocks.push(content);
         }
       }
     }
 
     // Format tool results into a clear, structured context
     let toolResultsContext = '';
-    if (preloadedContextBlock || toolResults.length > 0) {
+    if (preloadedContextBlock || extraContextBlocks.length > 0 || toolResults.length > 0) {
       toolResultsContext = '\n\nThe following data is available for this response:\n';
 
       // Always include pre-loaded context first (current glucose, meals, insulin, exercise, memory)
       if (preloadedContextBlock) {
         toolResultsContext += `\n--- ${preloadedContextBlock} ---\n`;
+      }
+
+      // Include any extra reference context (research papers, etc.)
+      for (const block of extraContextBlocks) {
+        toolResultsContext += `\n--- Reference Context ---\n${block}\n`;
       }
 
       // Append any additional data gathered by tools during analysis

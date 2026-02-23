@@ -1,5 +1,4 @@
 import { query } from '../config/database.js';
-import { convertToUserTimezone } from './timezone.js';
 
 const TREND_ARROWS: Record<number, string> = {
   1: '↑↑ Rising Rapidly',
@@ -26,7 +25,7 @@ function localDateKey(ts: Date | string, timezone: string): string {
 }
 
 /** Human-readable day label relative to today. */
-function dayLabel(dateKey: string, todayKey: string, timezone: string): string {
+function dayLabel(dateKey: string, todayKey: string): string {
   if (dateKey === todayKey) return 'Today';
   const date = new Date(`${dateKey}T12:00:00`); // noon avoids DST edge cases
   const today = new Date(`${todayKey}T12:00:00`);
@@ -83,7 +82,7 @@ export async function buildCurrentContext(userId: string, timezone: string): Pro
     ),
     // Last 7 days of insulin
     query(
-      `SELECT timestamp, insulin_type, units, type as purpose, notes
+      `SELECT timestamp, insulin_type, units, purpose, notes
        FROM insulin_doses
        WHERE user_id = $1
          AND timestamp >= NOW() - INTERVAL '7 days'
@@ -156,7 +155,7 @@ export async function buildCurrentContext(userId: string, timezone: string): Pro
     lines.push(`Meals — last 7 days (${meals.length} entries):`);
     const byDay = groupByDay(meals, tz);
     for (const [dateKey, dayMeals] of byDay) {
-      lines.push(`  ${dayLabel(dateKey, todayKey, tz)}:`);
+      lines.push(`  ${dayLabel(dateKey, todayKey)}:`);
       for (const m of dayMeals) {
         const carbStr = m.carbs ? `, ${Math.round(parseFloat(m.carbs))}g carbs` : '';
         lines.push(`    ${formatTime(m.timestamp, tz)}: ${m.description || m.meal_type || 'Meal'}${carbStr}`);
@@ -174,7 +173,7 @@ export async function buildCurrentContext(userId: string, timezone: string): Pro
     lines.push(`Insulin — last 7 days (${insulin.length} dose${insulin.length > 1 ? 's' : ''}):`);
     const byDay = groupByDay(insulin, tz);
     for (const [dateKey, dayDoses] of byDay) {
-      lines.push(`  ${dayLabel(dateKey, todayKey, tz)}:`);
+      lines.push(`  ${dayLabel(dateKey, todayKey)}:`);
       for (const d of dayDoses) {
         const units = parseFloat(d.units);
         const type = d.insulin_type || 'insulin';
@@ -195,7 +194,7 @@ export async function buildCurrentContext(userId: string, timezone: string): Pro
     lines.push(`Exercise — last 7 days (${exercise.length} session${exercise.length > 1 ? 's' : ''}):`);
     const byDay = groupByDay(exercise, tz);
     for (const [dateKey, daySessions] of byDay) {
-      lines.push(`  ${dayLabel(dateKey, todayKey, tz)}:`);
+      lines.push(`  ${dayLabel(dateKey, todayKey)}:`);
       for (const e of daySessions) {
         const durationStr = e.duration_minutes ? ` ${e.duration_minutes}min` : '';
         const intensityStr = e.intensity ? ` (${e.intensity})` : '';

@@ -198,74 +198,38 @@ export function AIChat() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [searchParams.get('conversation'), conversations, activeConversationId, isFetchingConversations]);
 
-  // Listen for messages from service worker
+  // Listen for OPEN_CONVERSATION postMessages from the service worker.
+  // The SW sends this when the user taps a notification and the app is already running
+  // (hot start). We delegate to the URL deep-link path so all retry/load logic is unified.
   useEffect(() => {
     const handleMessage = (event: MessageEvent) => {
-      if (event.data.type === 'OPEN_CONVERSATION') {
-        const conversationId = event.data.conversationId;
-        console.log('[Service Worker Message] Request to open conversation:', conversationId);
-        console.log('[Service Worker Message] Currently active:', activeConversationId);
+      if (event.data?.type !== 'OPEN_CONVERSATION') return;
 
-        if (!conversationId) {
-          console.warn('[Service Worker Message] No conversation ID provided');
-          return;
-        }
+      const conversationId = event.data.conversationId;
+      if (!conversationId) return;
 
-        // Skip if already viewing this conversation
-        if (conversationId === activeConversationId) {
-          console.log('[Service Worker Message] Already viewing this conversation');
-          return;
-        }
+      console.log('[SW Message] OPEN_CONVERSATION received:', conversationId);
 
-        // Try to find conversation in the list
-        const conversation = conversations.find(c => c.id === conversationId);
-        if (conversation) {
-          console.log('[Service Worker Message] Found conversation in list:', conversation.title);
-          loadConversation(conversationId);
-          return;
-        }
-
-        // Conversation not in list - try direct load with retries
-        console.warn('[Service Worker Message] Conversation not in list, attempting direct load...');
-        console.warn('[Service Worker Message] This is normal for new proactive messages');
-
-        // Retry logic for network delays (e.g., VPN connection)
-        const attemptLoadFromSW = async (retryCount = 0): Promise<void> => {
-          try {
-            await loadConversation(conversationId);
-            console.log('[Service Worker Message] Direct load successful');
-            // Refresh conversation list to include the new one
-            fetchConversations();
-          } catch (error: any) {
-            const isNotFound = error.message?.includes('not found') || error.response?.status === 404;
-            const isNetworkError = error.message?.includes('fetch') || error.message?.includes('network') || !error.response;
-
-            // Retry up to 8 times with exponential backoff
-            if ((isNotFound || isNetworkError) && retryCount < 8) {
-              const delay = retryCount === 0 ? 500 : Math.min((retryCount) * 1000, 7000);
-              console.warn(`[Service Worker Message] ${isNetworkError ? 'Network error' : 'Conversation not found'}, retrying in ${delay}ms (attempt ${retryCount + 1}/8)`);
-              setTimeout(() => attemptLoadFromSW(retryCount + 1), delay);
-            } else {
-              console.error('[Service Worker Message] Direct load failed after all retries:', error);
-              console.error('[Service Worker Message] Error details:', error.message);
-              setError(`Failed to load conversation: ${error.message}`);
-            }
-          }
-        };
-
-        attemptLoadFromSW();
+      // Skip if already viewing this conversation
+      if (conversationId === activeConversationId) {
+        console.log('[SW Message] Already viewing this conversation, skipping');
+        return;
       }
+
+      // Reset the deep-link guard so the useEffect below isn't blocked if this
+      // conversationId was previously attempted (e.g. multiple notifications).
+      deepLinkAttemptedRef.current = null;
+
+      // Set the URL param — the deep-link useEffect handles loading + retries.
+      setSearchParams({ conversation: conversationId });
     };
 
     if ('serviceWorker' in navigator) {
       navigator.serviceWorker.addEventListener('message', handleMessage);
-      return () => {
-        navigator.serviceWorker.removeEventListener('message', handleMessage);
-      };
+      return () => navigator.serviceWorker.removeEventListener('message', handleMessage);
     }
-    // Only re-run when conversations list length changes, not the full array
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [conversations.length, activeConversationId]);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [activeConversationId, setSearchParams]);
 
   // Handle viewport resize (keyboard appearing/disappearing on mobile)
   useEffect(() => {

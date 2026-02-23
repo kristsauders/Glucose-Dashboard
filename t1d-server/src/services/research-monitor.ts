@@ -1,6 +1,7 @@
 import { query } from '../config/database.js';
 import { researchService } from './research-service.js';
 import { pushNotificationService } from './push-notification-service.js';
+import { HumanMessage, SystemMessage } from '@langchain/core/messages';
 
 /**
  * Research Monitor - Automated research discovery and sharing
@@ -293,74 +294,48 @@ export class ResearchMonitor {
     // Use AI to create a detailed, personalized analysis
     const { createHybridAgentGraph } = await import('../agent/hybrid-graph.js');
 
-    // Fetch user preferences for model configuration
+    // Fetch user preferences and timezone
     const prefsResult = await query(
-      `SELECT preferences FROM users WHERE id = $1`,
+      `SELECT preferences, timezone FROM users WHERE id = $1`,
       [userId]
     );
     const userPreferences = prefsResult.rows[0]?.preferences || {};
     const userModelConfig = userPreferences.modelConfig;
+    const userTimezone = prefsResult.rows[0]?.timezone || 'America/New_York';
 
     // Create user-specific agent
     const agent = createHybridAgentGraph('proactive', userModelConfig);
 
-    const detailedPrompt = `You are analyzing a recent diabetes research paper to share with a user. Create a comprehensive, engaging summary that explains:
+    // Pass paper content as a SystemMessage so it reaches the synthesis model via the
+    // extraContextBlocks path — avoids the plain-object HumanMessage constructor issue
+    // and ensures the CRITICAL INSTRUCTION doesn't block the model from referencing it.
+    const paperContext = new SystemMessage(
+      `Research paper for this message:\n\n` +
+      `Title: ${paper.title}\n` +
+      `Journal: ${paper.journal}\n` +
+      `Published: ${paper.publishedDate.getFullYear()}\n` +
+      `Abstract: ${paper.abstract}\n\n` +
+      `Key Findings: ${summary.keyFindings?.join('; ') || 'Not available'}\n` +
+      `Clinical Implications: ${summary.clinicalImplications?.join('; ') || 'Not available'}\n` +
+      `Limitations: ${summary.limitations?.join('; ') || 'Not available'}\n` +
+      `Relevance to T1D: ${summary.relevanceToT1D || 'Not available'}\n` +
+      `Link: ${paper.url}`
+    );
 
-**Research Paper:**
-Title: ${paper.title}
-Journal: ${paper.journal}
-Published: ${paper.publishedDate.getFullYear()}
-Abstract: ${paper.abstract}
-
-**Existing Summary:**
-Key Findings: ${summary.keyFindings?.join('; ') || 'Not available'}
-Clinical Implications: ${summary.clinicalImplications?.join('; ') || 'Not available'}
-Limitations: ${summary.limitations?.join('; ') || 'Not available'}
-Relevance to T1D: ${summary.relevanceToT1D || 'Not available'}
-
-**Your Task:**
-Create a detailed, engaging analysis (300-400 words) that includes:
-
-1. **What Was Tested** (2-3 sentences)
-   - Explain the study design, participants, and methodology in accessible language
-   - What question were the researchers trying to answer?
-
-2. **Key Findings & Insights** (3-4 sentences)
-   - What did they discover? Be specific with numbers/percentages if available
-   - What was surprising or particularly interesting about the results?
-   - How strong was the evidence? (e.g., "showed significant improvement" vs "suggested potential benefit")
-
-3. **Clinical Implications** (2-3 sentences)
-   - What does this mean for people with Type 1 diabetes?
-   - Are there practical takeaways or action items?
-
-4. **Future Directions** (1-2 sentences)
-   - What questions remain unanswered?
-   - What should future research explore?
-
-5. **Personalized Relevance** (2-3 sentences)
-   - Use tools to check this user's recent data (glucose patterns, insulin doses, meals, exercise)
-   - Explain how this research might specifically apply to their diabetes management
-   - If the research relates to patterns you see in their data, mention it
-
-**IMPORTANT:**
-- Call tools to analyze the user's recent data (last 7-14 days) to personalize your analysis
-- Tools available: get_recent_glucose, analyze_trends, get_meal_history, get_insulin_history, analyze_meal_patterns, get_detected_patterns
-- Call 2-3 tools minimum to understand their patterns
-- Be specific about how the research relates to what you observe in their data
-- Use accessible language - avoid excessive jargon
-- Be engaging and conversational, not academic
-- End with: "Link: ${paper.url}"
-
-Format your response as a cohesive, flowing analysis (not bullet points with headers). Make it feel like a knowledgeable friend explaining exciting research.`;
+    const userRequest = new HumanMessage(
+      `Using the research paper in the context above and my recent diabetes data (fetch it with tools), ` +
+      `write a personalized 300-400 word research update. Cover what was tested, key findings, ` +
+      `clinical implications, and how it specifically relates to my glucose patterns. ` +
+      `Write as flowing prose, not bullet points. End with the paper link.`
+    );
 
     try {
       const result = await agent.invoke({
-        messages: [{ role: 'user', content: detailedPrompt }],
+        messages: [paperContext, userRequest],
         userId,
         userContext: {
-          email: '', // Not needed for this analysis
-          timezone: 'America/New_York'
+          email: '',
+          timezone: userTimezone,
         }
       });
 
