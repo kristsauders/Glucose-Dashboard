@@ -182,6 +182,16 @@ self.addEventListener('notificationclick', async (event) => {
   debugLog('Notification Click', 'URL to open', { url: urlToOpen });
 
   event.waitUntil(
+    // Update Cache API with a fresh click timestamp so the client's visibilitychange
+    // handler can use it as a fallback if the postMessage below was dropped.
+    caches.open(CACHE_NAME).then(cache =>
+      cache.put(NOTIFICATION_KEY, new Response(JSON.stringify({
+        conversationId,
+        messageId,
+        timestamp: Date.now(),
+        clicked: true,
+      })))
+    ).catch(() => {}).then(() =>
     clients
       .matchAll({ type: 'window', includeUncontrolled: true })
       .then((clientList) => {
@@ -224,6 +234,7 @@ self.addEventListener('notificationclick', async (event) => {
         debugLog('Notification Click', 'Focusing client', { url: targetClient.url });
         return targetClient.focus();
       })
+    ) // closes .then(() => clients.matchAll...)
   );
 });
 

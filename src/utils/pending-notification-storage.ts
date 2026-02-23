@@ -13,6 +13,8 @@ export interface PendingNotification {
   conversationId: string;
   messageId?: string;
   timestamp: number;
+  /** Set to true when the user actively tapped the notification (vs. just receiving it). */
+  clicked?: boolean;
 }
 
 /**

@@ -124,14 +124,17 @@ export function getHybridAIProvider(mode: 'chat' | 'proactive' = 'chat', userMod
   console.log('[Provider] Mode:', mode);
   console.log('[Provider] User model config:', JSON.stringify(userModelConfig, null, 2));
 
-  // Get model names from user preferences or fall back to environment variables
+  // Get model names from user preferences or fall back to environment variables.
+  // For proactive mode: prefer proactive-specific config, then fall back to chat config
+  // (so users only need to configure models once), then env vars.
   const smallModelName = mode === 'chat'
     ? (userModelConfig?.chat?.smallModel || env.HYBRID_SMALL_MODEL || 'qwen2.5:32b')
-    : (userModelConfig?.proactive?.smallModel || env.PROACTIVE_SMALL_MODEL || env.HYBRID_SMALL_MODEL || 'qwen2.5:32b');
+    : (userModelConfig?.proactive?.smallModel || userModelConfig?.chat?.smallModel || env.PROACTIVE_SMALL_MODEL || env.HYBRID_SMALL_MODEL || 'qwen2.5:32b');
 
   // Debug: Log which model we're using
-  console.log('[Provider] Selected small model:', smallModelName);
-  console.log('[Provider] From user config?:', mode === 'chat' ? !!userModelConfig?.chat?.smallModel : !!userModelConfig?.proactive?.smallModel);
+  const smallFromConfig = mode === 'chat' ? !!userModelConfig?.chat?.smallModel
+    : !!(userModelConfig?.proactive?.smallModel || userModelConfig?.chat?.smallModel);
+  console.log('[Provider] Selected small model:', smallModelName, '| from user config:', smallFromConfig);
 
   // Small model provider - use ollama if model doesn't start with provider prefix
   const smallModelProvider = mode === 'proactive' && env.PROACTIVE_SMALL_PROVIDER
@@ -167,14 +170,16 @@ export function getHybridAIProvider(mode: 'chat' | 'proactive' = 'chat', userMod
     smallModel.getNumTokens = async () => 0;
   }
 
-  // Large model for message synthesis (OpenRouter by default)
+  // Large model for message synthesis (OpenRouter by default).
+  // Same fallback chain: proactive-specific → chat config → env vars.
   const largeModelName = mode === 'chat'
     ? (userModelConfig?.chat?.largeModel || env.HYBRID_LARGE_MODEL || 'anthropic/claude-sonnet-4-5')
-    : (userModelConfig?.proactive?.largeModel || env.PROACTIVE_LARGE_MODEL || env.HYBRID_LARGE_MODEL || 'anthropic/claude-sonnet-4-5');
+    : (userModelConfig?.proactive?.largeModel || userModelConfig?.chat?.largeModel || env.PROACTIVE_LARGE_MODEL || env.HYBRID_LARGE_MODEL || 'anthropic/claude-sonnet-4-5');
 
   // Debug: Log which model we're using
-  console.log('[Provider] Selected large model:', largeModelName);
-  console.log('[Provider] From user config?:', mode === 'chat' ? !!userModelConfig?.chat?.largeModel : !!userModelConfig?.proactive?.largeModel);
+  const largeFromConfig = mode === 'chat' ? !!userModelConfig?.chat?.largeModel
+    : !!(userModelConfig?.proactive?.largeModel || userModelConfig?.chat?.largeModel);
+  console.log('[Provider] Selected large model:', largeModelName, '| from user config:', largeFromConfig);
   const largeModel = new ChatOpenAI({
     modelName: largeModelName,
     apiKey: env.OPENROUTER_API_KEY,

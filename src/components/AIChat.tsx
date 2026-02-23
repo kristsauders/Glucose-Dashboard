@@ -11,6 +11,7 @@ import { Bot, Send, Trash2, Loader2, User, MessageSquare, Menu, Plus, X, Edit2, 
 import { apiService } from '@/services/api';
 import { format } from 'date-fns';
 import type { Conversation, Message } from '@/types/chat';
+import { getPendingNotification, clearPendingNotification } from '@/utils/pending-notification-storage';
 
 const MESSAGE_PAGE_SIZE = 50; // Only render this many recent messages at once
 
@@ -39,6 +40,10 @@ export function AIChat() {
   const inputRef = useRef<HTMLInputElement>(null);
   const messagesContainerRef = useRef<HTMLDivElement>(null);
   const deepLinkAttemptedRef = useRef<string | null>(null);
+  // Tracks the last notification conversationId we've already dispatched, to prevent
+  // the OPEN_CONVERSATION postMessage handler and the visibilitychange fallback from
+  // both firing for the same tap.
+  const handledNotificationClickRef = useRef<string | null>(null);
   // Char-by-char reveal: queue holds pending characters, timer drives reveal, done callback signals completion
   const charQueueRef = useRef('');
   const charTimerRef = useRef<ReturnType<typeof setInterval> | null>(null);
@@ -216,6 +221,10 @@ export function AIChat() {
         return;
       }
 
+      // Mark as handled so the visibilitychange fallback doesn't double-fire
+      handledNotificationClickRef.current = conversationId;
+      clearPendingNotification(); // prevent visibilitychange from also handling this
+
       // Reset the deep-link guard so the useEffect below isn't blocked if this
       // conversationId was previously attempted (e.g. multiple notifications).
       deepLinkAttemptedRef.current = null;
@@ -228,6 +237,50 @@ export function AIChat() {
       navigator.serviceWorker.addEventListener('message', handleMessage);
       return () => navigator.serviceWorker.removeEventListener('message', handleMessage);
     }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [activeConversationId, setSearchParams]);
+
+  // Fallback for when the SW postMessage is dropped (e.g. iOS freezes the JS before focus()).
+  // When the page becomes visible, check if the SW stamped a recent notification click in
+  // the Cache API. If so, and we haven't already handled it via postMessage, load the convo.
+  useEffect(() => {
+    const handleVisibilityChange = async () => {
+      if (document.visibilityState !== 'visible') return;
+
+      try {
+        const pending = await getPendingNotification();
+
+        // Only act on explicit user taps (clicked: true) that are fresh (within 15s)
+        if (!pending?.conversationId || !pending.clicked) return;
+        if (Date.now() - pending.timestamp > 15000) return;
+
+        const conversationId = pending.conversationId;
+        console.log('[Visibility] Found recent notification click:', conversationId);
+
+        // Skip if the postMessage handler already handled this tap
+        if (handledNotificationClickRef.current === conversationId) {
+          console.log('[Visibility] Already handled via postMessage, skipping');
+          return;
+        }
+
+        // Skip if already viewing this conversation
+        if (conversationId === activeConversationId) {
+          clearPendingNotification();
+          return;
+        }
+
+        console.log('[Visibility] Handling missed notification click:', conversationId);
+        handledNotificationClickRef.current = conversationId;
+        clearPendingNotification();
+        deepLinkAttemptedRef.current = null;
+        setSearchParams({ conversation: conversationId });
+      } catch (e) {
+        console.error('[Visibility] Error checking pending notification:', e);
+      }
+    };
+
+    document.addEventListener('visibilitychange', handleVisibilityChange);
+    return () => document.removeEventListener('visibilitychange', handleVisibilityChange);
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [activeConversationId, setSearchParams]);
 

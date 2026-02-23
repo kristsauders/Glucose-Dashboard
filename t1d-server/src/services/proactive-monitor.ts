@@ -66,9 +66,10 @@ export class ProactiveMonitor {
         console.log('  🚀 FORCE MODE: Bypassing all checks');
       }
 
-      // Get all users with LibreView OR Discord connected
+      // Get all users with LibreView OR Discord connected.
+      // Include preferences so runProactiveAnalysis can read modelConfig without an extra query.
       const usersResult = await query(
-        `SELECT id, email, diagnosis_type, diagnosis_date, timezone, discord_user_id
+        `SELECT id, email, diagnosis_type, diagnosis_date, timezone, discord_user_id, preferences
          FROM users
          WHERE (libreview_email IS NOT NULL AND libreview_password_encrypted IS NOT NULL)
             OR discord_user_id IS NOT NULL`,
@@ -355,13 +356,10 @@ export class ProactiveMonitor {
     try {
       console.log(`  Analyzing ${user.email}...`);
 
-      // Fetch user preferences for model configuration
-      const prefsResult = await query(
-        `SELECT preferences FROM users WHERE id = $1`,
-        [user.id]
-      );
-      const userPreferences = prefsResult.rows[0]?.preferences || {};
+      // preferences is already included in the user object from checkAllUsers query
+      const userPreferences = user.preferences || {};
       const userModelConfig = userPreferences.modelConfig;
+      console.log(`  [proactive-monitor] Model config for ${user.email}:`, JSON.stringify(userModelConfig));
 
       // Create user-specific agent and providers with their model preferences
       const toolOnlyAgent = createHybridAgentGraph('proactive', userModelConfig);
