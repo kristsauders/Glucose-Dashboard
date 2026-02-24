@@ -546,7 +546,7 @@ Respond with ONLY "SEND" or "DONT_SEND" (no explanation needed).`;
 
         // PHASE 3: Extract tool results from Phase 1 and synthesize with large model
         // This ensures the large model only sees raw data, not the small model's draft
-        const providers = getHybridAIProvider('proactive');
+        const providers = getHybridAIProvider('proactive', userModelConfig);
 
         console.log(`  📊 Phase 3 Debug: Extracting tool results from ${allMessages.length} messages`);
 
