@@ -13,7 +13,7 @@ import { format } from 'date-fns';
 import type { Conversation, Message } from '@/types/chat';
 import { getPendingNotification, clearPendingNotification } from '@/utils/pending-notification-storage';
 
-const MESSAGE_PAGE_SIZE = 50; // Only render this many recent messages at once
+const MESSAGE_PAGE_SIZE = 10; // Only render this many recent messages at once
 
 export function AIChat() {
   const [searchParams, setSearchParams] = useSearchParams();

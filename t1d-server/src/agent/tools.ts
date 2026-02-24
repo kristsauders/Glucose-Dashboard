@@ -976,8 +976,8 @@ export const sendProactiveMessageTool = new DynamicStructuredTool({
       });
 
       // 1. Find or create conversation for proactive messages
-      // Check if there's an existing "Proactive Check-ins" conversation with <50 messages
-      const MAX_MESSAGES_PER_CONVERSATION = 50;
+      // Check if there's an existing "Proactive Check-ins" conversation with <20 messages
+      const MAX_MESSAGES_PER_CONVERSATION = 20;
 
       const existingConversationResult = await query(
         `SELECT c.id, COUNT(cm.id) as message_count

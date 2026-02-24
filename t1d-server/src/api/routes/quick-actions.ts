@@ -50,7 +50,11 @@ router.get('/suggestions', authMiddleware, async (req: AuthRequest, res) => {
 router.post('/log', authMiddleware, async (req: AuthRequest, res) => {
   try {
     const userId = req.user!.id;
-    const { type, timestamp, data } = req.body;
+    const { type, timestamp } = req.body;
+    // Accept nested { data: {...} } (web app) or flat top-level keys (iOS Shortcuts)
+    const data = (req.body.data && typeof req.body.data === 'object' && Object.keys(req.body.data).length > 0)
+      ? req.body.data
+      : req.body;
 
     // Default to current time if not provided
     const logTimestamp = timestamp || new Date().toISOString();
