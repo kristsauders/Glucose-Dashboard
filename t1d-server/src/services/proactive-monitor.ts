@@ -400,7 +400,7 @@ export class ProactiveMonitor {
 🚨 CRITICAL REQUIREMENT: You MUST call AT LEAST 5 TOOLS in your VERY FIRST response. Not 1 tool, not 2 tools - MINIMUM 5 tools in parallel in your first message.
 
 **FIRST MESSAGE - Call these 5 tools in parallel (all at once):**
-1. retrieve_user_memory(key="user_context")
+1. get_user_context() — fetches user profile, recent stats, and ALL stored memories in one call
 2. get_recent_glucose(hours=2)
 3. analyze_live_trend(period=4)
 4. analyze_trends(days=7)
