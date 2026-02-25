@@ -544,8 +544,9 @@ Respond with ONLY "SEND" or "DONT_SEND" (no explanation needed).`;
       if (decision.includes('SEND') && !decision.includes('DONT')) {
         console.log(`  Phase 3: Generating polished message with large model...`);
 
-        // PHASE 3: Extract tool results from Phase 1 and synthesize with large model
-        // This ensures the large model only sees raw data, not the small model's draft
+        // PHASE 3: Synthesize with large model using raw tool results + Phase 1 draft as cross-check
+        // Phase 1's draft is included so Phase 3 can validate its own interpretation (e.g. peak
+        // glucose vs net window change), not to be copied verbatim.
         const providers = getHybridAIProvider('proactive', userModelConfig);
 
         console.log(`  📊 Phase 3 Debug: Extracting tool results from ${allMessages.length} messages`);
@@ -797,6 +798,22 @@ This user has LADA (Latent Autoimmune Diabetes in Adults):
         if (conversationHistory) {
           messagesToSend.push(new SystemMessage(conversationHistory));
         }
+
+        // Add Phase 1 draft as a cross-check reference.
+        // Phase 1 ran the full agent and correctly interpreted the data (e.g. it sees the
+        // actual peak value, not just the net change over a window). Phase 3 re-synthesizes
+        // from raw tool data and can misread things like analyze_live_trend's net-change as
+        // the size of a meal spike. Giving Phase 3 the Phase 1 draft lets it validate its
+        // own interpretation against Phase 1's findings before writing the final message.
+        messagesToSend.push(new SystemMessage(
+          `## Phase 1 Preliminary Analysis (for cross-checking only)\n\n` +
+          `The analysis phase produced the following preliminary findings. Use this to validate ` +
+          `your own interpretation of the raw data above — if a specific value (e.g. a peak glucose, ` +
+          `a spike magnitude) appears in both the raw data and this draft, prefer the value from the ` +
+          `raw data. If this draft and the raw data seem to conflict, trust the raw data but note the ` +
+          `discrepancy. Do NOT copy this draft verbatim — rewrite it in polished form.\n\n` +
+          generatedMessage
+        ));
 
         // Add synthesis task prompt
         messagesToSend.push(new HumanMessage(

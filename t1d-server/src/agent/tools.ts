@@ -789,6 +789,10 @@ export const analyzeLiveTrendTool = new DynamicStructuredTool({
     const isRapidRise = changeRate > 10; // Rising > 10 mg/dL per hour
     const isRapidFall = changeRate < -10; // Falling > 10 mg/dL per hour
 
+    // Find peak and trough within the period
+    const peakReading = readings.reduce((a, b) => b.glucose > a.glucose ? b : a);
+    const troughReading = readings.reduce((a, b) => b.glucose < a.glucose ? b : a);
+
     return JSON.stringify({
       hasData: true,
       period: `${hours} hours`,
@@ -804,6 +808,15 @@ export const analyzeLiveTrendTool = new DynamicStructuredTool({
         direction: change > 0 ? 'rising' : change < 0 ? 'falling' : 'stable',
         isRapidRise,
         isRapidFall,
+        note: Math.abs(peakReading.glucose - troughReading.glucose) > Math.abs(change) + 10
+          ? 'Net change is smaller than the range — glucose spiked and returned within this window'
+          : undefined,
+      },
+      range: {
+        peak: { glucose: peakReading.glucose, timestamp: peakReading.timestamp },
+        trough: { glucose: troughReading.glucose, timestamp: troughReading.timestamp },
+        peakAboveStart: parseFloat((peakReading.glucose - oldest.glucose).toFixed(1)),
+        troughBelowStart: parseFloat((oldest.glucose - troughReading.glucose).toFixed(1)),
       },
       recentAvg: recentAvg.toFixed(1),
       readings: readings.slice(-10), // Last 10 readings for context
