@@ -75,6 +75,7 @@ router.get('/summary', async (req, res, next) => {
     if (period === '30d') daysAgo = 30;
     else if (period === '90d') daysAgo = 90;
 
+    // Exclude type-0 (LibreView one-time scan readings) — only count continuous CGM (type 1) and manual entries (record_type IS NULL)
     const result = await query(
       `SELECT
         COUNT(*) as count,
@@ -84,7 +85,8 @@ router.get('/summary', async (req, res, next) => {
         STDDEV(glucose) as std_dev
        FROM glucose_readings
        WHERE user_id = $1
-         AND timestamp >= NOW() - INTERVAL '${daysAgo} days'`,
+         AND timestamp >= NOW() - INTERVAL '${daysAgo} days'
+         AND (record_type IS NULL OR record_type = 1)`,
       [authReq.user!.id]
     );
 
@@ -99,7 +101,8 @@ router.get('/summary', async (req, res, next) => {
         COUNT(*) FILTER (WHERE glucose > 180) as above_180
        FROM glucose_readings
        WHERE user_id = $1
-         AND timestamp >= NOW() - INTERVAL '${daysAgo} days'`,
+         AND timestamp >= NOW() - INTERVAL '${daysAgo} days'
+         AND (record_type IS NULL OR record_type = 1)`,
       [authReq.user!.id]
     );
 

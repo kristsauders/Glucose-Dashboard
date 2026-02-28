@@ -1,14 +1,15 @@
 import { ScrollView, View, Text, TouchableOpacity, RefreshControl } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
-import { useEffect, useRef } from 'react';
+import { useEffect, useRef, useMemo } from 'react';
 import { GlucoseCard } from '../../components/glucose/GlucoseCard';
 import { GlucoseChart } from '../../components/glucose/GlucoseChart';
 import { StatsRow } from '../../components/glucose/StatsRow';
-import { useLatestGlucose, useGlucose24h, useGlucoseSummary } from '../../hooks/useGlucose';
+import { useLatestGlucose, useGlucose24h } from '../../hooks/useGlucose';
 import { useMealLogs, useInsulinLogs, useExerciseLogs } from '../../hooks/useLogs';
 import { useGlucoseWidgets } from '../../hooks/useGlucoseWidgets';
 import type { ChartEvent } from '../../components/glucose/GlucoseChart';
+import type { GlucoseReading, GlucoseSummary } from '../../types/glucose';
 import { Colors } from '../../constants/colors';
 import { useAuth } from '../../hooks/useAuth';
 
@@ -28,7 +29,32 @@ export default function DashboardScreen() {
       syncReading(reading);
     }
   }, [(latest.data as any)?.reading]);
-  const summary = useGlucoseSummary('7d');
+  // Compute today's summary from the already-fetched 24h readings (type-1 only, same window as chart)
+  const todaySummary = useMemo<GlucoseSummary | undefined>(() => {
+    const rds = (readings.data as any)?.readings as GlucoseReading[] | undefined;
+    if (!rds || rds.length === 0) return undefined;
+    const vals = rds.map(r => Number(r.glucose));
+    const n = vals.length;
+    const avg = vals.reduce((s, v) => s + v, 0) / n;
+    const variance = vals.reduce((s, v) => s + (v - avg) ** 2, 0) / n;
+    const std = Math.sqrt(variance);
+    return {
+      period: 'today',
+      totalReadings: n,
+      avgGlucose: avg.toFixed(1),
+      minGlucose: Math.min(...vals).toFixed(1),
+      maxGlucose: Math.max(...vals).toFixed(1),
+      stdDev: std.toFixed(1),
+      cv: avg > 0 ? ((std / avg) * 100).toFixed(1) : '0',
+      estimatedA1c: ((avg + 46.7) / 28.7).toFixed(1),
+      timeInRange: {
+        '70-180': (vals.filter(v => v >= 70 && v <= 180).length / n * 100).toFixed(1),
+        '70-140': (vals.filter(v => v >= 70 && v <= 140).length / n * 100).toFixed(1),
+        below70:  (vals.filter(v => v < 70).length / n * 100).toFixed(1),
+        above180: (vals.filter(v => v > 180).length / n * 100).toFixed(1),
+      },
+    };
+  }, [(readings.data as any)?.readings]);
 
   // Fetch last 24h of logs for the chart event overlay
   const meals = useMealLogs(1);
@@ -40,7 +66,6 @@ export default function DashboardScreen() {
   const onRefresh = () => {
     latest.refetch();
     readings.refetch();
-    summary.refetch();
     meals.refetch();
     insulin.refetch();
     exercise.refetch();
@@ -97,8 +122,8 @@ export default function DashboardScreen() {
         {/* Current glucose */}
         <GlucoseCard reading={(latest.data as any)?.reading} loading={latest.isLoading} />
 
-        {/* Stats row */}
-        <StatsRow summary={summary.data as any} />
+        {/* Stats row — today from 7am, same window as the chart */}
+        <StatsRow summary={todaySummary} />
 
         {/* 24h chart */}
         <View
