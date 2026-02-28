@@ -49,9 +49,14 @@ export function GlucoseChart({ readings, events = [] }: GlucoseChartProps) {
   // Readings come from server in DESC order — reverse to chronological (oldest → left)
   const chronological = [...readings].reverse();
 
-  // Downsample to max 144 points (every other reading when > 144)
-  const sampled = chronological.length > 144
-    ? chronological.filter((_, i) => i % 2 === 0)
+  // Downsample to max 144 points — keep every Nth reading so we stay under the cap.
+  // One pass of every-other can still leave 250+ points from dense CGM data, so compute N.
+  const MAX_POINTS = 144;
+  const step = chronological.length > MAX_POINTS
+    ? Math.ceil(chronological.length / MAX_POINTS)
+    : 1;
+  const sampled = step > 1
+    ? chronological.filter((_, i) => i % step === 0)
     : chronological;
 
   // Calculate spacing so all data fits exactly within CONTAINER_W.
