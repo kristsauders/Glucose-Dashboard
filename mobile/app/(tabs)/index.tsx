@@ -5,7 +5,7 @@ import { useEffect, useRef } from 'react';
 import { GlucoseCard } from '../../components/glucose/GlucoseCard';
 import { GlucoseChart } from '../../components/glucose/GlucoseChart';
 import { StatsRow } from '../../components/glucose/StatsRow';
-import { useLatestGlucose, useGlucoseReadings, useGlucoseSummary } from '../../hooks/useGlucose';
+import { useLatestGlucose, useGlucose24h, useGlucoseSummary } from '../../hooks/useGlucose';
 import { useMealLogs, useInsulinLogs, useExerciseLogs } from '../../hooks/useLogs';
 import { useGlucoseWidgets } from '../../hooks/useGlucoseWidgets';
 import type { ChartEvent } from '../../components/glucose/GlucoseChart';
@@ -16,7 +16,7 @@ export default function DashboardScreen() {
   const router = useRouter();
   const { user } = useAuth();
   const latest = useLatestGlucose();
-  const readings = useGlucoseReadings(288);
+  const readings = useGlucose24h();
   const { syncReading } = useGlucoseWidgets();
 
   // Sync the latest reading to the lock-screen widget and Live Activity whenever it changes
@@ -111,7 +111,7 @@ export default function DashboardScreen() {
           }}
         >
           <Text style={{ fontSize: 16, fontWeight: '600', color: Colors.foreground, marginBottom: 12 }}>
-            Last 24 hours
+            Today from 7am
           </Text>
           <GlucoseChart
             readings={(readings.data as any)?.readings ?? []}

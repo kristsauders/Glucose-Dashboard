@@ -12,6 +12,8 @@
     "metro": "cd mobile && EXPO_NO_DEVTOOLS=1 npx expo start",
     "start": "concurrently \"npm run server\" \"npm run dev\" \"npm run metro\" --names \"server,app,metro\" --prefix-colors \"magenta,green,cyan\"",
     "start:prod": "npm run build && concurrently \"npm run server\" \"npm run preview\" \"npm run metro\" --names \"server,app,metro\" --prefix-colors \"magenta,green,cyan\"",
+    "start:web": "concurrently \"npm run server\" \"npm run dev\" --names \"server,app\" --prefix-colors \"magenta,green\"",
+    "start:web:prod": "npm run build && concurrently \"npm run server\" \"npm run preview\" --names \"server,app\" --prefix-colors \"magenta,green\"",
     "postinstall": "cd t1d-server && npm install && cd ../mobile && npm install"
   },
   "dependencies": {

@@ -60,17 +60,27 @@ export function GlucoseChart({ readings, events = [] }: GlucoseChartProps) {
     ? PLOT_W / (sampled.length - 1)
     : 2;
 
-  // Map each event to the nearest sampled data point index (within 30 min)
+  // Map each event to the nearest sampled data point index.
+  // No fixed distance limit — LibreView readings (parsed by server) and meal logs (from iPhone)
+  // can have differing timezone offsets, so we match to nearest reading within a reasonable
+  // multiple of the chart span to avoid matching completely unrelated data.
+  const chartStart = sampled.length > 0 ? new Date(sampled[0].timestamp).getTime() : 0;
+  const chartEnd   = sampled.length > 0 ? new Date(sampled[sampled.length - 1].timestamp).getTime() : 0;
+  const chartSpan  = chartEnd - chartStart;
+
   const eventsByIndex = new Map<number, ChartEvent['type']>();
   for (const event of events) {
     const evTime = new Date(event.timestamp).getTime();
+    // Skip events more than 2× the chart span away (avoids matching completely unrelated data)
+    if (chartSpan > 0 && (evTime < chartStart - chartSpan || evTime > chartEnd + chartSpan)) continue;
+
     let nearestIdx = 0;
     let minDiff = Infinity;
     sampled.forEach((r, i) => {
       const diff = Math.abs(new Date(r.timestamp).getTime() - evTime);
       if (diff < minDiff) { minDiff = diff; nearestIdx = i; }
     });
-    if (minDiff < 30 * 60 * 1000 && !eventsByIndex.has(nearestIdx)) {
+    if (!eventsByIndex.has(nearestIdx)) {
       eventsByIndex.set(nearestIdx, event.type);
     }
   }
@@ -136,7 +146,8 @@ export function GlucoseChart({ readings, events = [] }: GlucoseChartProps) {
   const minVal = Math.max(40, Math.min(...values) - 20);
   const maxVal = Math.min(400, Math.max(...values) + 20);
 
-  const presentTypes = new Set(events.map(e => e.type));
+  // Legend shows only types that have a matched marker (helps diagnose missing markers)
+  const presentTypes = new Set(eventsByIndex.values());
 
   return (
     <View>

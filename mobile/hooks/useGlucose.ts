@@ -1,7 +1,7 @@
 import { useQuery } from '@tanstack/react-query';
 import { getReadings, getLatestReading, getGlucoseSummary, getReadingsForRange } from '../services/api';
 import { GLUCOSE_POLL_INTERVAL_MS } from '../constants/config';
-import { subDays, startOfDay, endOfDay, startOfWeek, format } from 'date-fns';
+import { subDays, subHours, startOfDay, endOfDay, startOfWeek, format } from 'date-fns';
 import type { GlucoseReading } from '../types/glucose';
 
 // ── Shared types for history analytics ───────────────────────────────────────
@@ -177,6 +177,33 @@ export function useGlucoseSummary(period: '7d' | '30d' | '90d' = '7d') {
     queryKey: ['glucose', 'summary', period],
     queryFn: () => getGlucoseSummary(period),
     staleTime: 5 * 60_000,
+  });
+}
+
+/**
+ * Fetches today's readings from 7am to now, matching the web UI live view.
+ * If it's before 7am, falls back to the previous 12 hours so the chart isn't empty.
+ * Filters to trend readings (record_type '1') — 5-min CGM intervals.
+ */
+export function useGlucose24h() {
+  return useQuery({
+    queryKey: ['glucose', '24h'],
+    queryFn: async () => {
+      const now      = new Date();
+      const start7am = new Date(now);
+      start7am.setHours(7, 0, 0, 0);
+      // Before 7am: show last 12h so the chart isn't empty
+      const start = now < start7am
+        ? subHours(now, 12).toISOString()
+        : start7am.toISOString();
+      const { readings } = await getReadingsForRange(start, now.toISOString());
+      const chron = [...readings].reverse();
+      // record_type comes from the server as a number (0 or 1); use loose comparison
+      const trend = chron.filter(r => r.record_type == null || Number(r.record_type) === 1);
+      return { readings: trend.length > 0 ? trend : chron };
+    },
+    refetchInterval: GLUCOSE_POLL_INTERVAL_MS,
+    staleTime: 60_000,
   });
 }
 
