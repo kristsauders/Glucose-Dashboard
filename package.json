@@ -9,10 +9,10 @@
     "lint": "eslint .",
     "preview": "vite preview --host --port 5173",
     "server": "cd t1d-server && npm run dev",
-    "metro": "cd mobile && npx expo start",
+    "metro": "cd mobile && EXPO_NO_DEVTOOLS=1 npx expo start",
     "start": "concurrently \"npm run server\" \"npm run dev\" \"npm run metro\" --names \"server,app,metro\" --prefix-colors \"magenta,green,cyan\"",
     "start:prod": "npm run build && concurrently \"npm run server\" \"npm run preview\" \"npm run metro\" --names \"server,app,metro\" --prefix-colors \"magenta,green,cyan\"",
-    "postinstall": "cd t1d-server && npm install"
+    "postinstall": "cd t1d-server && npm install && cd ../mobile && npm install"
   },
   "dependencies": {
     "@radix-ui/react-dialog": "^1.1.15",
