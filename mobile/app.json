@@ -1,0 +1,50 @@
+{
+  "expo": {
+    "name": "Sage",
+    "slug": "t1d-sage",
+    "version": "1.0.0",
+    "orientation": "portrait",
+    "scheme": "sage",
+    "icon": "./assets/icon.png",
+    "userInterfaceStyle": "light",
+    "splash": {
+      "image": "./assets/splash-icon.png",
+      "resizeMode": "contain",
+      "backgroundColor": "#f5f5f5"
+    },
+    "ios": {
+      "supportsTablet": false,
+      "bundleIdentifier": "com.auders.t1dsage",
+      "infoPlist": {
+        "NSHealthShareUsageDescription": "Sage reads health data to display alongside your glucose readings.",
+        "NSHealthUpdateUsageDescription": "Sage writes meals, insulin doses, and exercise sessions to Apple Health when you log them.",
+        "UIBackgroundModes": [
+          "fetch",
+          "remote-notification"
+        ]
+      }
+    },
+    "plugins": [
+      "expo-router",
+      "expo-secure-store",
+      [
+        "expo-notifications",
+        {
+          "icon": "./assets/icon.png",
+          "color": "#3b82f6"
+        }
+      ],
+      "react-native-health",
+      "./plugins/withGlucoseWidgets"
+    ],
+    "extra": {
+      "eas": {
+        "projectId": "0b24f00e-f486-4bca-8809-8a6a8b49b04f"
+      },
+      "router": {
+        "origin": false
+      }
+    },
+    "owner": "kristsauders"
+  }
+}

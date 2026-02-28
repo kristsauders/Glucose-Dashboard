@@ -1,0 +1,58 @@
+import { useCallback, useRef } from 'react';
+import { NativeModules, Platform } from 'react-native';
+import { GLUCOSE_LOW, GLUCOSE_HIGH } from '../constants/config';
+import type { GlucoseReading } from '../types/glucose';
+
+const { GlucoseWidgetsModule } = NativeModules;
+
+const isAvailable = Platform.OS === 'ios' && !!GlucoseWidgetsModule;
+
+/**
+ * Controls the iOS lock-screen widget and Dynamic Island Live Activity.
+ *
+ * Usage in the dashboard:
+ *   const { syncReading, endActivity } = useGlucoseWidgets();
+ *   useEffect(() => { if (reading) syncReading(reading); }, [reading]);
+ */
+export function useGlucoseWidgets() {
+  const liveActivityStarted = useRef(false);
+
+  /** Push a new glucose reading to the widget and Live Activity. */
+  const syncReading = useCallback((reading: GlucoseReading) => {
+    if (!isAvailable) return;
+
+    const glucose = Number(reading.glucose);
+    const trend   = trendArrow(reading.trend);
+    const ts      = new Date(reading.timestamp).getTime() / 1000;
+    const isLow   = glucose < GLUCOSE_LOW;
+    const isHigh  = glucose > GLUCOSE_HIGH;
+
+    // Always update the lock-screen widget UserDefaults + reload timeline
+    GlucoseWidgetsModule.updateGlucose(glucose, trend, ts, isLow, isHigh);
+
+    // Start a Live Activity on first reading; subsequent calls just update
+    if (!liveActivityStarted.current) {
+      liveActivityStarted.current = true;
+      GlucoseWidgetsModule.startLiveActivity(glucose, trend, ts, isLow, isHigh)
+        .catch(() => {
+          // Live Activities may not be available (simulator, older OS, user disabled)
+          liveActivityStarted.current = false;
+        });
+    }
+  }, []);
+
+  /** End the Live Activity (e.g. on logout). */
+  const endActivity = useCallback(() => {
+    if (!isAvailable) return;
+    liveActivityStarted.current = false;
+    GlucoseWidgetsModule.endLiveActivity();
+  }, []);
+
+  return { syncReading, endActivity };
+}
+
+// Map stored trend code → glyph (mirrors colors.ts getTrendArrow)
+function trendArrow(trend?: number | null): string {
+  const map: Record<number, string> = { 1: '↑↑', 2: '↑', 3: '→', 4: '↘', 5: '↓', 6: '↓↓' };
+  return trend != null ? (map[trend] ?? '→') : '→';
+}

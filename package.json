@@ -9,8 +9,9 @@
     "lint": "eslint .",
     "preview": "vite preview --host --port 5173",
     "server": "cd t1d-server && npm run dev",
-    "start": "concurrently \"npm run server\" \"npm run dev\" --names \"server,app\" --prefix-colors \"magenta,green\"",
-    "start:prod": "npm run build && concurrently \"npm run server\" \"npm run preview\" --names \"server,app\" --prefix-colors \"magenta,green\"",
+    "metro": "cd mobile && npx expo start",
+    "start": "concurrently \"npm run server\" \"npm run dev\" \"npm run metro\" --names \"server,app,metro\" --prefix-colors \"magenta,green,cyan\"",
+    "start:prod": "npm run build && concurrently \"npm run server\" \"npm run preview\" \"npm run metro\" --names \"server,app,metro\" --prefix-colors \"magenta,green,cyan\"",
     "postinstall": "cd t1d-server && npm install"
   },
   "dependencies": {

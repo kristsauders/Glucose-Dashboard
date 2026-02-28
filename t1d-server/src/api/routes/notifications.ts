@@ -19,27 +19,42 @@ router.get('/vapid-public-key', (req, res) => {
   res.json({ publicKey: env.VAPID_PUBLIC_KEY });
 });
 
-// Subscribe to push notifications
-const subscribeSchema = z.object({
-  subscription: z.object({
-    endpoint: z.string().url(),
-    keys: z.object({
-      p256dh: z.string(),
-      auth: z.string(),
+// Subscribe to push notifications — accepts either a web push subscription or an Expo push token
+const subscribeSchema = z.union([
+  z.object({
+    // Web Push (PWA / service worker)
+    subscription: z.object({
+      endpoint: z.string().url(),
+      keys: z.object({
+        p256dh: z.string(),
+        auth: z.string(),
+      }),
     }),
   }),
-});
+  z.object({
+    // Expo Push (native iOS / Android)
+    expoToken: z.string().startsWith('ExponentPushToken['),
+  }),
+]);
 
 router.post('/subscribe', async (req, res, next) => {
   try {
     const authReq = req as AuthRequest;
-    const { subscription } = subscribeSchema.parse(req.body);
+    const parsed = subscribeSchema.parse(req.body);
 
-    await pushNotificationService.saveSubscription(
-      authReq.user!.id,
-      subscription,
-      req.headers['user-agent']
-    );
+    if ('expoToken' in parsed) {
+      await pushNotificationService.saveExpoToken(
+        authReq.user!.id,
+        parsed.expoToken,
+        req.headers['user-agent'] as string | undefined
+      );
+    } else {
+      await pushNotificationService.saveSubscription(
+        authReq.user!.id,
+        parsed.subscription,
+        req.headers['user-agent'] as string | undefined
+      );
+    }
 
     res.json({ success: true, message: 'Subscription saved successfully' });
   } catch (error) {

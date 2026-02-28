@@ -1,6 +1,9 @@
 import webpush from 'web-push';
+import { Expo } from 'expo-server-sdk';
 import { query } from '../config/database.js';
 import { env } from '../config/env.js';
+
+const expo = new Expo();
 
 // Configure web-push with VAPID keys
 if (env.VAPID_PUBLIC_KEY && env.VAPID_PRIVATE_KEY && env.VAPID_EMAIL) {
@@ -52,16 +55,11 @@ export class PushNotificationService {
    * Send push notification to all subscribed devices for a user
    */
   async sendToUser(userId: string, payload: NotificationPayload): Promise<void> {
-    // Check if VAPID keys are configured
-    if (!env.VAPID_PUBLIC_KEY || !env.VAPID_PRIVATE_KEY || !env.VAPID_EMAIL) {
-      console.log('[PushNotification] VAPID keys not configured, skipping push notification');
-      return;
-    }
 
     try {
-      // Get all active subscriptions for user
-      const result = await query<{ endpoint: string; keys: any }>(
-        'SELECT endpoint, keys FROM push_subscriptions WHERE user_id = $1',
+      // Get all active subscriptions for user (web push + expo tokens)
+      const result = await query<{ endpoint: string; keys: any; expo_push_token: string | null }>(
+        'SELECT endpoint, keys, expo_push_token FROM push_subscriptions WHERE user_id = $1',
         [userId]
       );
 
@@ -72,8 +70,34 @@ export class PushNotificationService {
 
       console.log(`[PushNotification] Sending to ${result.rows.length} device(s)...`);
 
-      // Send to all devices in parallel
       const sendPromises = result.rows.map(async (subscription) => {
+        // ── Expo (native iOS/Android) ──────────────────────────────────────────
+        if (subscription.expo_push_token && Expo.isExpoPushToken(subscription.expo_push_token)) {
+          try {
+            const messages = [{
+              to: subscription.expo_push_token,
+              title: payload.title,
+              body: payload.body,
+              data: payload.data as Record<string, unknown>,
+            }];
+            const chunks = expo.chunkPushNotifications(messages);
+            for (const chunk of chunks) {
+              await expo.sendPushNotificationsAsync(chunk);
+            }
+            await query(
+              'UPDATE push_subscriptions SET last_used_at = NOW() WHERE expo_push_token = $1',
+              [subscription.expo_push_token]
+            );
+            console.log(`[PushNotification] ✓ Sent via Expo to ${subscription.expo_push_token.substring(0, 30)}...`);
+          } catch (error: any) {
+            console.error(`[PushNotification] ✗ Expo send failed:`, error.message);
+          }
+          return;
+        }
+
+        // ── Web push (PWA) ─────────────────────────────────────────────────────
+        if (!subscription.keys || !env.VAPID_PUBLIC_KEY) return;
+
         try {
           await webpush.sendNotification(
             {
@@ -83,15 +107,13 @@ export class PushNotificationService {
             JSON.stringify(payload)
           );
 
-          // Update last_used_at
           await query(
             'UPDATE push_subscriptions SET last_used_at = NOW() WHERE endpoint = $1',
             [subscription.endpoint]
           );
 
-          console.log(`[PushNotification] ✓ Sent to ${subscription.endpoint.substring(0, 50)}...`);
+          console.log(`[PushNotification] ✓ Sent via WebPush to ${subscription.endpoint.substring(0, 50)}...`);
         } catch (error: any) {
-          // Handle subscription errors (expired, invalid, etc.)
           if (error.statusCode === 404 || error.statusCode === 410) {
             console.log(`[PushNotification] Subscription expired/invalid, removing: ${subscription.endpoint.substring(0, 50)}...`);
             await this.removeSubscription(subscription.endpoint);
@@ -124,6 +146,21 @@ export class PushNotificationService {
     );
 
     console.log(`[PushNotification] Saved subscription for user ${userId}`);
+  }
+
+  /**
+   * Save an Expo push token (native app registration)
+   */
+  async saveExpoToken(userId: string, expoToken: string, userAgent?: string): Promise<void> {
+    // Use the token itself as the "endpoint" so the UNIQUE constraint works
+    await query(
+      `INSERT INTO push_subscriptions (user_id, endpoint, keys, expo_push_token, user_agent)
+       VALUES ($1, $2, NULL, $2, $3)
+       ON CONFLICT (endpoint)
+       DO UPDATE SET user_id = $1, expo_push_token = $2, user_agent = $3, last_used_at = NOW()`,
+      [userId, expoToken, userAgent]
+    );
+    console.log(`[PushNotification] Saved Expo token for user ${userId}`);
   }
 
   /**
