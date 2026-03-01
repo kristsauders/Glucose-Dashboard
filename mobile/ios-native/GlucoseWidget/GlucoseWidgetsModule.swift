@@ -9,23 +9,7 @@ private let APP_GROUP = "group.com.auders.t1dsage"
 private let STALE_INTERVAL: TimeInterval = 16 * 60  // 16 minutes
 
 @objc(GlucoseWidgetsModule)
-class GlucoseWidgetsModule: RCTEventEmitter {
-
-    private var hasListeners = false
-
-    // MARK: - RCTEventEmitter
-
-    override func supportedEvents() -> [String]! {
-        return ["liveActivityPushToken"]
-    }
-
-    override func startObserving() {
-        hasListeners = true
-    }
-
-    override func stopObserving() {
-        hasListeners = false
-    }
+class GlucoseWidgetsModule: NSObject {
 
     // MARK: - Widget + Live Activity update (called every poll from JS)
 
@@ -51,6 +35,14 @@ class GlucoseWidgetsModule: RCTEventEmitter {
     }
 
     // MARK: - Start Live Activity (called once on first reading)
+    //
+    // Resolves immediately with the activity ID (plain String).
+    // A background Task then observes pushTokenUpdates with NO timeout — the
+    // token may arrive well after 5 s depending on APNs conditions. Once it
+    // arrives the token is POSTed to the server via URLSession.
+    //
+    // Server config (URL + auth token) is read from NSUserDefaults.standard,
+    // written there by JS via React Native's Settings.set() before this call.
 
     @objc func startLiveActivity(_ glucose: Double,
                                   trend: String,
@@ -79,15 +71,30 @@ class GlucoseWidgetsModule: RCTEventEmitter {
                 } else {
                     activity = try Activity.request(
                         attributes: GlucoseActivityAttributes(),
-                        content: content)
+                        content: content,
+                        pushType: .token)
                 }
 
+                // Resolve immediately — no waiting for the push token here.
                 resolve(activity.id)
 
-                // Observe push token updates for the lifetime of this activity.
-                // The first value comes immediately and gives us the token to register
-                // with the server. iOS may rotate the token; each new value is emitted.
-                self.observePushToken(for: activity)
+                // Snapshot server config written by JS via Settings.set().
+                let serverUrl = UserDefaults.standard.string(forKey: "liveActivityServerUrl") ?? ""
+                let authToken = UserDefaults.standard.string(forKey: "liveActivityAuthToken") ?? ""
+                let activityId = activity.id
+
+                // Observe pushTokenUpdates indefinitely; APNs may take >5 s.
+                Task {
+                    for await tokenData in activity.pushTokenUpdates {
+                        let hex = tokenData.map { String(format: "%02x", $0) }.joined()
+                        NSLog("[GlucoseWidgets] Push token received (%@…)", String(hex.prefix(16)))
+                        await GlucoseWidgetsModule.postPushToken(
+                            hex, activityId: activityId,
+                            serverUrl: serverUrl, authToken: authToken)
+                        // Continue loop — iOS rotates tokens occasionally.
+                    }
+                    NSLog("[GlucoseWidgets] pushTokenUpdates stream ended.")
+                }
 
             } catch {
                 reject("START_FAILED", error.localizedDescription, error)
@@ -123,20 +130,29 @@ class GlucoseWidgetsModule: RCTEventEmitter {
         }
     }
 
-    /// Watches the activity's push token and emits it to JS whenever it changes.
-    /// The first emission happens quickly after calling this — that token is what
-    /// we register with the server so it can push updates while the app is frozen.
-    @available(iOS 16.2, *)
-    private func observePushToken(for activity: Activity<GlucoseActivityAttributes>) {
-        Task {
-            for await tokenData in activity.pushTokenUpdates {
-                let hexToken = tokenData.map { String(format: "%02x", $0) }.joined()
-                guard self.hasListeners else { continue }
-                self.sendEvent(withName: "liveActivityPushToken", body: [
-                    "token": hexToken,
-                    "activityId": activity.id,
-                ])
-            }
+    private static func postPushToken(_ token: String,
+                                       activityId: String,
+                                       serverUrl: String,
+                                       authToken: String) async {
+        guard !serverUrl.isEmpty,
+              let url = URL(string: "\(serverUrl)/notifications/live-activity-token") else {
+            NSLog("[GlucoseWidgets] postPushToken: invalid or missing serverUrl")
+            return
+        }
+        var request = URLRequest(url: url)
+        request.httpMethod = "POST"
+        request.setValue("application/json", forHTTPHeaderField: "Content-Type")
+        // No auth header needed — the endpoint looks up the user by activityId,
+        // which was pre-registered by JS via /live-activity-register (with auth).
+        do {
+            request.httpBody = try JSONSerialization.data(withJSONObject: [
+                "token": token, "activityId": activityId
+            ])
+            let (_, response) = try await URLSession.shared.data(for: request)
+            let status = (response as? HTTPURLResponse)?.statusCode ?? 0
+            NSLog("[GlucoseWidgets] Token registration response: %d", status)
+        } catch {
+            NSLog("[GlucoseWidgets] postPushToken error: %@", error.localizedDescription)
         }
     }
 

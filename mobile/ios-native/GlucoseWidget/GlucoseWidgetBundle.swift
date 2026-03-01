@@ -37,7 +37,7 @@ struct GlucoseLiveActivityWidget: Widget {
                         .background(color.opacity(0.2), in: Capsule())
                 }
                 DynamicIslandExpandedRegion(.bottom) {
-                    Text("Updated \(relativeTime(context.state.readingDate))")
+                    Text(context.state.readingDate, style: .relative)
                         .font(.caption2).foregroundStyle(.secondary)
                 }
             } compactLeading: {

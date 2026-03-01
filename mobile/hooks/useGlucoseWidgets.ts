@@ -1,5 +1,5 @@
-import { useCallback, useEffect, useRef } from 'react';
-import { NativeModules, NativeEventEmitter, Platform } from 'react-native';
+import { useCallback, useRef } from 'react';
+import { NativeModules, Platform, Settings } from 'react-native';
 import { GLUCOSE_LOW, GLUCOSE_HIGH } from '../constants/config';
 import type { GlucoseReading } from '../types/glucose';
 import { getToken } from '../services/auth';
@@ -16,9 +16,9 @@ if (Platform.OS === 'ios' && !GlucoseWidgetsModule) {
 /**
  * Controls the iOS lock-screen widget and Dynamic Island Live Activity.
  *
- * When a Live Activity starts, iOS assigns it a unique push token. We register
- * that token with the server so it can push ActivityKit updates directly via
- * APNs — keeping the Live Activity current even when the app is frozen by iOS.
+ * Server config is written to NSUserDefaults.standard via Settings.set()
+ * so Swift can POST the APNs push token directly via URLSession — no
+ * dictionary bridging, no new native methods, no fixed timeout.
  *
  * Usage:
  *   const { syncReading, endActivity } = useGlucoseWidgets();
@@ -27,38 +27,18 @@ if (Platform.OS === 'ios' && !GlucoseWidgetsModule) {
 export function useGlucoseWidgets() {
   const liveActivityStarted = useRef(false);
 
-  // Subscribe to push token events emitted by the native module.
-  // Fires immediately after startLiveActivity and again if iOS rotates the token.
-  useEffect(() => {
-    if (!isAvailable) return;
-
-    const emitter = new NativeEventEmitter(GlucoseWidgetsModule);
-    const sub = emitter.addListener(
-      'liveActivityPushToken',
-      async ({ token, activityId }: { token: string; activityId: string }) => {
-        console.log('[GlucoseWidgets] Live Activity push token:', token.slice(0, 16) + '…');
-        try {
-          const authToken = await getToken();
-          await fetch(`${API_BASE_URL}/notifications/live-activity-token`, {
-            method: 'POST',
-            headers: {
-              'Content-Type': 'application/json',
-              ...(authToken ? { Authorization: `Bearer ${authToken}` } : {}),
-            },
-            body: JSON.stringify({ token, activityId }),
-          });
-        } catch (err) {
-          console.warn('[GlucoseWidgets] Failed to register Live Activity push token:', err);
-        }
-      }
-    );
-
-    return () => sub.remove();
-  }, []);
-
   /** Push a new glucose reading to the widget and Live Activity. */
-  const syncReading = useCallback((reading: GlucoseReading) => {
+  const syncReading = useCallback(async (reading: GlucoseReading) => {
     if (!isAvailable) return;
+
+    // Write server config to NSUserDefaults.standard before starting the
+    // Live Activity so Swift's background URLSession task can read them.
+    // React Native's Settings.set() calls [NSUserDefaults.standard setValue:forKey:].
+    const authToken = await getToken();
+    Settings.set({
+      liveActivityServerUrl: API_BASE_URL,
+      liveActivityAuthToken: authToken ?? '',
+    });
 
     const glucose = Number(reading.glucose);
     const trend   = trendArrow(reading.trend);
@@ -66,15 +46,35 @@ export function useGlucoseWidgets() {
     const isLow   = glucose < GLUCOSE_LOW;
     const isHigh  = glucose > GLUCOSE_HIGH;
 
-    // Always update the lock-screen widget UserDefaults + reload timeline
+    // Always update the lock-screen widget UserDefaults + reload timeline.
     GlucoseWidgetsModule.updateGlucose(glucose, trend, ts, isLow, isHigh);
 
-    // Start a Live Activity on first reading; subsequent calls just update.
-    // The native module emits 'liveActivityPushToken' once the activity is running.
+    // Start a Live Activity on first reading; subsequent updateGlucose calls
+    // keep the content fresh via updateActivity() in Swift.
     if (!liveActivityStarted.current) {
       liveActivityStarted.current = true;
       GlucoseWidgetsModule.startLiveActivity(glucose, trend, ts, isLow, isHigh)
-        .then((id: string) => console.log('[GlucoseWidgets] Live Activity started:', id))
+        .then(async (activityId: string) => {
+          console.log('[GlucoseWidgets] Live Activity started:', activityId);
+
+          // Pre-register activityId → userId on the server (with auth) so
+          // Swift's unauthenticated /live-activity-token call can look up the user.
+          try {
+            const res = await fetch(`${API_BASE_URL}/notifications/live-activity-register`, {
+              method: 'POST',
+              headers: {
+                'Content-Type': 'application/json',
+                ...(authToken ? { Authorization: `Bearer ${authToken}` } : {}),
+              },
+              body: JSON.stringify({ activityId }),
+            });
+            console.log('[GlucoseWidgets] Activity pre-registered:', res.status);
+          } catch (err) {
+            console.warn('[GlucoseWidgets] Failed to pre-register activity:', err);
+          }
+          // Swift observes pushTokenUpdates indefinitely and POSTs to
+          // /live-activity-token (no auth) when iOS assigns the token.
+        })
         .catch((err: any) => {
           console.warn('[GlucoseWidgets] startLiveActivity failed:', err);
           liveActivityStarted.current = false;

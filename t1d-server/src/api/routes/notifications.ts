@@ -9,6 +9,46 @@ import { sendLiveActivityPush } from '../../services/live-activity-push.js';
 
 const router = Router();
 
+// ── Unauthenticated routes (must come before router.use(authMiddleware)) ──────
+
+// Update the APNs push token for an existing Live Activity.
+// Called by the native Swift module via URLSession — no JWT available there.
+// Security: activityId must have been pre-registered by the authenticated user
+// via POST /live-activity-register before this endpoint will accept it.
+const liveActivityTokenSchema = z.object({
+  token:      z.string().min(64),  // hex-encoded APNs push token
+  activityId: z.string().min(1),
+});
+
+router.post('/live-activity-token', async (req, res, next) => {
+  try {
+    const { token, activityId } = liveActivityTokenSchema.parse(req.body);
+
+    // Look up the user via the pre-registered activity mapping.
+    const lookup = await query<{ user_id: string }>(
+      'SELECT user_id FROM live_activity_tokens WHERE activity_id = $1',
+      [activityId],
+    );
+    if (lookup.rows.length === 0) {
+      return res.status(404).json({ error: 'Activity not registered — call /live-activity-register first' });
+    }
+
+    const userId = lookup.rows[0].user_id;
+    await query(
+      `UPDATE live_activity_tokens SET token = $1, updated_at = NOW()
+       WHERE activity_id = $2`,
+      [token, activityId],
+    );
+
+    console.log(`[LiveActivity] Registered token for user ${userId}, activity ${activityId.slice(0, 8)}…`);
+    res.json({ success: true });
+  } catch (error) {
+    next(error);
+  }
+});
+
+// ── Authenticated routes ───────────────────────────────────────────────────────
+
 router.use(authMiddleware);
 
 // Get VAPID public key (needed for frontend subscription)
@@ -158,29 +198,29 @@ router.post('/action-response', async (req, res, next) => {
   }
 });
 
-// Register (or refresh) a Live Activity push token for the authenticated user.
-// Called by the native app whenever iOS assigns or rotates the token.
-const liveActivityTokenSchema = z.object({
-  token:      z.string().min(64),  // hex-encoded APNs device token for the activity
+// Pre-register a Live Activity ID for the authenticated user.
+// JS calls this immediately after startLiveActivity() resolves so Swift can
+// later update the APNs token via /live-activity-token (no auth required there).
+const liveActivityRegisterSchema = z.object({
   activityId: z.string().min(1),
 });
 
-router.post('/live-activity-token', async (req, res, next) => {
+router.post('/live-activity-register', async (req, res, next) => {
   try {
     const authReq = req as AuthRequest;
-    const { token, activityId } = liveActivityTokenSchema.parse(req.body);
+    const { activityId } = liveActivityRegisterSchema.parse(req.body);
 
-    // Upsert: one row per (user, activity). If the activity_id already exists,
-    // update the token (iOS can rotate it) and refresh updated_at.
+    // Insert a placeholder row so /live-activity-token can look up the user.
+    // 'pending' token is filtered out by pushLiveActivityForUser until the
+    // real APNs token arrives via the Swift URLSession call.
     await query(
       `INSERT INTO live_activity_tokens (user_id, token, activity_id, updated_at)
-       VALUES ($1, $2, $3, NOW())
-       ON CONFLICT (user_id, activity_id)
-       DO UPDATE SET token = EXCLUDED.token, updated_at = NOW()`,
-      [authReq.user!.id, token, activityId],
+       VALUES ($1, 'pending', $2, NOW())
+       ON CONFLICT (user_id, activity_id) DO UPDATE SET updated_at = NOW()`,
+      [authReq.user!.id, activityId],
     );
 
-    console.log(`[LiveActivity] Registered token for user ${authReq.user!.id}, activity ${activityId.slice(0, 8)}…`);
+    console.log(`[LiveActivity] Pre-registered activity ${activityId.slice(0, 8)}… for user ${authReq.user!.id}`);
     res.json({ success: true });
   } catch (error) {
     next(error);

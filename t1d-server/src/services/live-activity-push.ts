@@ -178,7 +178,8 @@ export async function pushLiveActivityForUser(
   }
 
   const result = await query<{ token: string; activity_id: string }>(
-    'SELECT token, activity_id FROM live_activity_tokens WHERE user_id = $1',
+    `SELECT token, activity_id FROM live_activity_tokens
+     WHERE user_id = $1 AND token != 'pending'`,
     [userId],
   );
 
