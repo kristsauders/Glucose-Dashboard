@@ -7,6 +7,10 @@ const { GlucoseWidgetsModule } = NativeModules;
 
 const isAvailable = Platform.OS === 'ios' && !!GlucoseWidgetsModule;
 
+if (Platform.OS === 'ios' && !GlucoseWidgetsModule) {
+  console.warn('[GlucoseWidgets] Native module not found — Live Activity and widget updates are disabled.');
+}
+
 /**
  * Controls the iOS lock-screen widget and Dynamic Island Live Activity.
  *
@@ -34,8 +38,9 @@ export function useGlucoseWidgets() {
     if (!liveActivityStarted.current) {
       liveActivityStarted.current = true;
       GlucoseWidgetsModule.startLiveActivity(glucose, trend, ts, isLow, isHigh)
-        .catch(() => {
-          // Live Activities may not be available (simulator, older OS, user disabled)
+        .then((id: string) => console.log('[GlucoseWidgets] Live Activity started/updated:', id))
+        .catch((err: any) => {
+          console.warn('[GlucoseWidgets] startLiveActivity failed:', err);
           liveActivityStarted.current = false;
         });
     }
