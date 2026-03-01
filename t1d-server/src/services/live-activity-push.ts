@@ -172,14 +172,20 @@ export async function pushLiveActivityForUser(
   userId: string,
   state: GlucoseActivityState,
 ): Promise<void> {
-  if (!isConfigured()) return;
+  if (!isConfigured()) {
+    console.warn('[LiveActivityPush] Skipping — APNs not configured (check APNS_KEY_ID / APNS_TEAM_ID / APNS_PRIVATE_KEY / APNS_BUNDLE_ID in .env)');
+    return;
+  }
 
   const result = await query<{ token: string; activity_id: string }>(
     'SELECT token, activity_id FROM live_activity_tokens WHERE user_id = $1',
     [userId],
   );
 
-  if (result.rows.length === 0) return;
+  if (result.rows.length === 0) {
+    console.log(`[LiveActivityPush] No registered tokens for user ${userId} — skipping push`);
+    return;
+  }
 
   await Promise.allSettled(
     result.rows.map(async (row) => {

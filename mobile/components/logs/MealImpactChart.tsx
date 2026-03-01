@@ -189,7 +189,7 @@ export function MealImpactChart({ meals, glucoseReadings }: Props) {
                 width={SPARKLINE_W}
                 height={60}
                 maxValue={sparkMax}
-                mostNegativeValue={sparkMin}
+                minValue={sparkMin}
                 noOfSections={3}
                 color={Colors.primary}
                 thickness={2}
@@ -199,11 +199,6 @@ export function MealImpactChart({ meals, glucoseReadings }: Props) {
                 xAxisLabelTextStyle={{ color: 'transparent', fontSize: 0 }}
                 yAxisTextStyle={{ color: Colors.mutedForeground, fontSize: 8 }}
                 yAxisLabelWidth={SPARKLINE_Y_AXIS_W}
-                yAxisLabelTexts={[
-                  Math.round(sparkMin).toString(),
-                  Math.round((sparkMin + sparkMax) / 2).toString(),
-                  Math.round(sparkMax).toString(),
-                ]}
                 rulesColor={Colors.border + '30'}
                 yAxisColor="transparent"
                 xAxisColor={Colors.border + '60'}
@@ -226,8 +221,22 @@ export function MealImpactChart({ meals, glucoseReadings }: Props) {
               </View>
             </View>
 
-            {/* Stats row */}
+            {/* Stats row: start → spike → peak → time to peak */}
             <View style={{ flexDirection: 'row', gap: 8 }}>
+              {/* Start glucose */}
+              <View style={{
+                flex: 1,
+                backgroundColor: Colors.muted,
+                borderRadius: 8,
+                padding: 10,
+                alignItems: 'center',
+              }}>
+                <Text style={{ fontSize: 16, fontWeight: '700', color: Colors.foreground }}>
+                  {Math.round(impact.baseline)}
+                </Text>
+                <Text style={{ fontSize: 9, color: Colors.mutedForeground, marginTop: 2 }}>start</Text>
+              </View>
+
               {/* Spike */}
               <View style={{
                 flex: 1,
@@ -239,35 +248,7 @@ export function MealImpactChart({ meals, glucoseReadings }: Props) {
                 <Text style={{ fontSize: 16, fontWeight: '700', color: sc }}>
                   {spikeSign}{Math.round(impact.spike)}
                 </Text>
-                <Text style={{ fontSize: 9, color: Colors.mutedForeground, marginTop: 2 }}>mg/dL spike</Text>
-              </View>
-
-              {/* Time to peak */}
-              <View style={{
-                flex: 1,
-                backgroundColor: Colors.muted,
-                borderRadius: 8,
-                padding: 10,
-                alignItems: 'center',
-              }}>
-                <Text style={{ fontSize: 16, fontWeight: '700', color: Colors.foreground }}>
-                  {impact.timeToPeak}
-                </Text>
-                <Text style={{ fontSize: 9, color: Colors.mutedForeground, marginTop: 2 }}>min to peak</Text>
-              </View>
-
-              {/* Return time */}
-              <View style={{
-                flex: 1,
-                backgroundColor: Colors.muted,
-                borderRadius: 8,
-                padding: 10,
-                alignItems: 'center',
-              }}>
-                <Text style={{ fontSize: 16, fontWeight: '700', color: Colors.foreground }}>
-                  {impact.returnTime !== null ? impact.returnTime : '>180'}
-                </Text>
-                <Text style={{ fontSize: 9, color: Colors.mutedForeground, marginTop: 2 }}>min return</Text>
+                <Text style={{ fontSize: 9, color: Colors.mutedForeground, marginTop: 2 }}>spike</Text>
               </View>
 
               {/* Peak */}
@@ -281,7 +262,21 @@ export function MealImpactChart({ meals, glucoseReadings }: Props) {
                 <Text style={{ fontSize: 16, fontWeight: '700', color: Colors.foreground }}>
                   {Math.round(impact.peakGlucose)}
                 </Text>
-                <Text style={{ fontSize: 9, color: Colors.mutedForeground, marginTop: 2 }}>peak mg/dL</Text>
+                <Text style={{ fontSize: 9, color: Colors.mutedForeground, marginTop: 2 }}>peak</Text>
+              </View>
+
+              {/* Time to peak */}
+              <View style={{
+                flex: 1,
+                backgroundColor: Colors.muted,
+                borderRadius: 8,
+                padding: 10,
+                alignItems: 'center',
+              }}>
+                <Text style={{ fontSize: 16, fontWeight: '700', color: Colors.foreground }}>
+                  {impact.timeToPeak}m
+                </Text>
+                <Text style={{ fontSize: 9, color: Colors.mutedForeground, marginTop: 2 }}>to peak</Text>
               </View>
             </View>
           </View>

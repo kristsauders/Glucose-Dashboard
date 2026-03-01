@@ -18,13 +18,6 @@ func glucoseColor(_ g: Int) -> Color {
     return Color(red: 0.13, green: 0.77, blue: 0.37)
 }
 
-func relativeTime(_ date: Date) -> String {
-    let secs = Int(Date().timeIntervalSince(date))
-    if secs < 60  { return "just now" }
-    if secs < 120 { return "1 min ago" }
-    if secs < 3600 { return "\(secs / 60) min ago" }
-    return "\(secs / 3600)h ago"
-}
 
 // MARK: - Timeline entry & provider
 
@@ -76,7 +69,7 @@ struct GlucoseRectangularView: View {
                         .font(.system(size: 22, weight: .bold, design: .rounded))
                     Text(entry.trend).font(.system(size: 18))
                 }
-                Text(relativeTime(entry.date)).font(.caption2).foregroundStyle(.secondary)
+                Text(entry.date, style: .relative).font(.caption2).foregroundStyle(.secondary)
             }
             Spacer()
         }
@@ -101,7 +94,7 @@ struct GlucoseSmallView: View {
                     .font(.system(size: 44, weight: .bold, design: .rounded))
                     .foregroundStyle(glucoseColor(entry.glucose))
                 Text(entry.trend).font(.system(size: 22)).foregroundStyle(glucoseColor(entry.glucose))
-                Text(relativeTime(entry.date)).font(.caption2).foregroundStyle(.secondary)
+                Text(entry.date, style: .relative).font(.caption2).foregroundStyle(.secondary)
             }
         }
         .padding(8)
@@ -158,7 +151,7 @@ struct GlucoseLiveActivityView: View {
                         .font(.caption2.bold())
                         .foregroundStyle(Color.orange)
                 } else {
-                    Text(relativeTime(state.readingDate)).font(.caption).foregroundStyle(.secondary)
+                    Text(state.readingDate, style: .relative).font(.caption).foregroundStyle(.secondary)
                 }
             }
             Spacer()
