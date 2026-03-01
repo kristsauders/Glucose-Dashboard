@@ -103,14 +103,18 @@ export async function sendLiveActivityPush(
     return;
   }
 
-  const unixTs = Math.floor(state.readingDate.getTime() / 1000);
+  const readingUnixTs = Math.floor(state.readingDate.getTime() / 1000);
+  const nowUnixTs = Math.floor(Date.now() / 1000);
   // Swift Codable Date → seconds since 2001-01-01
-  const swiftDate = unixTs - SWIFT_REFERENCE_DATE_OFFSET;
-  const staleDate = unixTs + 16 * 60; // 16 minutes = 3 missed CGM cycles → mark stale
+  const swiftDate = readingUnixTs - SWIFT_REFERENCE_DATE_OFFSET;
+  const staleDate = readingUnixTs + 16 * 60; // 16 minutes = 3 missed CGM cycles → mark stale
 
   const payload = {
     aps: {
-      timestamp: unixTs,
+      // aps.timestamp must be the CURRENT time (not reading time).
+      // iOS ignores pushes whose timestamp is older than the last content-state update.
+      // Using readingDate (past time) caused all pushes to be silently dropped.
+      timestamp: nowUnixTs,
       event: 'update',
       'content-state': {
         glucose: state.glucose,
