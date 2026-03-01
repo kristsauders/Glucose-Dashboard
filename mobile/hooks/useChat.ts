@@ -70,7 +70,7 @@ export function useChat(initialConversationId: string | null, initialMessages: M
     let finalConversationId = state.conversationId;
     let contentStarted = false;
 
-    // ~143 chars/sec — same rate as web UI
+    // ~857 chars/sec — 6 chars per 7ms tick
     const startReveal = () => {
       if (charTimerRef.current) return;
       charTimerRef.current = setInterval(() => {
@@ -81,11 +81,11 @@ export function useChat(initialConversationId: string | null, initialMessages: M
           charRevealDoneRef.current = null;
           return;
         }
-        const ch = charQueueRef.current[0];
-        charQueueRef.current = charQueueRef.current.slice(1);
-        fullText += ch;
+        const batch = charQueueRef.current.slice(0, 30);
+        charQueueRef.current = charQueueRef.current.slice(30);
+        fullText += batch;
         setState(s => ({ ...s, streamingText: fullText }));
-      }, 7);
+      }, 10);
     };
 
     try {

@@ -4,7 +4,7 @@ import { useColors } from '../../constants/colors';
 import type { DayMetrics } from '../../hooks/useGlucose';
 
 const SCREEN_W = Dimensions.get('window').width;
-const CHART_H  = 160;
+const CHART_H = 160;
 
 interface Props {
   daily: DayMetrics[];
@@ -18,20 +18,34 @@ export function OvernightBedtimeChart({ daily }: Props) {
   const filtered = daily.filter(d => d.overnightAvg !== null || d.bedtimeAvg !== null);
   if (filtered.length === 0) return null;
 
+  const Y_AXIS_W = 36;
+  const CHART_W = SCREEN_W - 66 - Y_AXIS_W;
+  const step = Math.ceil(filtered.length / 7);
+
   const overnightData = filtered.map((d, i) => ({
     value: d.overnightAvg ?? 0,
     hideDataPoint: d.overnightAvg === null,
-    label: i % Math.ceil(filtered.length / 7) === 0 ? d.label : '',
+    label: i % step === 0 ? d.label : '',
   }));
 
   const bedtimeData = filtered.map(d => ({
     value: d.bedtimeAvg ?? 0,
     hideDataPoint: d.bedtimeAvg === null,
+    label: '',
   }));
 
-  const allVals = filtered.flatMap(d => [d.overnightAvg, d.bedtimeAvg].filter(v => v !== null) as number[]);
+  const allVals = filtered.flatMap(d =>
+    [d.overnightAvg, d.bedtimeAvg].filter((v): v is number => v !== null)
+  );
   const minVal = Math.max(40, Math.min(...allVals) - 20);
   const maxVal = Math.min(300, Math.max(...allVals) + 20);
+  const yMax = Math.ceil(maxVal / 20) * 20;
+  const noOfSections = 4;
+  const sectionSize = (yMax - Math.floor(minVal / 20) * 20) / noOfSections;
+  const yBase = Math.floor(minVal / 20) * 20;
+
+  // Integer y-axis labels
+  const yLabels = [0, 1, 2, 3, 4].map(i => Math.round(yBase + sectionSize * i).toString());
 
   const avgOvernight = filtered
     .filter(d => d.overnightAvg !== null)
@@ -72,11 +86,11 @@ export function OvernightBedtimeChart({ daily }: Props) {
       {/* Legend */}
       <View style={{ flexDirection: 'row', gap: 12, marginBottom: 8 }}>
         <View style={{ flexDirection: 'row', alignItems: 'center', gap: 4 }}>
-          <View style={{ width: 12, height: 2, backgroundColor: '#34D399' }} />
+          <View style={{ width: 14, height: 3, backgroundColor: '#34D399', borderRadius: 2 }} />
           <Text style={{ fontSize: 10, color: Colors.mutedForeground }}>3–7am avg</Text>
         </View>
         <View style={{ flexDirection: 'row', alignItems: 'center', gap: 4 }}>
-          <View style={{ width: 12, height: 2, backgroundColor: '#A78BFA' }} />
+          <View style={{ width: 14, height: 3, backgroundColor: '#A78BFA', borderRadius: 2 }} />
           <Text style={{ fontSize: 10, color: Colors.mutedForeground }}>10pm–midnight avg</Text>
         </View>
       </View>
@@ -102,14 +116,16 @@ export function OvernightBedtimeChart({ daily }: Props) {
             dataPointsRadius: 3,
           },
         ]}
-        width={SCREEN_W - 96}
+        width={CHART_W}
         height={CHART_H}
-        maxValue={Math.ceil(maxVal / 20) * 20}
-        noOfSections={4}
-        xAxisLabelTextStyle={{ color: Colors.mutedForeground, fontSize: 8 }}
+        maxValue={yMax}
+        mostNegativeValue={yBase}
+        noOfSections={noOfSections}
+        yAxisLabelTexts={yLabels}
+        yAxisLabelWidth={Y_AXIS_W}
+        xAxisLabelTextStyle={{ color: Colors.mutedForeground, fontSize: 9 }}
         yAxisTextStyle={{ color: Colors.mutedForeground, fontSize: 9 }}
-        yAxisLabelWidth={30}
-        rulesColor={Colors.border}
+        rulesColor={Colors.border + '40'}
         yAxisColor="transparent"
         xAxisColor={Colors.border}
         referenceLine1={{

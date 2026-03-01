@@ -1,35 +1,46 @@
-import { View, Text } from 'react-native';
+import { View, Text, Dimensions } from 'react-native';
 import { BarChart } from 'react-native-gifted-charts';
 import { useColors } from '../../constants/colors';
 import type { ColorScheme } from '../../constants/colors';
 import type { BucketData } from '../../hooks/useGlucose';
-import { Dimensions } from 'react-native';
 
 const SCREEN_W = Dimensions.get('window').width;
-const CHART_H  = 140;
+const CHART_H = 140;
 
 interface Props {
   distribution: BucketData[];
 }
 
 function bucketColor(low: number, colors: ColorScheme): string {
-  if (low < 70)  return colors.glucoseLow;
+  if (low < 70) return colors.glucoseLow;
   if (low < 180) return colors.glucoseInRange;
   return colors.glucoseHigh;
 }
 
 export function DistributionChart({ distribution }: Props) {
   const Colors = useColors();
-  // Filter out empty edge buckets, keep a reasonable range (e.g. 40–380)
-  const visible = distribution.filter(b => b.low >= 40 && b.low < 380);
-  const maxPct  = Math.max(...visible.map(b => b.pct), 1);
 
-  const barW = Math.floor((SCREEN_W - 64 - 30) / visible.length) - 2;
+  // Filter out empty edge buckets, keep 40–380
+  const visible = distribution.filter(b => b.low >= 40 && b.low < 380);
+  if (visible.length === 0) return null;
+
+  const maxPct = Math.max(...visible.map(b => b.pct), 1);
+  const Y_AXIS_W = 36;
+  const CHART_W = SCREEN_W - 66 - Y_AXIS_W;
+
+  // Dynamic bar sizing to fill width
+  const barWidth = Math.max(4, Math.floor(CHART_W / visible.length) - 2);
+  const spacing = Math.max(1, Math.floor(CHART_W / visible.length) - barWidth - 1);
+
+  // Integer y-axis labels (percentage)
+  const yMax = Math.ceil(maxPct / 5) * 5;
+  const sectionSize = yMax / 4;
+  const yLabels = [0, 1, 2, 3, 4].map(i => `${Math.round(sectionSize * i)}%`);
 
   const barData = visible.map(b => ({
     value: parseFloat(b.pct.toFixed(1)),
     frontColor: bucketColor(b.low, Colors),
-    label: b.low % 40 === 0 ? `${b.low}` : '',  // label every 40mg/dL
+    label: b.low % 40 === 0 ? `${b.low}` : '',
   }));
 
   return (
@@ -39,21 +50,21 @@ export function DistributionChart({ distribution }: Props) {
       </Text>
       <BarChart
         data={barData}
-        width={SCREEN_W - 64}
+        width={CHART_W}
         height={CHART_H}
-        maxValue={Math.ceil(maxPct / 5) * 5}
+        maxValue={yMax}
         noOfSections={4}
-        barWidth={Math.max(4, barW)}
-        spacing={2}
+        barWidth={barWidth}
+        spacing={spacing}
         xAxisLabelTextStyle={{ color: Colors.mutedForeground, fontSize: 8 }}
         yAxisTextStyle={{ color: Colors.mutedForeground, fontSize: 9 }}
-        yAxisLabelWidth={30}
-        rulesColor={Colors.border}
+        yAxisLabelWidth={Y_AXIS_W}
+        yAxisLabelTexts={yLabels}
+        rulesColor={Colors.border + '40'}
         yAxisColor="transparent"
         xAxisColor={Colors.border}
-        yAxisLabelSuffix="%"
       />
-      <Text style={{ fontSize: 10, color: Colors.mutedForeground, marginTop: 2, textAlign: 'center' }}>
+      <Text style={{ fontSize: 10, color: Colors.mutedForeground, marginTop: 4, textAlign: 'center' }}>
         mg/dL (each bar = 20 mg/dL)
       </Text>
     </View>

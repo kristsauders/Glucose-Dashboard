@@ -7,6 +7,7 @@ import {
   Text,
   Keyboard,
   Animated,
+  Dimensions,
 } from 'react-native';
 import { useLocalSearchParams, useNavigation } from 'expo-router';
 import { useQuery } from '@tanstack/react-query';
@@ -77,10 +78,10 @@ export default function ChatDetailScreen() {
     }
   }, [existingMessages]);
 
-  // Scroll to bottom when a new committed message arrives or streaming begins/ends.
-  // onContentSizeChange handles scrolling during the char-by-char reveal.
+  // Scroll to bottom only when a committed message lands (not while streaming).
+  // handleSend positions the user message at the top when streaming begins.
   useEffect(() => {
-    if (chat.messages.length > 0 || chat.streaming) {
+    if (chat.messages.length > 0 && !chat.streaming) {
       setTimeout(() => listRef.current?.scrollToEnd({ animated: true }), 100);
     }
   }, [chat.messages.length, chat.streaming]);
@@ -109,7 +110,7 @@ export default function ChatDetailScreen() {
       try {
         listRef.current?.scrollToIndex({
           index: targetIndex,
-          viewPosition: 0.05,
+          viewPosition: 0,
           animated: true,
         });
       } catch {
@@ -133,8 +134,7 @@ export default function ChatDetailScreen() {
         style={{ flex: 1 }}
         data={chat.messages}
         keyExtractor={item => item.id}
-        contentContainerStyle={{ padding: 16, paddingBottom: 8 }}
-        onContentSizeChange={() => listRef.current?.scrollToEnd({ animated: false })}
+        contentContainerStyle={{ padding: 16, paddingBottom: chat.streaming ? Dimensions.get('window').height : 8 }}
         ListEmptyComponent={
           !chat.streaming ? (
             <View style={{ alignItems: 'center', marginTop: 80, gap: 10 }}>

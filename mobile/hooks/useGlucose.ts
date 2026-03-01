@@ -220,6 +220,7 @@ export function useGlucoseHistory(days: 7 | 30 | 90) {
         weekly:       computeWeeklyMetrics(chron),
         distribution: computeDistribution(chron),
         totalReadings: chron.length,
+        readings:     chron, // expose raw readings for MealImpactChart
       };
     },
     staleTime: 5 * 60_000,

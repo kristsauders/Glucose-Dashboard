@@ -4,7 +4,7 @@ import { useColors } from '../../constants/colors';
 import type { DayMetrics, WeekMetrics } from '../../hooks/useGlucose';
 
 const SCREEN_W = Dimensions.get('window').width;
-const CHART_H  = 150;
+const CHART_H = 150;
 
 interface Props {
   daily?: DayMetrics[];
@@ -17,6 +17,12 @@ export function SpikeCountChart({ daily, weekly, useWeekly }: Props) {
   const items = useWeekly ? weekly : daily;
   if (!items || items.length === 0) return null;
 
+  const Y_AXIS_W = 36;
+  const CHART_W = SCREEN_W - 66 - Y_AXIS_W;
+  const step = Math.ceil(items.length / 7);
+  const barWidth = Math.max(6, Math.floor(CHART_W / items.length) - 4);
+  const spacing = Math.max(2, Math.floor(CHART_W / items.length) - barWidth - 2);
+
   // For weekly we use above180 %, for daily we use raw spikesAbove180 count
   const isWeekly = useWeekly && !('spikesAbove180' in (items[0] ?? {}));
 
@@ -28,13 +34,17 @@ export function SpikeCountChart({ daily, weekly, useWeekly }: Props) {
   const maxVal = Math.max(...spikeCounts, 1);
   const daysZero = spikeCounts.filter(v => v === 0).length;
 
-  const barW = Math.max(6, Math.floor((SCREEN_W - 96) / items.length) - 3);
+  // Integer y-axis labels
+  const yMax = Math.ceil(maxVal / 5) * 5 || 10;
+  const noOfSections = 4;
+  const sectionSize = yMax / noOfSections;
+  const yLabels = [0, 1, 2, 3, 4].map(i => Math.round(sectionSize * i).toString());
 
   const barData = items.map((d, i) => {
     const val = isWeekly
       ? (d as WeekMetrics).above180
       : (d as DayMetrics).spikesAbove180;
-    const label = i % Math.ceil(items.length / 7) === 0
+    const label = i % step === 0
       ? ('label' in d ? d.label : (d as WeekMetrics).weekLabel)
       : '';
     return {
@@ -68,16 +78,17 @@ export function SpikeCountChart({ daily, weekly, useWeekly }: Props) {
 
       <BarChart
         data={barData}
-        width={SCREEN_W - 96}
+        width={CHART_W}
         height={CHART_H}
-        maxValue={Math.ceil(maxVal / 5) * 5 || 10}
-        noOfSections={4}
-        barWidth={Math.max(4, barW)}
-        spacing={3}
-        xAxisLabelTextStyle={{ color: Colors.mutedForeground, fontSize: 8 }}
+        maxValue={yMax}
+        noOfSections={noOfSections}
+        yAxisLabelTexts={yLabels}
+        yAxisLabelWidth={Y_AXIS_W}
+        barWidth={barWidth}
+        spacing={spacing}
+        xAxisLabelTextStyle={{ color: Colors.mutedForeground, fontSize: 9 }}
         yAxisTextStyle={{ color: Colors.mutedForeground, fontSize: 9 }}
-        yAxisLabelWidth={30}
-        rulesColor={Colors.border}
+        rulesColor={Colors.border + '40'}
         yAxisColor="transparent"
         xAxisColor={Colors.border}
       />

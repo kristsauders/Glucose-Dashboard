@@ -18,6 +18,7 @@ import {
 import { useColors } from '../../constants/colors';
 import { format } from 'date-fns';
 import type { MealLog, InsulinLog, ExerciseLog } from '../../types/logs';
+import type { GlucoseReading } from '../../types/glucose';
 import { useGlucoseHistory } from '../../hooks/useGlucose';
 import { DailyGlucoseBarChart } from '../../components/glucose/DailyGlucoseBarChart';
 import { TIRBarChart } from '../../components/glucose/TIRBarChart';
@@ -29,6 +30,8 @@ import { WeeklyA1CChart } from '../../components/glucose/WeeklyA1CChart';
 import { DailyCarbChart } from '../../components/logs/DailyCarbChart';
 import { InsulinUsageChart } from '../../components/logs/InsulinUsageChart';
 import { ExercisePatternChart } from '../../components/logs/ExercisePatternChart';
+import { MealImpactChart } from '../../components/logs/MealImpactChart';
+import { CarbRatioChart } from '../../components/logs/CarbRatioChart';
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
@@ -59,6 +62,7 @@ function ChartCard({ children }: { children: React.ReactNode }) {
       borderWidth: 1,
       borderColor: Colors.cardBorder,
       padding: 16,
+      overflow: 'hidden',
     }}>
       {children}
     </View>
@@ -285,7 +289,7 @@ function GlucoseAnalyticsView() {
         </ChartCard>
       )}
 
-      {/* Average glucose per day/week */}
+      {/* Daily/weekly avg + min + max lines */}
       {data && (
         <ChartCard>
           <DailyGlucoseBarChart daily={daily} weekly={weekly} useWeekly={useWeekly} />
@@ -356,6 +360,10 @@ function LogsView() {
   const insulin  = useQuery({ queryKey: ['logs', 'insulin'],  queryFn: () => getInsulinLogs(start30d, undefined, 100) });
   const exercise = useQuery({ queryKey: ['logs', 'exercise'], queryFn: () => getExerciseLogs(start30d, undefined, 100) });
 
+  // Fetch 30-day glucose readings for MealImpactChart correlation
+  const glucoseHistory = useGlucoseHistory(30);
+  const rawReadings: GlucoseReading[] = glucoseHistory.data?.readings ?? [];
+
   const deleteMealMutation     = useMutation({ mutationFn: deleteMeal,     onSuccess: () => queryClient.invalidateQueries({ queryKey: ['logs', 'meal'] }) });
   const deleteInsulinMutation  = useMutation({ mutationFn: deleteInsulin,  onSuccess: () => queryClient.invalidateQueries({ queryKey: ['logs', 'insulin'] }) });
   const deleteExerciseMutation = useMutation({ mutationFn: deleteExercise, onSuccess: () => queryClient.invalidateQueries({ queryKey: ['logs', 'exercise'] }) });
@@ -368,15 +376,25 @@ function LogsView() {
   }, []);
 
   const activeQuery = activeTab === 'meal' ? meals : activeTab === 'insulin' ? insulin : exercise;
-  const mealItems: MealLog[]       = (meals.data as any)?.meals      ?? [];
-  const insulinItems: InsulinLog[] = (insulin.data as any)?.doses     ?? [];
+  const mealItems: MealLog[]         = (meals.data as any)?.meals      ?? [];
+  const insulinItems: InsulinLog[]   = (insulin.data as any)?.doses     ?? [];
   const exerciseItems: ExerciseLog[] = (exercise.data as any)?.exercises ?? [];
 
   // Chart shown above each log list
   const listHeader = activeTab === 'meal'
-    ? <DailyCarbChart meals={mealItems} />
+    ? (
+      <View style={{ gap: 0 }}>
+        <DailyCarbChart meals={mealItems} />
+        <MealImpactChart meals={mealItems} glucoseReadings={rawReadings} />
+      </View>
+    )
     : activeTab === 'insulin'
-    ? <InsulinUsageChart doses={insulinItems} />
+    ? (
+      <View style={{ gap: 0 }}>
+        <InsulinUsageChart doses={insulinItems} />
+        <CarbRatioChart meals={mealItems} insulin={insulinItems} />
+      </View>
+    )
     : <ExercisePatternChart exercises={exerciseItems} />;
 
   return (

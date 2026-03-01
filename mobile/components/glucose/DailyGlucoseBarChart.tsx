@@ -1,15 +1,15 @@
-import { View, Text, ScrollView, Dimensions } from 'react-native';
-import { BarChart } from 'react-native-gifted-charts';
+import { View, Text, Dimensions } from 'react-native';
+import { LineChart } from 'react-native-gifted-charts';
 import { useColors } from '../../constants/colors';
 import type { DayMetrics, WeekMetrics } from '../../hooks/useGlucose';
 
 const SCREEN_W = Dimensions.get('window').width;
-const CHART_H  = 180;
+const CHART_H = 180;
 
 interface Props {
   daily?: DayMetrics[];
   weekly?: WeekMetrics[];
-  /** If true, show weekly bars (for 90d); otherwise daily bars */
+  /** If true, show weekly data (for 90d); otherwise daily */
   useWeekly?: boolean;
 }
 
@@ -18,69 +18,136 @@ export function DailyGlucoseBarChart({ daily, weekly, useWeekly }: Props) {
   const items = useWeekly ? weekly : daily;
   if (!items || items.length === 0) return null;
 
-  const labels  = items.map(d => ('label' in d ? d.label : (d as WeekMetrics).weekLabel));
-  const avgs    = items.map(d => d.avg);
-  const maxVal  = Math.min(400, Math.max(...avgs) + 30);
-  const minVal  = Math.max(40,  Math.min(...avgs) - 20);
+  const Y_AXIS_W = 36;
+  const CHART_W = SCREEN_W - 66 - Y_AXIS_W;
+  const step = Math.ceil(items.length / 7);
 
-  // Bar spacing: fit all bars in ~SCREEN_W - 64px, min 8px each
-  const plotW   = SCREEN_W - 64;
-  const spacing = Math.max(8, Math.floor(plotW / items.length) - 20);
-
-  const barData = items.map((d, i) => ({
+  const avgData = items.map((d, i) => ({
     value: d.avg,
-    label: labels[i],
-    frontColor: d.avg < 70
-      ? Colors.glucoseLow
-      : d.avg > 180
-      ? Colors.glucoseHigh
-      : Colors.glucoseInRange,
-    topLabelComponent: items.length <= 14
-      ? () => (
-          <Text style={{ fontSize: 8, color: Colors.mutedForeground, marginBottom: 2 }}>
-            {d.avg}
-          </Text>
-        )
-      : undefined,
+    label: i % step === 0
+      ? ('label' in d ? d.label : (d as WeekMetrics).weekLabel)
+      : '',
   }));
+
+  const maxData = items.map(d => ({
+    value: d.max,
+    label: '',
+  }));
+
+  const minData = items.map(d => ({
+    value: d.min,
+    label: '',
+  }));
+
+  // Compute y-axis range
+  const allVals = items.flatMap(d => [d.avg, d.max, d.min]);
+  const chartMin = Math.max(40, Math.min(...allVals) - 20);
+  const chartMax = Math.min(300, Math.max(...allVals) + 20);
+  const noOfSections = 6;
+  const step_size = Math.ceil((chartMax - chartMin) / noOfSections / 10) * 10;
+  const adjustedMax = chartMin + step_size * noOfSections;
+
+  // Build integer y-axis labels
+  const yLabels: string[] = [];
+  for (let i = 0; i <= noOfSections; i++) {
+    yLabels.push(Math.round(chartMin + step_size * i).toString());
+  }
+
+  // Summary stats
+  const overallAvg = Math.round(items.reduce((s, d) => s + d.avg, 0) / items.length);
+  const overallMin = Math.min(...items.map(d => d.min));
+  const overallMax = Math.max(...items.map(d => d.max));
 
   return (
     <View>
-      <Text style={{ fontSize: 13, fontWeight: '600', color: Colors.foreground, marginBottom: 8 }}>
-        {useWeekly ? 'Weekly average glucose' : 'Daily average glucose'}
+      <Text style={{ fontSize: 13, fontWeight: '600', color: Colors.foreground, marginBottom: 4 }}>
+        {useWeekly ? 'Weekly glucose (avg / min / max)' : 'Daily glucose (avg / min / max)'}
       </Text>
-      <ScrollView horizontal showsHorizontalScrollIndicator={false}>
-        <BarChart
-          data={barData}
-          width={Math.max(SCREEN_W - 64, items.length * (spacing + 20))}
-          height={CHART_H}
-          maxValue={maxVal}
-          minValue={minVal}
-          noOfSections={4}
-          barWidth={Math.max(6, spacing)}
-          spacing={4}
-          roundedTop
-          xAxisLabelTextStyle={{ color: Colors.mutedForeground, fontSize: 9 }}
-          yAxisTextStyle={{ color: Colors.mutedForeground, fontSize: 10 }}
-          yAxisLabelWidth={30}
-          rulesColor={Colors.border}
-          yAxisColor="transparent"
-          xAxisColor={Colors.border}
-          referenceLine1Position={180}
-          referenceLine1Config={{ color: Colors.glucoseHigh, dashWidth: 3, dashGap: 3, thickness: 1 }}
-          referenceLine2Position={70}
-          referenceLine2Config={{ color: Colors.glucoseLow, dashWidth: 3, dashGap: 3, thickness: 1 }}
-        />
-      </ScrollView>
+
+      {/* Stat row */}
+      <View style={{ flexDirection: 'row', gap: 16, marginBottom: 10 }}>
+        <View style={{ flexDirection: 'row', alignItems: 'baseline', gap: 3 }}>
+          <Text style={{ fontSize: 18, fontWeight: '700', color: Colors.primary }}>{overallAvg}</Text>
+          <Text style={{ fontSize: 10, color: Colors.mutedForeground }}>avg</Text>
+        </View>
+        <View style={{ flexDirection: 'row', alignItems: 'baseline', gap: 3 }}>
+          <Text style={{ fontSize: 16, fontWeight: '600', color: Colors.glucoseChartLine }}>{overallMin}</Text>
+          <Text style={{ fontSize: 10, color: Colors.mutedForeground }}>min</Text>
+        </View>
+        <View style={{ flexDirection: 'row', alignItems: 'baseline', gap: 3 }}>
+          <Text style={{ fontSize: 16, fontWeight: '600', color: Colors.warning }}>{overallMax}</Text>
+          <Text style={{ fontSize: 10, color: Colors.mutedForeground }}>max</Text>
+        </View>
+      </View>
+
+      <LineChart
+        dataSet={[
+          {
+            data: avgData,
+            color: Colors.primary,
+            thickness: 2,
+            curved: true,
+            hideDataPoints: true,
+          },
+          {
+            data: maxData,
+            color: Colors.warning,
+            thickness: 1.5,
+            curved: true,
+            hideDataPoints: true,
+          },
+          {
+            data: minData,
+            color: Colors.glucoseChartLine,
+            thickness: 1.5,
+            curved: true,
+            hideDataPoints: true,
+          },
+        ]}
+        height={CHART_H}
+        width={CHART_W}
+        maxValue={adjustedMax}
+        mostNegativeValue={chartMin}
+        noOfSections={noOfSections}
+        yAxisLabelTexts={yLabels}
+        yAxisLabelWidth={Y_AXIS_W}
+        xAxisLabelTextStyle={{ color: Colors.mutedForeground, fontSize: 9 }}
+        yAxisTextStyle={{ color: Colors.mutedForeground, fontSize: 10 }}
+        rulesColor={Colors.border + '40'}
+        yAxisColor="transparent"
+        xAxisColor={Colors.border}
+        backgroundColor="transparent"
+        referenceLine1={{
+          value: 180,
+          lineConfig: {
+            color: Colors.glucoseHigh,
+            thickness: 1,
+            dashWidth: 3,
+            dashGap: 3,
+          },
+        }}
+        referenceLine2={{
+          value: 70,
+          lineConfig: {
+            color: Colors.glucoseLow,
+            thickness: 1,
+            dashWidth: 3,
+            dashGap: 3,
+          },
+        }}
+        showReferenceLine1
+        showReferenceLine2
+      />
+
       {/* Legend */}
-      <View style={{ flexDirection: 'row', gap: 12, marginTop: 6 }}>
+      <View style={{ flexDirection: 'row', gap: 14, marginTop: 8 }}>
         {[
-          { color: Colors.glucoseLow,     label: 'Low (<70)' },
-          { color: Colors.glucoseInRange, label: 'In range' },
-          { color: Colors.glucoseHigh,    label: 'High (>180)' },
+          { color: Colors.primary, label: 'Avg' },
+          { color: Colors.warning, label: 'Max' },
+          { color: Colors.glucoseChartLine, label: 'Min' },
         ].map(({ color, label }) => (
-          <View key={label} style={{ flexDirection: 'row', alignItems: 'center', gap: 4 }}>
-            <View style={{ width: 10, height: 10, borderRadius: 2, backgroundColor: color }} />
+          <View key={label} style={{ flexDirection: 'row', alignItems: 'center', gap: 5 }}>
+            <View style={{ width: 14, height: 3, backgroundColor: color, borderRadius: 2 }} />
             <Text style={{ fontSize: 10, color: Colors.mutedForeground }}>{label}</Text>
           </View>
         ))}

@@ -5,7 +5,7 @@ import { format } from 'date-fns';
 import type { InsulinLog } from '../../types/logs';
 
 const SCREEN_W = Dimensions.get('window').width;
-const CHART_H  = 140;
+const CHART_H = 140;
 
 const BASAL_BRANDS = ['lantus', 'tresiba', 'levemir', 'basaglar', 'toujeo', 'glargine', 'detemir', 'degludec'];
 
@@ -26,27 +26,38 @@ export function InsulinUsageChart({ doses }: Props) {
   for (const d of doses) {
     const key = format(new Date(d.timestamp), 'yyyy-MM-dd');
     const cur = byDay.get(key) ?? { basal: 0, rapid: 0 };
-    if (isBasal(d)) cur.basal += d.units;
-    else cur.rapid += d.units;
+    if (isBasal(d)) cur.basal += Number(d.units);
+    else cur.rapid += Number(d.units);
     byDay.set(key, cur);
   }
 
   const entries = Array.from(byDay.entries()).sort(([a], [b]) => a.localeCompare(b));
   if (entries.length === 0) return null;
 
+  const Y_AXIS_W = 36;
+  const CHART_W = SCREEN_W - 66 - Y_AXIS_W;
+  const step = Math.ceil(entries.length / 7);
+  const barWidth = Math.max(6, Math.floor(CHART_W / entries.length) - 4);
+  const spacing = Math.max(2, Math.floor(CHART_W / entries.length) - barWidth - 2);
+
   const totals = entries.map(([, v]) => v.basal + v.rapid);
   const avgTotal = Math.round(totals.reduce((s, v) => s + v, 0) / totals.length);
   const avgBasal = Math.round(entries.reduce((s, [, v]) => s + v.basal, 0) / entries.length);
   const avgRapid = Math.round(entries.reduce((s, [, v]) => s + v.rapid, 0) / entries.length);
   const maxVal = Math.max(...totals);
-  const barW = Math.max(8, Math.floor((SCREEN_W - 96) / entries.length) - 3);
+
+  // Integer y-axis labels (units)
+  const yMax = Math.ceil(maxVal / 10) * 10 || 30;
+  const noOfSections = 4;
+  const sectionSize = yMax / noOfSections;
+  const yLabels = [0, 1, 2, 3, 4].map(i => `${Math.round(sectionSize * i)}u`);
 
   const stackData = entries.map(([dateIso, v], i) => ({
     stacks: [
       { value: v.basal, color: '#60A5FA' },  // blue = basal
       { value: v.rapid, color: '#F472B6' },  // pink = rapid
     ],
-    label: i % Math.ceil(entries.length / 7) === 0
+    label: i % step === 0
       ? format(new Date(dateIso + 'T12:00:00'), 'M/d')
       : '',
   }));
@@ -59,6 +70,7 @@ export function InsulinUsageChart({ doses }: Props) {
       borderColor: Colors.cardBorder,
       padding: 16,
       marginBottom: 12,
+      overflow: 'hidden',
     }}>
       <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'baseline', marginBottom: 8 }}>
         <Text style={{ fontSize: 13, fontWeight: '600', color: Colors.foreground }}>
@@ -86,17 +98,17 @@ export function InsulinUsageChart({ doses }: Props) {
 
       <BarChart
         stackData={stackData}
-        width={SCREEN_W - 96}
+        width={CHART_W}
         height={CHART_H}
-        maxValue={Math.ceil(maxVal / 10) * 10 || 30}
-        noOfSections={4}
-        barWidth={Math.max(4, barW)}
-        spacing={3}
-        xAxisLabelTextStyle={{ color: Colors.mutedForeground, fontSize: 8 }}
+        maxValue={yMax}
+        noOfSections={noOfSections}
+        barWidth={barWidth}
+        spacing={spacing}
+        xAxisLabelTextStyle={{ color: Colors.mutedForeground, fontSize: 9 }}
         yAxisTextStyle={{ color: Colors.mutedForeground, fontSize: 9 }}
-        yAxisLabelWidth={30}
-        yAxisLabelSuffix="u"
-        rulesColor={Colors.border}
+        yAxisLabelWidth={Y_AXIS_W}
+        yAxisLabelTexts={yLabels}
+        rulesColor={Colors.border + '40'}
         yAxisColor="transparent"
         xAxisColor={Colors.border}
       />
