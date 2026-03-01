@@ -21,7 +21,7 @@ const fs   = require('fs');
 const APP_GROUP         = 'group.com.auders.t1dsage';
 const BUNDLE_EXTENSION  = 'com.auders.t1dsage.GlucoseWidget';
 const EXTENSION_NAME    = 'GlucoseWidget';
-const DEPLOYMENT_TARGET = '17.0';
+const DEPLOYMENT_TARGET = '18.0'; // activityFamily + supplementalActivityFamilies require iOS 18.0
 
 // Source files that belong to the widget extension target
 const EXTENSION_SWIFT = [

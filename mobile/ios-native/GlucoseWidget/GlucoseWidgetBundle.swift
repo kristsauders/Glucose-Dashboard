@@ -21,43 +21,48 @@ struct GlucoseLiveActivityWidget: Widget {
         } dynamicIsland: { context in
             DynamicIsland {
                 DynamicIslandExpandedRegion(.leading) {
-                    let color = islandColor(context.state)
-                    HStack(spacing: 4) {
+                    let color = glucoseColor(context.state.glucose)
+                    HStack(alignment: .firstTextBaseline, spacing: 4) {
                         Text("\(context.state.glucose)")
-                            .font(.system(size: 28, weight: .bold, design: .rounded))
+                            .font(.system(size: 36, weight: .bold, design: .rounded))
                             .foregroundStyle(color)
-                        Text(context.state.trend).font(.system(size: 20)).foregroundStyle(color)
+                        Text(context.state.trend).font(.system(size: 24)).foregroundStyle(color)
                     }
                 }
                 DynamicIslandExpandedRegion(.trailing) {
-                    let color = islandColor(context.state)
-                    Text(context.state.isLow ? "LOW" : context.state.isHigh ? "HIGH" : "IN RANGE")
-                        .font(.caption.bold()).foregroundStyle(color)
-                        .padding(.horizontal, 6).padding(.vertical, 3)
-                        .background(color.opacity(0.2), in: Capsule())
+                    if context.state.isLow || context.state.isHigh {
+                        let color = glucoseColor(context.state.glucose)
+                        Text(context.state.isLow ? "LOW" : "HIGH")
+                            .font(.caption.bold()).foregroundStyle(color)
+                            .padding(.horizontal, 6).padding(.vertical, 3)
+                            .background(color.opacity(0.2), in: Capsule())
+                    }
                 }
                 DynamicIslandExpandedRegion(.bottom) {
-                    Text(context.state.readingDate, style: .relative)
-                        .font(.caption2).foregroundStyle(.secondary)
+                    HStack {
+                        Text(context.state.readingDate, style: .relative)
+                            .font(.caption2).foregroundStyle(.secondary)
+                        Spacer()
+                        if let label = insulinLabel(units: context.state.lastInsulinUnits,
+                                                    date: context.state.lastInsulinDate) {
+                            Text(label).font(.caption2).foregroundStyle(.secondary)
+                        }
+                    }
                 }
             } compactLeading: {
                 Text("\(context.state.glucose)")
                     .font(.system(size: 14, weight: .semibold, design: .rounded))
-                    .foregroundStyle(islandColor(context.state))
+                    .foregroundStyle(glucoseColor(context.state.glucose))
             } compactTrailing: {
                 Text(context.state.trend)
                     .font(.system(size: 13))
-                    .foregroundStyle(islandColor(context.state))
+                    .foregroundStyle(glucoseColor(context.state.glucose))
             } minimal: {
                 Text("\(context.state.glucose)")
                     .font(.system(size: 12, weight: .bold, design: .rounded))
-                    .foregroundStyle(islandColor(context.state))
+                    .foregroundStyle(glucoseColor(context.state.glucose))
             }
         }
+        .supplementalActivityFamilies([.small])
     }
-}
-
-@available(iOS 16.2, *)
-private func islandColor(_ state: GlucoseActivityAttributes.ContentState) -> Color {
-    glucoseColor(state.glucose)
 }

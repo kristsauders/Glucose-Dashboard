@@ -129,72 +129,105 @@ struct GlucoseWidget: Widget {
 
 // MARK: - Live Activity view
 
-@available(iOS 16.2, *)
-struct GlucoseLiveActivityView: View {
+// Shared helpers for Live Activity views
+func insulinLabel(units: Double?, date: Date?) -> String? {
+    guard let units, let date else { return nil }
+    let u = units.truncatingRemainder(dividingBy: 1) == 0
+        ? String(format: "%.0f", units)
+        : String(format: "%.1f", units)
+    let mins = Int(Date().timeIntervalSince(date) / 60)
+    if mins < 60 { return "💉 \(u)u · \(mins)m ago" }
+    let hrs = mins / 60; let rem = mins % 60
+    return rem == 0 ? "💉 \(u)u · \(hrs)h ago" : "💉 \(u)u · \(hrs)h \(rem)m ago"
+}
+
+// iPhone lock screen layout
+struct GlucoseLiveActivityPhoneView: View {
     let state: GlucoseActivityAttributes.ContentState
     var color: Color { glucoseColor(state.glucose) }
-    // Data older than 15 minutes hasn't been refreshed in ≥3 CGM cycles — warn the user.
     var isStale: Bool { Date().timeIntervalSince(state.readingDate) > 15 * 60 }
 
-    var insulinLabel: String? {
-        guard let units = state.lastInsulinUnits, let date = state.lastInsulinDate else { return nil }
-        let u = units.truncatingRemainder(dividingBy: 1) == 0
-            ? String(format: "%.0f", units)
-            : String(format: "%.1f", units)
-        let mins = Int(Date().timeIntervalSince(date) / 60)
-        if mins < 60 {
-            return "💉 \(u)u · \(mins)m ago"
-        } else {
-            let hrs = mins / 60
-            let rem = mins % 60
-            return rem == 0 ? "💉 \(u)u · \(hrs)h ago" : "💉 \(u)u · \(hrs)h \(rem)m ago"
-        }
-    }
-
     var body: some View {
-        HStack(alignment: .center, spacing: 16) {
-            // Left: glucose value + trend arrow + timestamp
-            VStack(alignment: .leading, spacing: 2) {
-                HStack(alignment: .firstTextBaseline, spacing: 6) {
-                    Text(isStale ? "--" : "\(state.glucose)")
-                        .font(.system(size: 48, weight: .bold, design: .rounded))
-                        .foregroundStyle(isStale ? Color.secondary : color)
-                    Text(isStale ? "?" : state.trend)
-                        .font(.system(size: 30))
-                        .foregroundStyle(isStale ? Color.secondary : color)
-                }
+        VStack(alignment: .leading, spacing: 6) {
+            // Top row: glucose + trend fills width; alert badge on the right if needed
+            HStack(alignment: .firstTextBaseline, spacing: 8) {
+                Text(isStale ? "--" : "\(state.glucose)")
+                    .font(.system(size: 52, weight: .bold, design: .rounded))
+                    .foregroundStyle(isStale ? Color.secondary : color)
+                Text(isStale ? "?" : state.trend)
+                    .font(.system(size: 36))
+                    .foregroundStyle(isStale ? Color.secondary : color)
+                Spacer()
                 if isStale {
-                    Label("No recent data", systemImage: "exclamationmark.circle")
-                        .font(.caption2.bold())
-                        .foregroundStyle(Color.orange)
-                } else {
-                    Text(state.readingDate, style: .relative)
-                        .font(.caption).foregroundStyle(.secondary)
-                }
-            }
-
-            Spacer()
-
-            // Right: alert badge (if any) + last insulin dose
-            VStack(alignment: .trailing, spacing: 6) {
-                if isStale {
-                    Text("DELAYED")
+                    Label("No data", systemImage: "exclamationmark.circle")
                         .font(.caption.bold()).foregroundStyle(Color.orange)
-                        .padding(.horizontal, 8).padding(.vertical, 4)
-                        .background(Color.orange.opacity(0.15), in: Capsule())
                 } else if state.isLow || state.isHigh {
                     Text(state.isLow ? "LOW" : "HIGH")
                         .font(.caption.bold()).foregroundStyle(color)
-                        .padding(.horizontal, 8).padding(.vertical, 4)
+                        .padding(.horizontal, 8).padding(.vertical, 3)
                         .background(color.opacity(0.15), in: Capsule())
                 }
-                if let label = insulinLabel {
-                    Text(label)
-                        .font(.caption2).foregroundStyle(.secondary)
-                        .multilineTextAlignment(.trailing)
+            }
+            // Bottom row: timestamp left, insulin right — same size so they balance
+            HStack {
+                Text(state.readingDate, style: .relative)
+                    .font(.caption).foregroundStyle(.secondary)
+                Spacer()
+                if let label = insulinLabel(units: state.lastInsulinUnits, date: state.lastInsulinDate) {
+                    Text(label).font(.caption).foregroundStyle(.secondary)
                 }
             }
         }
         .padding(12)
+    }
+}
+
+// Apple Watch layout — compact
+struct GlucoseLiveActivityWatchView: View {
+    let state: GlucoseActivityAttributes.ContentState
+    var color: Color { glucoseColor(state.glucose) }
+    var isStale: Bool { Date().timeIntervalSince(state.readingDate) > 15 * 60 }
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 4) {
+            HStack(alignment: .firstTextBaseline, spacing: 4) {
+                Text(isStale ? "--" : "\(state.glucose)")
+                    .font(.system(size: 44, weight: .bold, design: .rounded))
+                    .foregroundStyle(isStale ? Color.secondary : color)
+                    .minimumScaleFactor(0.7)
+                Text(isStale ? "?" : state.trend)
+                    .font(.system(size: 26))
+                    .foregroundStyle(isStale ? Color.secondary : color)
+                Spacer()
+                if isStale {
+                    Image(systemName: "exclamationmark.circle.fill").foregroundStyle(Color.orange)
+                } else if state.isLow || state.isHigh {
+                    Text(state.isLow ? "LOW" : "HIGH")
+                        .font(.caption2.bold()).foregroundStyle(color)
+                        .padding(.horizontal, 5).padding(.vertical, 2)
+                        .background(color.opacity(0.2), in: Capsule())
+                }
+            }
+            if let label = insulinLabel(units: state.lastInsulinUnits, date: state.lastInsulinDate) {
+                Text(label).font(.caption2).foregroundStyle(.secondary)
+            } else if !isStale {
+                Text(state.readingDate, style: .relative).font(.caption2).foregroundStyle(.secondary)
+            }
+        }
+        .padding(10)
+    }
+}
+
+// Entry point: routes to phone or watch layout. Deployment target 18.0 so activityFamily is always available.
+@available(iOS 16.2, *)
+struct GlucoseLiveActivityView: View {
+    let state: GlucoseActivityAttributes.ContentState
+    @Environment(\.activityFamily) var activityFamily
+    var body: some View {
+        if activityFamily == .small {
+            GlucoseLiveActivityWatchView(state: state)
+        } else {
+            GlucoseLiveActivityPhoneView(state: state)
+        }
     }
 }
