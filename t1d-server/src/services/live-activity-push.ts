@@ -88,6 +88,8 @@ export interface GlucoseActivityState {
   readingDate: Date;
   isLow: boolean;
   isHigh: boolean;
+  lastInsulinUnits?: number;
+  lastInsulinDate?: Date;
 }
 
 /**
@@ -127,6 +129,10 @@ export async function sendLiveActivityPush(
         readingDate: swiftDate,
         isLow: state.isLow,
         isHigh: state.isHigh,
+        ...(state.lastInsulinDate != null && {
+          lastInsulinUnits: state.lastInsulinUnits,
+          lastInsulinDate: Math.floor(state.lastInsulinDate.getTime() / 1000) - SWIFT_REFERENCE_DATE_OFFSET,
+        }),
       },
       'stale-date': staleDate,
     },

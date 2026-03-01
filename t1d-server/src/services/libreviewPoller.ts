@@ -161,12 +161,26 @@ class LibreViewPollerService {
         console.log(`[LiveActivityPush] POLLER_DEBUG selected reading: ts=${latest.timestamp} glucose=${latest.glucose} (array size=${readings.length}, first_ts=${readings[0].timestamp}, last_ts=${readings[readings.length-1].timestamp})`);
         if (latest) {
           const glucose = latest.glucose as number;
+
+          // Fetch the most recent insulin dose for this user (last 24h to avoid stale data).
+          const insulinResult = await query<{ units: number; timestamp: string }>(
+            `SELECT units, timestamp FROM insulin_doses
+             WHERE user_id = $1 AND timestamp > NOW() - INTERVAL '24 hours'
+             ORDER BY timestamp DESC LIMIT 1`,
+            [state.userId],
+          );
+          const lastDose = insulinResult.rows[0];
+
           pushLiveActivityForUser(state.userId, {
             glucose,
             trend: trendArrow(latest.trend as number | undefined),
             readingDate: new Date(latest.timestamp),
             isLow:  glucose < 70,
             isHigh: glucose > 180,
+            ...(lastDose && {
+              lastInsulinUnits: Number(lastDose.units),
+              lastInsulinDate: new Date(lastDose.timestamp),
+            }),
           }).catch(err => console.warn('[LiveActivityPush] Error during poll push:', err));
         }
       } else {

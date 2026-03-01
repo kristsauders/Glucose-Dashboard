@@ -135,6 +135,22 @@ struct GlucoseLiveActivityView: View {
     var color: Color { glucoseColor(state.glucose) }
     // Data older than 15 minutes hasn't been refreshed in ≥3 CGM cycles — warn the user.
     var isStale: Bool { Date().timeIntervalSince(state.readingDate) > 15 * 60 }
+
+    var insulinLabel: String? {
+        guard let units = state.lastInsulinUnits, let date = state.lastInsulinDate else { return nil }
+        let u = units.truncatingRemainder(dividingBy: 1) == 0
+            ? String(format: "%.0f", units)
+            : String(format: "%.1f", units)
+        let mins = Int(Date().timeIntervalSince(date) / 60)
+        if mins < 60 {
+            return "💉 \(u)u · \(mins)m ago"
+        } else {
+            let hrs = mins / 60
+            let rem = mins % 60
+            return rem == 0 ? "💉 \(u)u · \(hrs)h ago" : "💉 \(u)u · \(hrs)h \(rem)m ago"
+        }
+    }
+
     var body: some View {
         HStack(spacing: 12) {
             VStack(alignment: .leading, spacing: 2) {
@@ -152,6 +168,9 @@ struct GlucoseLiveActivityView: View {
                         .foregroundStyle(Color.orange)
                 } else {
                     Text(state.readingDate, style: .relative).font(.caption).foregroundStyle(.secondary)
+                }
+                if let label = insulinLabel {
+                    Text(label).font(.caption2).foregroundStyle(.secondary)
                 }
             }
             Spacer()

@@ -8,5 +8,7 @@ struct GlucoseActivityAttributes: ActivityAttributes {
         var readingDate: Date
         var isLow: Bool
         var isHigh: Bool
+        var lastInsulinUnits: Double?
+        var lastInsulinDate: Date?
     }
 }
