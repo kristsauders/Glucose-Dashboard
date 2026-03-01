@@ -20,6 +20,7 @@ function AuthGuard({ children }: { children: React.ReactNode }) {
   const router = useRouter();
   const segments = useSegments();
 
+  // Auth guard: redirect to correct screen when auth state changes
   useEffect(() => {
     if (!auth.isReady) return;
 
@@ -31,10 +32,16 @@ function AuthGuard({ children }: { children: React.ReactNode }) {
       router.replace('/(auth)/login');
     } else if (auth.isAuthenticated && inAuthGroup) {
       router.replace('/(tabs)');
-      // Register for push notifications in background
-      registerForPushNotifications().catch(console.warn);
     }
   }, [auth.isReady, auth.isAuthenticated, segments]);
+
+  // Push notification registration: runs once when auth is ready, whether the user
+  // just logged in or was already authenticated from a previous session.
+  useEffect(() => {
+    if (auth.isReady && auth.isAuthenticated) {
+      registerForPushNotifications().catch(console.warn);
+    }
+  }, [auth.isReady, auth.isAuthenticated]);
 
   return <AuthContext.Provider value={auth}>{children}</AuthContext.Provider>;
 }

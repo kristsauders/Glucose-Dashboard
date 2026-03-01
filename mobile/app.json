@@ -6,7 +6,7 @@
     "orientation": "portrait",
     "scheme": "sage",
     "icon": "./assets/icon.png",
-    "userInterfaceStyle": "light",
+    "userInterfaceStyle": "automatic",
     "splash": {
       "image": "./assets/splash-icon.png",
       "resizeMode": "contain",
@@ -18,6 +18,8 @@
       "infoPlist": {
         "NSHealthShareUsageDescription": "Sage reads health data to display alongside your glucose readings.",
         "NSHealthUpdateUsageDescription": "Sage writes meals, insulin doses, and exercise sessions to Apple Health when you log them.",
+        "NSSupportsLiveActivities": true,
+        "NSSupportsLiveActivitiesFrequentUpdates": true,
         "UIBackgroundModes": [
           "fetch",
           "remote-notification"
