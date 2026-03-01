@@ -68,6 +68,13 @@ export function useColors(): ColorScheme {
 export const lightColors: ColorScheme = light;
 export const darkColors: ColorScheme = dark;
 
+export function getGlucoseColor(glucose: number, colors: ColorScheme = light): string {
+  if (glucose < 70) return colors.glucoseLow;
+  if (glucose <= 180) return colors.glucoseInRange;
+  if (glucose <= 250) return colors.glucoseHigh;
+  return colors.glucoseVeryHigh;
+}
+
 /** LibreLink Up API trend codes → arrow glyphs
  *  1=rapidly rising, 2=rising, 3=stable, 4=slowly falling, 5=falling, 6=rapidly falling */
 export function getTrendArrow(trend?: number | null): string {
