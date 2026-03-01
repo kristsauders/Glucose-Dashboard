@@ -57,7 +57,8 @@ export function useGlucoseWidgets() {
 }
 
 // Map stored trend code → glyph (mirrors colors.ts getTrendArrow)
+// 0=NotDetermined, 1=FallingQuickly, 2=Falling, 3=Stable, 4=Rising, 5=RisingQuickly
 function trendArrow(trend?: number | null): string {
-  const map: Record<number, string> = { 1: '↑↑', 2: '↑', 3: '→', 4: '↘', 5: '↓', 6: '↓↓' };
+  const map: Record<number, string> = { 0: '→', 1: '↓↓', 2: '↘', 3: '→', 4: '↗', 5: '↑↑' };
   return trend != null ? (map[trend] ?? '→') : '→';
 }

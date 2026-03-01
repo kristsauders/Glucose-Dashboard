@@ -76,15 +76,15 @@ export function getGlucoseColor(glucose: number, colors: ColorScheme = light): s
 }
 
 /** LibreLink Up API trend codes → arrow glyphs
- *  1=rapidly rising, 2=rising, 3=stable, 4=slowly falling, 5=falling, 6=rapidly falling */
+ *  0=NotDetermined, 1=FallingQuickly, 2=Falling, 3=Stable, 4=Rising, 5=RisingQuickly */
 export function getTrendArrow(trend?: number | null): string {
   const map: Record<number, string> = {
-    1: '↑↑',
-    2: '↑',
+    0: '→',
+    1: '↓↓',
+    2: '↘',
     3: '→',
-    4: '↘',
-    5: '↓',
-    6: '↓↓',
+    4: '↗',
+    5: '↑↑',
   };
   return trend != null ? (map[trend] ?? '→') : '→';
 }

@@ -12,8 +12,12 @@ const END_SPACE = 4;
 // Total container width: full screen minus horizontal padding (16px scroll + 16px card on each side)
 const CONTAINER_W = Dimensions.get('window').width - 64;
 
+// react-native-gifted-charts adds yAxisLabelWidth ON TOP of the `width` prop, so we subtract it.
+// Total rendered chart width = LINE_CHART_W + Y_AXIS_W = CONTAINER_W ✓
+const LINE_CHART_W = CONTAINER_W - Y_AXIS_W;
+
 // Plotting area for data points (excludes y-axis and edge spacing)
-const PLOT_W = CONTAINER_W - Y_AXIS_W - INIT_SPACE - END_SPACE;
+const PLOT_W = LINE_CHART_W - INIT_SPACE - END_SPACE;
 
 export interface ChartEvent {
   type: 'meal' | 'insulin' | 'exercise';
@@ -77,8 +81,11 @@ export function GlucoseChart({ readings, events = [] }: GlucoseChartProps) {
   const eventsByIndex = new Map<number, ChartEvent['type']>();
   for (const event of events) {
     const evTime = new Date(event.timestamp).getTime();
-    // Skip events more than 2× the chart span away (avoids matching completely unrelated data)
-    if (chartSpan > 0 && (evTime < chartStart - chartSpan || evTime > chartEnd + chartSpan)) continue;
+    // Show events from up to 24h before chart start (covers a full day of prior context)
+    // and up to 5 min after chart end. Events before chartStart snap to index 0.
+    const PRE_BUFFER_MS  = 24 * 60 * 60 * 1000;
+    const POST_BUFFER_MS =  5 * 60 * 1000;
+    if (evTime < chartStart - PRE_BUFFER_MS || evTime > chartEnd + POST_BUFFER_MS) continue;
 
     let nearestIdx = 0;
     let minDiff = Infinity;
@@ -132,21 +139,12 @@ export function GlucoseChart({ readings, events = [] }: GlucoseChartProps) {
     }
   }
 
-  const data = sampled.map((r, i) => {
-    const eventType = eventsByIndex.get(i);
-    return {
-      value: Number(r.glucose),
-      dataPointColor: Number(r.glucose) < GLUCOSE_LOW || Number(r.glucose) > GLUCOSE_HIGH
-        ? Colors.glucoseLow
-        : Colors.glucoseInRange,
-      ...(eventType ? {
-        showVerticalLine: true,
-        verticalLineColor: EVENT_COLORS[eventType],
-        verticalLineThickness: 1.5,
-        verticalLineStrokeDashArray: '4,4',
-      } : {}),
-    };
-  });
+  const data = sampled.map((r) => ({
+    value: Number(r.glucose),
+    dataPointColor: Number(r.glucose) < GLUCOSE_LOW || Number(r.glucose) > GLUCOSE_HIGH
+      ? Colors.glucoseLow
+      : Colors.glucoseInRange,
+  }));
 
   const values = sampled.map(r => Number(r.glucose));
   const minVal = Math.max(40, Math.min(...values) - 20);
@@ -157,10 +155,12 @@ export function GlucoseChart({ readings, events = [] }: GlucoseChartProps) {
 
   return (
     <View>
-      <LineChart
-        data={data}
-        width={CONTAINER_W}
-        height={160}
+      {/* Chart + event line overlay */}
+      <View style={{ position: 'relative' }}>
+        <LineChart
+          data={data}
+          width={LINE_CHART_W}
+          height={160}
         spacing={spacing}
         color={Colors.primary}
         thickness={2}
@@ -194,6 +194,26 @@ export function GlucoseChart({ readings, events = [] }: GlucoseChartProps) {
         initialSpacing={INIT_SPACE}
         endSpacing={END_SPACE}
       />
+
+        {/* Event marker lines — absolutely overlaid so they always render */}
+        {Array.from(eventsByIndex.entries()).map(([idx, type]) => {
+          const x = Y_AXIS_W + INIT_SPACE + idx * spacing;
+          return (
+            <View
+              key={`ev-${idx}-${type}`}
+              pointerEvents="none"
+              style={{
+                position: 'absolute',
+                top: 0,
+                bottom: 0,
+                left: x - 1,
+                width: 2,
+                backgroundColor: EVENT_COLORS[type] + 'cc',
+              }}
+            />
+          );
+        })}
+      </View>
 
       {/* Custom time-axis labels — pixel-aligned to chart data point positions */}
       <View style={{ position: 'relative', height: 18 }}>
