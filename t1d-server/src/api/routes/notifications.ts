@@ -5,6 +5,7 @@ import { pushNotificationService } from '../../services/push-notification-servic
 import { env } from '../../config/env.js';
 import type { AuthRequest } from '../../types/index.js';
 import { query } from '../../config/database.js';
+import { sendLiveActivityPush } from '../../services/live-activity-push.js';
 
 const router = Router();
 
@@ -151,6 +152,35 @@ router.post('/action-response', async (req, res, next) => {
 
     console.log(`[ActionResponse] User ${authReq.user!.id} clicked action ${actionId} on message ${messageId}`);
 
+    res.json({ success: true });
+  } catch (error) {
+    next(error);
+  }
+});
+
+// Register (or refresh) a Live Activity push token for the authenticated user.
+// Called by the native app whenever iOS assigns or rotates the token.
+const liveActivityTokenSchema = z.object({
+  token:      z.string().min(64),  // hex-encoded APNs device token for the activity
+  activityId: z.string().min(1),
+});
+
+router.post('/live-activity-token', async (req, res, next) => {
+  try {
+    const authReq = req as AuthRequest;
+    const { token, activityId } = liveActivityTokenSchema.parse(req.body);
+
+    // Upsert: one row per (user, activity). If the activity_id already exists,
+    // update the token (iOS can rotate it) and refresh updated_at.
+    await query(
+      `INSERT INTO live_activity_tokens (user_id, token, activity_id, updated_at)
+       VALUES ($1, $2, $3, NOW())
+       ON CONFLICT (user_id, activity_id)
+       DO UPDATE SET token = EXCLUDED.token, updated_at = NOW()`,
+      [authReq.user!.id, token, activityId],
+    );
+
+    console.log(`[LiveActivity] Registered token for user ${authReq.user!.id}, activity ${activityId.slice(0, 8)}…`);
     res.json({ success: true });
   } catch (error) {
     next(error);

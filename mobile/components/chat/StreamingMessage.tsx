@@ -1,58 +1,82 @@
-import { useRef, useEffect, useState } from 'react';
+import { useRef, useEffect, useState, useCallback } from 'react';
 import { View, Text, Animated } from 'react-native';
-import Markdown from 'react-native-markdown-display';
 import { useColors } from '../../constants/colors';
-import { getMarkdownStyles } from './markdownStyles';
 
-// Body text style constants — match markdownStyles body exactly
+// Match markdownStyles body exactly so plain streaming text looks identical
+// to the committed Markdown render in MessageBubble.
 const BASE = 14;
 const FONT = 'TiemposText';
 
-interface StreamingMessageProps {
+// Each word fades in over FADE_MS, starting STAGGER_MS after the previous word.
+// At 30 chars/10ms queue rate and ~5 chars/word, ~6 words per batch.
+// Last word in a batch starts fading at ~50ms, fully visible at ~150ms.
+const FADE_MS = 100;
+const STAGGER_MS = 10;
+
+interface AnimWord {
+  id: number;
+  text: string;
+  opacity: Animated.Value;
+  done: boolean;
+}
+
+interface Props {
   text: string;
   statusText?: string;
 }
 
-export function StreamingMessage({ text, statusText }: StreamingMessageProps) {
+export function StreamingMessage({ text, statusText }: Props) {
   const Colors = useColors();
-  const markdownStyles = getMarkdownStyles(Colors);
 
-  // committedRef tracks how much text has been "settled" into Markdown render.
-  // displayCommitted drives the Markdown re-render (state, not ref).
-  const committedRef = useRef('');
-  const [displayCommitted, setDisplayCommitted] = useState('');
+  // committed: words whose animations have finished — collapsed into one string
+  // to keep the Animated.Text node count low (only recent words are animated).
+  const [committed, setCommitted] = useState('');
+  const [pendingWords, setPendingWords] = useState<AnimWord[]>([]);
+  const processedRef = useRef(0);
+  const wordIdRef = useRef(0);
 
-  // Always holds the latest text prop so animation callbacks don't go stale.
-  const latestTextRef = useRef(text);
-
-  // Fade animation for the "new chunk" (text beyond committed)
-  const fadeAnim = useRef(new Animated.Value(1)).current;
-  const animatingRef = useRef(false);
+  // Collapse all consecutive finished words from the front of the pending queue.
+  const collapse = useCallback(() => {
+    setPendingWords(prev => {
+      let i = 0;
+      while (i < prev.length && prev[i].done) i++;
+      if (i === 0) return prev;
+      const chunk = prev.slice(0, i).map(w => w.text).join('');
+      setCommitted(c => c + chunk);
+      return prev.slice(i);
+    });
+  }, []);
 
   useEffect(() => {
-    latestTextRef.current = text;
+    if (text.length <= processedRef.current) return;
+    const newChars = text.slice(processedRef.current);
+    processedRef.current = text.length;
 
-    // If we're not mid-animation and there's new text to reveal, kick off a fade.
-    if (!animatingRef.current && text.length > committedRef.current.length) {
-      animatingRef.current = true;
-      fadeAnim.setValue(0);
+    // Tokenize preserving whitespace so inline layout stays correct.
+    const tokens = newChars.match(/\S+|\s+/g) ?? [newChars];
 
-      Animated.timing(fadeAnim, {
+    const newWords: AnimWord[] = tokens.map((token, i) => {
+      const opacity = new Animated.Value(0);
+      const word: AnimWord = { id: wordIdRef.current++, text: token, opacity, done: false };
+
+      // Left-to-right stagger: word i starts STAGGER_MS after word i-1.
+      Animated.timing(opacity, {
         toValue: 1,
-        duration: 160,
+        duration: FADE_MS,
+        delay: i * STAGGER_MS,
         useNativeDriver: true,
       }).start(({ finished }) => {
         if (finished) {
-          // Commit everything accumulated so far.
-          committedRef.current = latestTextRef.current;
-          setDisplayCommitted(latestTextRef.current);
+          word.done = true;
+          collapse();
         }
-        animatingRef.current = false;
       });
-    }
-  // Re-run when text changes OR when displayCommitted changes (to catch any
-  // gap left after a commit while the server was still sending).
-  }, [text, displayCommitted]);
+
+      return word;
+    });
+
+    setPendingWords(prev => [...prev, ...newWords]);
+  }, [text, collapse]);
 
   // Blinking cursor
   const cursorOpacity = useRef(new Animated.Value(1)).current;
@@ -67,30 +91,32 @@ export function StreamingMessage({ text, statusText }: StreamingMessageProps) {
     return () => anim.stop();
   }, []);
 
-  // The portion not yet committed — fades in.
-  const newPart = text.slice(displayCommitted.length);
-  const hasContent = displayCommitted.length > 0 || newPart.length > 0;
+  const hasContent = committed.length > 0 || pendingWords.length > 0;
 
   return (
     <View style={{ marginBottom: 12 }}>
       {hasContent ? (
         <>
-          {displayCommitted.length > 0 && (
-            <Markdown style={markdownStyles}>{displayCommitted}</Markdown>
-          )}
-          {newPart.length > 0 && (
-            <Animated.Text
-              style={{
-                opacity: fadeAnim,
-                color: Colors.foreground,
-                fontSize: BASE,
-                lineHeight: BASE * 1.6,
-                fontFamily: FONT,
-              }}
-            >
-              {newPart}
-            </Animated.Text>
-          )}
+          {/*
+            Nested Text/Animated.Text siblings flow inline in RN, giving us
+            the left-to-right word reveal without breaking text wrapping.
+          */}
+          <Text
+            style={{
+              color: Colors.foreground,
+              fontSize: BASE,
+              lineHeight: BASE * 1.6,
+              fontFamily: FONT,
+            }}
+          >
+            {committed}
+            {pendingWords.map(w => (
+              <Animated.Text key={w.id} style={{ opacity: w.opacity }}>
+                {w.text}
+              </Animated.Text>
+            ))}
+          </Text>
+
           <Animated.View
             style={{
               width: 2,

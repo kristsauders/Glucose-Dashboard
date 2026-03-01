@@ -8,8 +8,10 @@ import {
   Keyboard,
   Animated,
   Dimensions,
+  TouchableOpacity,
 } from 'react-native';
-import { useLocalSearchParams, useNavigation } from 'expo-router';
+import { Ionicons } from '@expo/vector-icons';
+import { useLocalSearchParams, useNavigation, useRouter } from 'expo-router';
 import { useQuery } from '@tanstack/react-query';
 import { getConversation } from '../../../services/api';
 import { useChat } from '../../../hooks/useChat';
@@ -26,6 +28,7 @@ export default function ChatDetailScreen() {
   const Colors = useColors();
   const { id } = useLocalSearchParams<{ id: string }>();
   const navigation = useNavigation();
+  const router = useRouter();
   const listRef = useRef<FlatList<Message>>(null);
   const [inputText, setInputText] = useState('');
   const keyboardPad = useRef(new Animated.Value(0)).current;
@@ -67,13 +70,38 @@ export default function ChatDetailScreen() {
     else navigation.setOptions({ title: 'New conversation' });
   }, [conversationTitle, isNew]);
 
+  // Always inject a back button. When deep-linked from a notification the Stack
+  // has no history (no canGoBack), so fall back to the conversations list.
+  useEffect(() => {
+    navigation.setOptions({
+      headerLeft: () => (
+        <TouchableOpacity
+          onPress={() => {
+            if (navigation.canGoBack()) {
+              navigation.goBack();
+            } else {
+              router.replace('/(tabs)/chat');
+            }
+          }}
+          hitSlop={{ top: 12, bottom: 12, left: 12, right: 12 }}
+          style={{ paddingRight: 8, flexDirection: 'row', alignItems: 'center' }}
+        >
+          <Ionicons name="chevron-back" size={28} color={Colors.primary} />
+        </TouchableOpacity>
+      ),
+    });
+  }, [Colors.primary]);
+
   const chat = useChat(isNew ? null : id);
 
-  // Hydrate messages once when the conversation query resolves
+  // Hydrate messages once when the conversation query resolves.
+  // Set shouldScrollToBottomRef so the first onContentSizeChange scrolls to end.
   const hydratedRef = useRef(false);
+  const shouldScrollToBottomRef = useRef(false);
   useEffect(() => {
     if (!hydratedRef.current && existingMessages.length > 0) {
       hydratedRef.current = true;
+      shouldScrollToBottomRef.current = true;
       chat.resetMessages(existingMessages);
     }
   }, [existingMessages]);
@@ -135,6 +163,13 @@ export default function ChatDetailScreen() {
         data={chat.messages}
         keyExtractor={item => item.id}
         contentContainerStyle={{ padding: 16, paddingBottom: chat.streaming ? Dimensions.get('window').height : 8 }}
+        onContentSizeChange={() => {
+          // Only fires for the initial hydration — once done, this is a no-op.
+          if (shouldScrollToBottomRef.current) {
+            shouldScrollToBottomRef.current = false;
+            listRef.current?.scrollToEnd({ animated: false });
+          }
+        }}
         ListEmptyComponent={
           !chat.streaming ? (
             <View style={{ alignItems: 'center', marginTop: 80, gap: 10 }}>

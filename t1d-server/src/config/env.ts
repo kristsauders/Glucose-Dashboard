@@ -31,6 +31,17 @@ const envSchema = z.object({
   VAPID_PUBLIC_KEY: z.string().optional(),
   VAPID_PRIVATE_KEY: z.string().optional(),
   VAPID_EMAIL: z.string().optional(), // Format: mailto:email@example.com
+  // ActivityKit (Live Activity) push via direct APNs HTTP/2.
+  // APNS_PRIVATE_KEY: full contents of the .p8 auth key (newlines as literal \n)
+  // APNS_KEY_ID:      10-char Key ID shown next to the key in the Apple Developer portal
+  // APNS_TEAM_ID:     10-char Team ID (top-right of Apple Developer portal)
+  // APNS_BUNDLE_ID:   App bundle ID (e.g. com.auders.t1dsage)
+  // APNS_PRODUCTION:  "true" for App Store / TestFlight; omit or "false" for dev builds
+  APNS_PRIVATE_KEY: z.string().optional(),
+  APNS_KEY_ID: z.string().optional(),
+  APNS_TEAM_ID: z.string().optional(),
+  APNS_BUNDLE_ID: z.string().optional(),
+  APNS_PRODUCTION: z.string().default('false'),
   // Voice/Audio configuration (OpenAI for Whisper STT and TTS)
   OPENAI_API_KEY: z.string().optional(),
   // Pattern detection interval (ms); 300000=5min for testing, 1800000=30min production

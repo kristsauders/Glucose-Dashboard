@@ -140,22 +140,39 @@ struct GlucoseWidget: Widget {
 struct GlucoseLiveActivityView: View {
     let state: GlucoseActivityAttributes.ContentState
     var color: Color { glucoseColor(state.glucose) }
+    // Data older than 15 minutes hasn't been refreshed in ≥3 CGM cycles — warn the user.
+    var isStale: Bool { Date().timeIntervalSince(state.readingDate) > 15 * 60 }
     var body: some View {
         HStack(spacing: 12) {
             VStack(alignment: .leading, spacing: 2) {
                 HStack(alignment: .firstTextBaseline, spacing: 4) {
-                    Text("\(state.glucose)")
+                    Text(isStale ? "--" : "\(state.glucose)")
                         .font(.system(size: 28, weight: .bold, design: .rounded))
-                        .foregroundStyle(color)
-                    Text(state.trend).font(.system(size: 20)).foregroundStyle(color)
+                        .foregroundStyle(isStale ? Color.secondary : color)
+                    Text(isStale ? "?" : state.trend)
+                        .font(.system(size: 20))
+                        .foregroundStyle(isStale ? Color.secondary : color)
                 }
-                Text(relativeTime(state.readingDate)).font(.caption).foregroundStyle(.secondary)
+                if isStale {
+                    Label("No recent data", systemImage: "exclamationmark.circle")
+                        .font(.caption2.bold())
+                        .foregroundStyle(Color.orange)
+                } else {
+                    Text(relativeTime(state.readingDate)).font(.caption).foregroundStyle(.secondary)
+                }
             }
             Spacer()
-            Text(state.isLow ? "LOW" : state.isHigh ? "HIGH" : "IN RANGE")
-                .font(.caption.bold()).foregroundStyle(color)
-                .padding(.horizontal, 8).padding(.vertical, 4)
-                .background(color.opacity(0.15), in: Capsule())
+            if isStale {
+                Text("DELAYED")
+                    .font(.caption.bold()).foregroundStyle(Color.orange)
+                    .padding(.horizontal, 8).padding(.vertical, 4)
+                    .background(Color.orange.opacity(0.15), in: Capsule())
+            } else {
+                Text(state.isLow ? "LOW" : state.isHigh ? "HIGH" : "IN RANGE")
+                    .font(.caption.bold()).foregroundStyle(color)
+                    .padding(.horizontal, 8).padding(.vertical, 4)
+                    .background(color.opacity(0.15), in: Capsule())
+            }
         }
         .padding(12)
     }

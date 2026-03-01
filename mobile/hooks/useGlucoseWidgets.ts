@@ -1,7 +1,9 @@
-import { useCallback, useRef } from 'react';
-import { NativeModules, Platform } from 'react-native';
+import { useCallback, useEffect, useRef } from 'react';
+import { NativeModules, NativeEventEmitter, Platform } from 'react-native';
 import { GLUCOSE_LOW, GLUCOSE_HIGH } from '../constants/config';
 import type { GlucoseReading } from '../types/glucose';
+import { getToken } from '../services/auth';
+import { API_BASE_URL } from '../constants/config';
 
 const { GlucoseWidgetsModule } = NativeModules;
 
@@ -14,12 +16,45 @@ if (Platform.OS === 'ios' && !GlucoseWidgetsModule) {
 /**
  * Controls the iOS lock-screen widget and Dynamic Island Live Activity.
  *
- * Usage in the dashboard:
+ * When a Live Activity starts, iOS assigns it a unique push token. We register
+ * that token with the server so it can push ActivityKit updates directly via
+ * APNs — keeping the Live Activity current even when the app is frozen by iOS.
+ *
+ * Usage:
  *   const { syncReading, endActivity } = useGlucoseWidgets();
  *   useEffect(() => { if (reading) syncReading(reading); }, [reading]);
  */
 export function useGlucoseWidgets() {
   const liveActivityStarted = useRef(false);
+
+  // Subscribe to push token events emitted by the native module.
+  // Fires immediately after startLiveActivity and again if iOS rotates the token.
+  useEffect(() => {
+    if (!isAvailable) return;
+
+    const emitter = new NativeEventEmitter(GlucoseWidgetsModule);
+    const sub = emitter.addListener(
+      'liveActivityPushToken',
+      async ({ token, activityId }: { token: string; activityId: string }) => {
+        console.log('[GlucoseWidgets] Live Activity push token:', token.slice(0, 16) + '…');
+        try {
+          const authToken = await getToken();
+          await fetch(`${API_BASE_URL}/notifications/live-activity-token`, {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+              ...(authToken ? { Authorization: `Bearer ${authToken}` } : {}),
+            },
+            body: JSON.stringify({ token, activityId }),
+          });
+        } catch (err) {
+          console.warn('[GlucoseWidgets] Failed to register Live Activity push token:', err);
+        }
+      }
+    );
+
+    return () => sub.remove();
+  }, []);
 
   /** Push a new glucose reading to the widget and Live Activity. */
   const syncReading = useCallback((reading: GlucoseReading) => {
@@ -34,11 +69,12 @@ export function useGlucoseWidgets() {
     // Always update the lock-screen widget UserDefaults + reload timeline
     GlucoseWidgetsModule.updateGlucose(glucose, trend, ts, isLow, isHigh);
 
-    // Start a Live Activity on first reading; subsequent calls just update
+    // Start a Live Activity on first reading; subsequent calls just update.
+    // The native module emits 'liveActivityPushToken' once the activity is running.
     if (!liveActivityStarted.current) {
       liveActivityStarted.current = true;
       GlucoseWidgetsModule.startLiveActivity(glucose, trend, ts, isLow, isHigh)
-        .then((id: string) => console.log('[GlucoseWidgets] Live Activity started/updated:', id))
+        .then((id: string) => console.log('[GlucoseWidgets] Live Activity started:', id))
         .catch((err: any) => {
           console.warn('[GlucoseWidgets] startLiveActivity failed:', err);
           liveActivityStarted.current = false;

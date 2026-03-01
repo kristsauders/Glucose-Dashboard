@@ -2,6 +2,7 @@ import { LibreViewClient } from './libreview.js';
 import { query } from '../config/database.js';
 import { env } from '../config/env.js';
 import { decrypt } from '../utils/crypto.js';
+import { pushLiveActivityForUser } from './live-activity-push.js';
 import type { GlucoseReading } from '../types/index.js';
 
 interface PollerState {
@@ -152,6 +153,20 @@ class LibreViewPollerService {
 
         const pollDuration = Date.now() - pollStartTime;
         console.log(`✓ Synced ${readings.length} glucose readings for user ${state.userId} (took ${pollDuration}ms)`);
+
+        // Push the latest reading to any registered Live Activities so the
+        // Dynamic Island / lock screen stays current even when the app is frozen.
+        const latest = readings[readings.length - 1];
+        if (latest) {
+          const glucose = latest.glucose as number;
+          pushLiveActivityForUser(state.userId, {
+            glucose,
+            trend: trendArrow(latest.trend as number | undefined),
+            readingDate: new Date(latest.timestamp),
+            isLow:  glucose < 70,
+            isHigh: glucose > 180,
+          }).catch(err => console.warn('[LiveActivityPush] Error during poll push:', err));
+        }
       } else {
         const pollDuration = Date.now() - pollStartTime;
         console.log(`✓ Poll completed for user ${state.userId} - no new readings (took ${pollDuration}ms)`);
@@ -223,3 +238,10 @@ class LibreViewPollerService {
 }
 
 export const libreViewPoller = new LibreViewPollerService();
+
+// LibreView MeasurementColor → trend glyph (same mapping as the mobile app)
+// 0=NotDetermined, 1=FallingQuickly, 2=Falling, 3=Stable, 4=Rising, 5=RisingQuickly
+function trendArrow(trend?: number): string {
+  const map: Record<number, string> = { 0: '→', 1: '↓↓', 2: '↘', 3: '→', 4: '↗', 5: '↑↑' };
+  return trend != null ? (map[trend] ?? '→') : '→';
+}
