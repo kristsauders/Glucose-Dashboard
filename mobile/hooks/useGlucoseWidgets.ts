@@ -1,5 +1,5 @@
 import { useCallback, useRef } from 'react';
-import { NativeModules, Platform, Settings } from 'react-native';
+import { NativeModules, Platform } from 'react-native';
 import { GLUCOSE_LOW, GLUCOSE_HIGH } from '../constants/config';
 import type { GlucoseReading } from '../types/glucose';
 import { getToken } from '../services/auth';
@@ -31,14 +31,7 @@ export function useGlucoseWidgets() {
   const syncReading = useCallback(async (reading: GlucoseReading) => {
     if (!isAvailable) return;
 
-    // Write server config to NSUserDefaults.standard before starting the
-    // Live Activity so Swift's background URLSession task can read them.
-    // React Native's Settings.set() calls [NSUserDefaults.standard setValue:forKey:].
     const authToken = await getToken();
-    Settings.set({
-      liveActivityServerUrl: API_BASE_URL,
-      liveActivityAuthToken: authToken ?? '',
-    });
 
     const glucose = Number(reading.glucose);
     const trend   = trendArrow(reading.trend);

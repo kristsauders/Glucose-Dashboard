@@ -18,6 +18,7 @@
       "infoPlist": {
         "NSHealthShareUsageDescription": "Sage reads health data to display alongside your glucose readings.",
         "NSHealthUpdateUsageDescription": "Sage writes meals, insulin doses, and exercise sessions to Apple Health when you log them.",
+        "T1DServerURL": "http://192.168.202.132:3003/api",
         "NSSupportsLiveActivities": true,
         "NSSupportsLiveActivitiesFrequentUpdates": true,
         "UIBackgroundModes": [

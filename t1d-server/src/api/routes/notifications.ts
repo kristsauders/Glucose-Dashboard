@@ -20,6 +20,12 @@ const liveActivityTokenSchema = z.object({
   activityId: z.string().min(1),
 });
 
+// Temporary debug endpoint — Swift pings this right after startLiveActivity resolves.
+router.post('/debug', (req, res) => {
+  console.log('[DEBUG] Swift ping received:', JSON.stringify(req.body));
+  res.json({ ok: true });
+});
+
 router.post('/live-activity-token', async (req, res, next) => {
   try {
     const { token, activityId } = liveActivityTokenSchema.parse(req.body);

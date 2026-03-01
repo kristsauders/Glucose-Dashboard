@@ -51,6 +51,7 @@ class GlucoseWidgetsModule: NSObject {
                                   isHigh: Bool,
                                   resolve: @escaping RCTPromiseResolveBlock,
                                   reject: @escaping RCTPromiseRejectBlock) {
+        NSLog("[GlucoseWidgets] startLiveActivity ENTRY — build check v2")
         guard #available(iOS 16.2, *) else {
             reject("UNSUPPORTED", "Live Activities require iOS 16.2+", nil); return
         }
@@ -65,10 +66,16 @@ class GlucoseWidgetsModule: NSObject {
                 let content = ActivityContent(state: state, staleDate: staleDate)
 
                 let activity: Activity<GlucoseActivityAttributes>
-                if let existing = Activity<GlucoseActivityAttributes>.activities.first {
+                if let existing = Activity<GlucoseActivityAttributes>.activities.first,
+                   existing.pushToken != nil {
+                    // Reuse existing activity only if it already has a push token channel.
                     await existing.update(content)
                     activity = existing
                 } else {
+                    // End any stale activity that lacks a push token, then start fresh.
+                    for stale in Activity<GlucoseActivityAttributes>.activities {
+                        await stale.end(nil, dismissalPolicy: .immediate)
+                    }
                     activity = try Activity.request(
                         attributes: GlucoseActivityAttributes(),
                         content: content,
@@ -78,9 +85,20 @@ class GlucoseWidgetsModule: NSObject {
                 // Resolve immediately — no waiting for the push token here.
                 resolve(activity.id)
 
-                // Snapshot server config written by JS via Settings.set().
-                let serverUrl = UserDefaults.standard.string(forKey: "liveActivityServerUrl") ?? ""
-                let authToken = UserDefaults.standard.string(forKey: "liveActivityAuthToken") ?? ""
+                // ── Debug ping ── tells the server this code path ran and what URL was read.
+                let serverUrl = Bundle.main.infoDictionary?["T1DServerURL"] as? String ?? ""
+                if let pingUrl = URL(string: "\(serverUrl)/notifications/debug") {
+                    var pingReq = URLRequest(url: pingUrl)
+                    pingReq.httpMethod = "POST"
+                    pingReq.setValue("application/json", forHTTPHeaderField: "Content-Type")
+                    pingReq.httpBody = try? JSONSerialization.data(withJSONObject: [
+                        "step": "post-resolve",
+                        "activityId": activity.id,
+                        "serverUrl": serverUrl,
+                    ])
+                    URLSession.shared.dataTask(with: pingReq).resume()
+                }
+
                 let activityId = activity.id
 
                 // Observe pushTokenUpdates indefinitely; APNs may take >5 s.
@@ -88,9 +106,7 @@ class GlucoseWidgetsModule: NSObject {
                     for await tokenData in activity.pushTokenUpdates {
                         let hex = tokenData.map { String(format: "%02x", $0) }.joined()
                         NSLog("[GlucoseWidgets] Push token received (%@…)", String(hex.prefix(16)))
-                        await GlucoseWidgetsModule.postPushToken(
-                            hex, activityId: activityId,
-                            serverUrl: serverUrl, authToken: authToken)
+                        await GlucoseWidgetsModule.postPushToken(hex, activityId: activityId, serverUrl: serverUrl)
                         // Continue loop — iOS rotates tokens occasionally.
                     }
                     NSLog("[GlucoseWidgets] pushTokenUpdates stream ended.")
@@ -132,8 +148,7 @@ class GlucoseWidgetsModule: NSObject {
 
     private static func postPushToken(_ token: String,
                                        activityId: String,
-                                       serverUrl: String,
-                                       authToken: String) async {
+                                       serverUrl: String) async {
         guard !serverUrl.isEmpty,
               let url = URL(string: "\(serverUrl)/notifications/live-activity-token") else {
             NSLog("[GlucoseWidgets] postPushToken: invalid or missing serverUrl")
