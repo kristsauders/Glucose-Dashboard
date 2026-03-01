@@ -47,6 +47,9 @@
         "origin": false
       }
     },
-    "owner": "kristsauders"
+    "owner": "kristsauders",
+    "android": {
+      "package": "com.auders.t1dsage"
+    }
   }
 }

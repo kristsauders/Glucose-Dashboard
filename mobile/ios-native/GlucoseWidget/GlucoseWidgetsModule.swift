@@ -44,9 +44,16 @@ class GlucoseWidgetsModule: NSObject {
                     glucose: Int(glucose), trend: trend,
                     readingDate: Date(timeIntervalSince1970: timestamp),
                     isLow: isLow, isHigh: isHigh)
+                let content = ActivityContent(state: state, staleDate: nil)
+                // Reuse an already-running activity (survives app restarts)
+                if let existing = Activity<GlucoseActivityAttributes>.activities.first {
+                    await existing.update(content)
+                    resolve(existing.id)
+                    return
+                }
                 let activity = try Activity.request(
                     attributes: GlucoseActivityAttributes(),
-                    content: ActivityContent(state: state, staleDate: nil))
+                    content: content)
                 resolve(activity.id)
             } catch {
                 reject("START_FAILED", error.localizedDescription, error)

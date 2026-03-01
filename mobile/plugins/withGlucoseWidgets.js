@@ -100,12 +100,144 @@ function withWidgetExtension(config) {
         }
       }
 
+      // Ensure bridging header imports RCTBridgeModule so Swift can see RCT types
+      const bridgingHeaderPath = path.join(mainTargetDest, 'Sage-Bridging-Header.h');
+      const reactImport = '#import <React/RCTBridgeModule.h>';
+      if (fs.existsSync(bridgingHeaderPath)) {
+        const contents = fs.readFileSync(bridgingHeaderPath, 'utf8');
+        if (!contents.includes(reactImport)) {
+          fs.writeFileSync(bridgingHeaderPath, contents.trimEnd() + '\n\n' + reactImport + '\n');
+        }
+      }
+
       return mod;
     },
   ]);
 }
 
-// ── 5. Add extension target to Xcode project ─────────────────────────────────
+// ── 5. Add main-app native module files to the Xcode project ─────────────────
+// Uses direct object manipulation instead of addSourceFile() to avoid xcode
+// package bugs with null path resolution in addPluginFile/correctForPath.
+function withMainModuleXcodeFiles(config) {
+  return withXcodeProject(config, (mod) => {
+    const xcodeProject = mod.modResults;
+    const objects = xcodeProject.hash.project.objects;
+
+    // Find the main app target
+    const nativeTargets = objects['PBXNativeTarget'] || {};
+    const mainTargetEntry = Object.entries(nativeTargets).find(
+      ([, t]) =>
+        t &&
+        typeof t === 'object' &&
+        t.productType === '"com.apple.product-type.application"',
+    );
+    if (!mainTargetEntry) {
+      console.warn('[withGlucoseWidgets] Could not find main app target');
+      return mod;
+    }
+    const [, mainTarget] = mainTargetEntry;
+
+    // Find the Sources build phase for the main target
+    const sourcesSection = objects['PBXSourcesBuildPhase'] || {};
+    let sourcesPhase = null;
+    for (const phase of mainTarget.buildPhases || []) {
+      const phaseUuid = phase.value;
+      if (sourcesSection[phaseUuid]) {
+        sourcesPhase = sourcesSection[phaseUuid];
+        break;
+      }
+    }
+    if (!sourcesPhase) {
+      console.warn('[withGlucoseWidgets] Could not find Sources build phase');
+      return mod;
+    }
+
+    if (!objects['PBXBuildFile']) objects['PBXBuildFile'] = {};
+    if (!objects['PBXFileReference']) objects['PBXFileReference'] = {};
+
+    // Helper: check if fileName is already in the main target's sources build phase
+    function isInMainSources(fileName) {
+      for (const f of sourcesPhase.files || []) {
+        const comment = f.comment || '';
+        if (comment.includes(fileName)) return true;
+      }
+      return false;
+    }
+
+    // Helper: find existing fileRef UUID by file name
+    function findFileRef(fileName) {
+      const fileRefs = objects['PBXFileReference'];
+      for (const [uuid, ref] of Object.entries(fileRefs)) {
+        if (!ref || typeof ref !== 'object') continue;
+        const p = ref.path || '';
+        const bare = p.replace(/^"|"$/g, ''); // strip surrounding quotes
+        if (bare === fileName || bare.endsWith('/' + fileName)) return uuid;
+      }
+      return null;
+    }
+
+    // ── Files that need a NEW file reference (unique to main target) ──
+    const newFiles = [
+      ['Sage/GlucoseWidgetsModule.swift', 'sourcecode.swift'],
+      ['Sage/GlucoseWidgetsModule.m',     'sourcecode.c.objc'],
+    ];
+
+    for (const [filePath, fileType] of newFiles) {
+      const fileName = filePath.split('/').pop();
+      if (isInMainSources(fileName)) continue;
+
+      // Reuse existing file ref if already present (e.g. from a previous prebuild)
+      let fileRefUuid = findFileRef(fileName);
+      if (!fileRefUuid) {
+        fileRefUuid = xcodeProject.generateUuid();
+        objects['PBXFileReference'][fileRefUuid] = {
+          isa: 'PBXFileReference',
+          lastKnownFileType: fileType,
+          name: `"${fileName}"`,
+          path: `"${filePath}"`,
+          sourceTree: '"<group>"',
+        };
+        objects['PBXFileReference'][`${fileRefUuid}_comment`] = fileName;
+      }
+
+      const buildFileUuid = xcodeProject.generateUuid();
+      const inSourcesComment = `${fileName} in Sources`;
+      objects['PBXBuildFile'][buildFileUuid] = {
+        isa: 'PBXBuildFile',
+        fileRef: fileRefUuid,
+        fileRef_comment: fileName,
+      };
+      objects['PBXBuildFile'][`${buildFileUuid}_comment`] = inSourcesComment;
+      sourcesPhase.files.push({ value: buildFileUuid, comment: inSourcesComment });
+      console.log(`[withGlucoseWidgets] Added ${fileName} to main app target`);
+    }
+
+    // ── GlucoseActivityAttributes.swift: already exists as an extension file ref;
+    //    we only need a new PBXBuildFile entry pointing at the same ref. ──
+    const attrFileName = 'GlucoseActivityAttributes.swift';
+    if (!isInMainSources(attrFileName)) {
+      const fileRefUuid = findFileRef(attrFileName);
+      if (fileRefUuid) {
+        const buildFileUuid = xcodeProject.generateUuid();
+        const inSourcesComment = `${attrFileName} in Sources`;
+        objects['PBXBuildFile'][buildFileUuid] = {
+          isa: 'PBXBuildFile',
+          fileRef: fileRefUuid,
+          fileRef_comment: attrFileName,
+        };
+        objects['PBXBuildFile'][`${buildFileUuid}_comment`] = inSourcesComment;
+        sourcesPhase.files.push({ value: buildFileUuid, comment: inSourcesComment });
+        console.log(`[withGlucoseWidgets] Added ${attrFileName} to main app target`);
+      } else {
+        console.warn(`[withGlucoseWidgets] Could not find file ref for ${attrFileName}`);
+      }
+    }
+
+    return mod;
+  });
+}
+
+// ── 6. Add extension target to Xcode project ─────────────────────────────────
 function withWidgetXcodeTarget(config) {
   return withXcodeProject(config, (mod) => {
     const xcodeProject = mod.modResults;
@@ -196,7 +328,8 @@ function withWidgetXcodeTarget(config) {
 module.exports = function withGlucoseWidgets(config) {
   config = withAppGroupEntitlement(config);
   config = withLiveActivitiesInfoPlist(config);
-  config = withWidgetExtension(config);   // copies files first
-  config = withWidgetXcodeTarget(config); // then wires Xcode
+  config = withWidgetExtension(config);      // copies files to ios/
+  config = withMainModuleXcodeFiles(config); // adds module files to main target
+  config = withWidgetXcodeTarget(config);    // adds extension target
   return config;
 };
