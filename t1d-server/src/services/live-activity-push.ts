@@ -107,7 +107,12 @@ export async function sendLiveActivityPush(
   const nowUnixTs = Math.floor(Date.now() / 1000);
   // Swift Codable Date → seconds since 2001-01-01
   const swiftDate = readingUnixTs - SWIFT_REFERENCE_DATE_OFFSET;
-  const staleDate = readingUnixTs + 16 * 60; // 16 minutes = 3 missed CGM cycles → mark stale
+
+  console.log(`[LiveActivityPush] PUSH_DEBUG glucose=${state.glucose} trend=${state.trend} readingDate_utc=${state.readingDate.toISOString()} age_s=${nowUnixTs - readingUnixTs} swiftDate=${swiftDate}`);
+  // stale-date must be in the future. Base it on now so a delayed reading
+  // (e.g. CGM sensor gap) doesn't cause iOS to immediately mark the activity stale.
+  // The widget's own isStale check (>15 min old readingDate) handles the UI separately.
+  const staleDate = nowUnixTs + 5 * 60; // mark stale if no push arrives for 5 minutes
 
   const payload = {
     aps: {

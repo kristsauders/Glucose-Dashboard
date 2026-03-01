@@ -156,7 +156,9 @@ class LibreViewPollerService {
 
         // Push the latest reading to any registered Live Activities so the
         // Dynamic Island / lock screen stays current even when the app is frozen.
-        const latest = readings[readings.length - 1];
+        // Use max timestamp — graphData order varies (LibreView may put current reading at index 0 or last).
+        const latest = readings.reduce((a, b) => a.timestamp > b.timestamp ? a : b);
+        console.log(`[LiveActivityPush] POLLER_DEBUG selected reading: ts=${latest.timestamp} glucose=${latest.glucose} (array size=${readings.length}, first_ts=${readings[0].timestamp}, last_ts=${readings[readings.length-1].timestamp})`);
         if (latest) {
           const glucose = latest.glucose as number;
           pushLiveActivityForUser(state.userId, {
