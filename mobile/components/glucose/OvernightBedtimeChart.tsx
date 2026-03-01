@@ -1,6 +1,6 @@
 import { View, Text, Dimensions } from 'react-native';
 import { LineChart } from 'react-native-gifted-charts';
-import { Colors } from '../../constants/colors';
+import { useColors } from '../../constants/colors';
 import type { DayMetrics } from '../../hooks/useGlucose';
 
 const SCREEN_W = Dimensions.get('window').width;
@@ -11,6 +11,7 @@ interface Props {
 }
 
 export function OvernightBedtimeChart({ daily }: Props) {
+  const Colors = useColors();
   if (!daily || daily.length === 0) return null;
 
   // Only include days that have at least one of the two values

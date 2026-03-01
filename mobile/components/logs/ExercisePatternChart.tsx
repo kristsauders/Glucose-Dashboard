@@ -1,6 +1,6 @@
 import { View, Text, Dimensions } from 'react-native';
 import { BarChart } from 'react-native-gifted-charts';
-import { Colors } from '../../constants/colors';
+import { useColors } from '../../constants/colors';
 import { format } from 'date-fns';
 import type { ExerciseLog } from '../../types/logs';
 
@@ -19,6 +19,7 @@ interface Props {
 }
 
 export function ExercisePatternChart({ exercises }: Props) {
+  const Colors = useColors();
   if (!exercises || exercises.length === 0) return null;
 
   const byDay = new Map<string, { light: number; moderate: number; intense: number }>();

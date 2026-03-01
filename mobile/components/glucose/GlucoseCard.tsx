@@ -1,6 +1,6 @@
 import { View, Text, ActivityIndicator } from 'react-native';
 import { Card } from '../shared/Card';
-import { Colors, getGlucoseColor, getTrendArrow } from '../../constants/colors';
+import { useColors, getGlucoseColor, getTrendArrow } from '../../constants/colors';
 import { formatDistanceToNow } from 'date-fns';
 import type { GlucoseReading } from '../../types/glucose';
 
@@ -10,6 +10,7 @@ interface GlucoseCardProps {
 }
 
 export function GlucoseCard({ reading, loading }: GlucoseCardProps) {
+  const Colors = useColors();
   if (loading) {
     return (
       <Card>
@@ -26,7 +27,7 @@ export function GlucoseCard({ reading, loading }: GlucoseCardProps) {
     );
   }
 
-  const color = getGlucoseColor(reading.glucose);
+  const color = getGlucoseColor(reading.glucose, Colors);
   const arrow = getTrendArrow(reading.trend);
   const age = formatDistanceToNow(new Date(reading.timestamp), { addSuffix: true });
   const label = reading.glucose < 70 ? 'LOW' : reading.glucose > 180 ? 'HIGH' : 'IN RANGE';

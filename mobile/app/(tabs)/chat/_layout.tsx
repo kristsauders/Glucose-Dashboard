@@ -1,7 +1,8 @@
 import { Stack } from 'expo-router';
-import { Colors } from '../../../constants/colors';
+import { useColors } from '../../../constants/colors';
 
 export default function ChatLayout() {
+  const Colors = useColors();
   return (
     <Stack
       screenOptions={{

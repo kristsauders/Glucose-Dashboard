@@ -15,7 +15,7 @@ import {
   getMealLogs, getInsulinLogs, getExerciseLogs,
   deleteMeal, deleteInsulin, deleteExercise,
 } from '../../services/api';
-import { Colors } from '../../constants/colors';
+import { useColors } from '../../constants/colors';
 import { format } from 'date-fns';
 import type { MealLog, InsulinLog, ExerciseLog } from '../../types/logs';
 import { useGlucoseHistory } from '../../hooks/useGlucose';
@@ -51,6 +51,7 @@ const DATE_RANGES: { days: DateRange; label: string }[] = [
 // ── Reusable card wrapper ─────────────────────────────────────────────────────
 
 function ChartCard({ children }: { children: React.ReactNode }) {
+  const Colors = useColors();
   return (
     <View style={{
       backgroundColor: Colors.card,
@@ -75,6 +76,7 @@ function SegmentedControl<T extends string>({
   value: T;
   onChange: (v: T) => void;
 }) {
+  const Colors = useColors();
   return (
     <View style={{ flexDirection: 'row', backgroundColor: Colors.muted, borderRadius: 12, padding: 4 }}>
       {options.map(opt => (
@@ -105,6 +107,7 @@ function SegmentedControl<T extends string>({
 // ── Log item renderers ────────────────────────────────────────────────────────
 
 function LogItemCard({ children, onDelete }: { children: React.ReactNode; onDelete: () => void }) {
+  const Colors = useColors();
   return (
     <TouchableOpacity
       onLongPress={onDelete}
@@ -123,6 +126,7 @@ function LogItemCard({ children, onDelete }: { children: React.ReactNode; onDele
 }
 
 function MealItem({ item, onDelete }: { item: MealLog; onDelete: () => void }) {
+  const Colors = useColors();
   return (
     <LogItemCard onDelete={onDelete}>
       <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' }}>
@@ -139,6 +143,7 @@ function MealItem({ item, onDelete }: { item: MealLog; onDelete: () => void }) {
 }
 
 function InsulinItem({ item, onDelete }: { item: InsulinLog; onDelete: () => void }) {
+  const Colors = useColors();
   return (
     <LogItemCard onDelete={onDelete}>
       <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' }}>
@@ -155,6 +160,7 @@ function InsulinItem({ item, onDelete }: { item: InsulinLog; onDelete: () => voi
 }
 
 function ExerciseItem({ item, onDelete }: { item: ExerciseLog; onDelete: () => void }) {
+  const Colors = useColors();
   return (
     <LogItemCard onDelete={onDelete}>
       <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' }}>
@@ -173,6 +179,7 @@ function ExerciseItem({ item, onDelete }: { item: ExerciseLog; onDelete: () => v
 // ── Glucose Analytics view ────────────────────────────────────────────────────
 
 function GlucoseAnalyticsView() {
+  const Colors = useColors();
   const [range, setRange] = useState<DateRange>(7);
   const history = useGlucoseHistory(range);
   const useWeekly = range === 90;
@@ -340,6 +347,7 @@ function GlucoseAnalyticsView() {
 // ── Logs view ─────────────────────────────────────────────────────────────────
 
 function LogsView() {
+  const Colors = useColors();
   const [activeTab, setActiveTab] = useState<LogTab>('meal');
   const queryClient = useQueryClient();
 
@@ -466,6 +474,7 @@ function LogsView() {
 // ── Main screen ───────────────────────────────────────────────────────────────
 
 export default function HistoryScreen() {
+  const Colors = useColors();
   const [mainView, setMainView] = useState<MainView>('glucose');
 
   return (

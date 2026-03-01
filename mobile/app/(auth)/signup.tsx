@@ -13,11 +13,12 @@ import {
 import { Link } from 'expo-router';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useAuth } from '../../hooks/useAuth';
-import { Colors } from '../../constants/colors';
+import { useColors } from '../../constants/colors';
 
 const DIAGNOSIS_TYPES = ['Type 1', 'LADA', 'Type 2', 'Other'];
 
 export default function SignupScreen() {
+  const Colors = useColors();
   const { signup } = useAuth();
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');

@@ -13,9 +13,10 @@ import {
 import { Link } from 'expo-router';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useAuth } from '../../hooks/useAuth';
-import { Colors } from '../../constants/colors';
+import { useColors } from '../../constants/colors';
 
 export default function LoginScreen() {
+  const Colors = useColors();
   const { login } = useAuth();
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');

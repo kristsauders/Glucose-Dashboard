@@ -24,9 +24,10 @@ import {
   updateModelConfig,
 } from '../../services/api';
 import { registerForPushNotifications } from '../../services/notifications';
-import { Colors } from '../../constants/colors';
+import { useColors } from '../../constants/colors';
 
 function SettingRow({ label, children }: { label: string; children: React.ReactNode }) {
+  const Colors = useColors();
   return (
     <View
       style={{
@@ -45,6 +46,7 @@ function SettingRow({ label, children }: { label: string; children: React.ReactN
 }
 
 function SectionHeader({ title }: { title: string }) {
+  const Colors = useColors();
   return (
     <Text
       style={{
@@ -63,6 +65,7 @@ function SectionHeader({ title }: { title: string }) {
 }
 
 export default function SettingsScreen() {
+  const Colors = useColors();
   const { user, logout } = useAuth();
   const queryClient = useQueryClient();
 

@@ -1,8 +1,9 @@
 import { Tabs } from 'expo-router';
 import { View, Text } from 'react-native';
-import { Colors } from '../../constants/colors';
+import { useColors } from '../../constants/colors';
 
 function TabIcon({ symbol, focused }: { symbol: string; focused: boolean }) {
+  const Colors = useColors();
   return (
     <Text style={{ fontSize: 22, color: focused ? Colors.tabActive : Colors.tabInactive }}>
       {symbol}
@@ -11,6 +12,7 @@ function TabIcon({ symbol, focused }: { symbol: string; focused: boolean }) {
 }
 
 export default function TabsLayout() {
+  const Colors = useColors();
   return (
     <Tabs
       screenOptions={{

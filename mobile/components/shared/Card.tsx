@@ -1,5 +1,5 @@
 import { View, ViewStyle } from 'react-native';
-import { Colors } from '../../constants/colors';
+import { useColors } from '../../constants/colors';
 
 interface CardProps {
   children: React.ReactNode;
@@ -7,6 +7,7 @@ interface CardProps {
 }
 
 export function Card({ children, style }: CardProps) {
+  const Colors = useColors();
   return (
     <View
       style={[

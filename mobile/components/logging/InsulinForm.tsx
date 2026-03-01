@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { View, Text, TextInput, TouchableOpacity, ActivityIndicator, Alert } from 'react-native';
-import { Colors } from '../../constants/colors';
+import { useColors } from '../../constants/colors';
 
 const INSULIN_TYPES = ['bolus', 'correction', 'basal'] as const;
 type InsulinType = typeof INSULIN_TYPES[number];
@@ -11,6 +11,7 @@ interface InsulinFormProps {
 }
 
 export function InsulinForm({ onSubmit, onCancel }: InsulinFormProps) {
+  const Colors = useColors();
   const [units, setUnits] = useState('');
   const [type, setType] = useState<InsulinType>('bolus');
   const [loading, setLoading] = useState(false);

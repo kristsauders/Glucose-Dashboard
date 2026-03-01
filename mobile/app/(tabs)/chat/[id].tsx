@@ -15,10 +15,11 @@ import { useChat } from '../../../hooks/useChat';
 import { MessageBubble } from '../../../components/chat/MessageBubble';
 import { StreamingMessage } from '../../../components/chat/StreamingMessage';
 import { ChatInput } from '../../../components/chat/ChatInput';
-import { Colors } from '../../../constants/colors';
+import { useColors } from '../../../constants/colors';
 import type { Message } from '../../../types/chat';
 
 export default function ChatDetailScreen() {
+  const Colors = useColors();
   const { id } = useLocalSearchParams<{ id: string }>();
   const navigation = useNavigation();
   const listRef = useRef<FlatList<Message>>(null);

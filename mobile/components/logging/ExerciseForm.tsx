@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { View, Text, TextInput, TouchableOpacity, ActivityIndicator, Alert } from 'react-native';
-import { Colors } from '../../constants/colors';
+import { useColors } from '../../constants/colors';
 
 const ACTIVITY_TYPES = ['walking', 'running', 'cycling', 'swimming', 'gym', 'yoga', 'other'] as const;
 const INTENSITY_LEVELS = ['low', 'moderate', 'high'] as const;
@@ -18,6 +18,7 @@ interface ExerciseFormProps {
 }
 
 export function ExerciseForm({ onSubmit, onCancel }: ExerciseFormProps) {
+  const Colors = useColors();
   const [activity, setActivity] = useState<ActivityType>('walking');
   const [duration, setDuration] = useState('');
   const [intensity, setIntensity] = useState<Intensity>('moderate');

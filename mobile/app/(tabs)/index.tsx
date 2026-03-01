@@ -10,10 +10,11 @@ import { useMealLogs, useInsulinLogs, useExerciseLogs } from '../../hooks/useLog
 import { useGlucoseWidgets } from '../../hooks/useGlucoseWidgets';
 import type { ChartEvent } from '../../components/glucose/GlucoseChart';
 import type { GlucoseReading, GlucoseSummary } from '../../types/glucose';
-import { Colors } from '../../constants/colors';
+import { useColors } from '../../constants/colors';
 import { useAuth } from '../../hooks/useAuth';
 
 export default function DashboardScreen() {
+  const Colors = useColors();
   const router = useRouter();
   const { user } = useAuth();
   const latest = useLatestGlucose();

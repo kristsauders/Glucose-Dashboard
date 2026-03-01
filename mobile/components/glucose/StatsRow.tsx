@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { View, Text, TouchableOpacity } from 'react-native';
-import { Colors } from '../../constants/colors';
+import { useColors } from '../../constants/colors';
 import type { GlucoseSummary } from '../../types/glucose';
 
 interface StatsRowProps {
@@ -8,6 +8,7 @@ interface StatsRowProps {
 }
 
 function Stat({ label, value, color, small }: { label: string; value: string; color?: string; small?: boolean }) {
+  const Colors = useColors();
   return (
     <View style={{ alignItems: 'center', flex: 1 }}>
       <Text style={{ fontSize: small ? 16 : 20, fontWeight: '700', color: color ?? Colors.foreground }}>{value}</Text>
@@ -17,12 +18,14 @@ function Stat({ label, value, color, small }: { label: string; value: string; co
 }
 
 function Divider({ vertical }: { vertical?: boolean }) {
+  const Colors = useColors();
   return vertical
     ? <View style={{ width: 1, backgroundColor: Colors.border }} />
     : <View style={{ height: 1, backgroundColor: Colors.border, marginHorizontal: 16, marginVertical: 12 }} />;
 }
 
 export function StatsRow({ summary }: StatsRowProps) {
+  const Colors = useColors();
   const [expanded, setExpanded] = useState(false);
   if (!summary) return null;
 

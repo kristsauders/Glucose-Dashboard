@@ -1,7 +1,7 @@
 import { View, Text, Image } from 'react-native';
 import Markdown, { type RenderRules } from 'react-native-markdown-display';
-import { Colors } from '../../constants/colors';
-import { assistantMarkdownStyles } from './markdownStyles';
+import { useColors } from '../../constants/colors';
+import { getMarkdownStyles } from './markdownStyles';
 import type { Message } from '../../types/chat';
 
 interface MessageBubbleProps {
@@ -28,6 +28,8 @@ const markdownRules: RenderRules = {
 };
 
 export function MessageBubble({ message }: MessageBubbleProps) {
+  const Colors = useColors();
+  const markdownStyles = getMarkdownStyles(Colors);
   const isUser = message.role === 'user';
   const charts: string[] = message.metadata?.charts ?? [];
 
@@ -56,7 +58,7 @@ export function MessageBubble({ message }: MessageBubbleProps) {
             {message.content}
           </Text>
         ) : (
-          <Markdown style={assistantMarkdownStyles} rules={markdownRules}>
+          <Markdown style={markdownStyles} rules={markdownRules}>
             {message.content}
           </Markdown>
         )}

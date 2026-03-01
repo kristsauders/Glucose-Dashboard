@@ -1,6 +1,6 @@
 import { View, Text, Dimensions } from 'react-native';
 import { BarChart } from 'react-native-gifted-charts';
-import { Colors } from '../../constants/colors';
+import { useColors } from '../../constants/colors';
 import { format } from 'date-fns';
 import type { MealLog } from '../../types/logs';
 
@@ -12,6 +12,7 @@ interface Props {
 }
 
 export function DailyCarbChart({ meals }: Props) {
+  const Colors = useColors();
   if (!meals || meals.length === 0) return null;
 
   // Group by local date

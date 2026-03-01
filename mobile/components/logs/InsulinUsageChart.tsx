@@ -1,6 +1,6 @@
 import { View, Text, Dimensions } from 'react-native';
 import { BarChart } from 'react-native-gifted-charts';
-import { Colors } from '../../constants/colors';
+import { useColors } from '../../constants/colors';
 import { format } from 'date-fns';
 import type { InsulinLog } from '../../types/logs';
 
@@ -19,6 +19,7 @@ interface Props {
 }
 
 export function InsulinUsageChart({ doses }: Props) {
+  const Colors = useColors();
   if (!doses || doses.length === 0) return null;
 
   const byDay = new Map<string, { basal: number; rapid: number }>();

@@ -11,11 +11,12 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { getConversations, deleteConversation } from '../../../services/api';
-import { Colors } from '../../../constants/colors';
+import { useColors } from '../../../constants/colors';
 import { formatDistanceToNow } from 'date-fns';
 import type { Conversation } from '../../../types/chat';
 
 export default function ConversationListScreen() {
+  const Colors = useColors();
   const router = useRouter();
   const queryClient = useQueryClient();
 

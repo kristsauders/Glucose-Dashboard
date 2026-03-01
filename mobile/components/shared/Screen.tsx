@@ -1,6 +1,6 @@
 import { ScrollView, View, RefreshControl } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { Colors } from '../../constants/colors';
+import { useColors } from '../../constants/colors';
 
 interface ScreenProps {
   children: React.ReactNode;
@@ -11,6 +11,7 @@ interface ScreenProps {
 }
 
 export function Screen({ children, scroll = true, onRefresh, refreshing = false, padded = true }: ScreenProps) {
+  const Colors = useColors();
   const content = (
     <View style={{ flex: 1, padding: padded ? 16 : 0 }}>
       {children}

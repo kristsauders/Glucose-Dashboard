@@ -1,6 +1,6 @@
 import { View, Text, Dimensions } from 'react-native';
 import { LineChart } from 'react-native-gifted-charts';
-import { Colors } from '../../constants/colors';
+import { useColors } from '../../constants/colors';
 import { GLUCOSE_LOW, GLUCOSE_HIGH } from '../../constants/config';
 import type { GlucoseReading } from '../../types/glucose';
 
@@ -38,6 +38,7 @@ interface GlucoseChartProps {
 }
 
 export function GlucoseChart({ readings, events = [] }: GlucoseChartProps) {
+  const Colors = useColors();
   if (!readings || readings.length === 0) {
     return (
       <View style={{ height: 160, justifyContent: 'center', alignItems: 'center' }}>
@@ -46,8 +47,8 @@ export function GlucoseChart({ readings, events = [] }: GlucoseChartProps) {
     );
   }
 
-  // Readings come from server in DESC order — reverse to chronological (oldest → left)
-  const chronological = [...readings].reverse();
+  // Readings arrive in chronological order (oldest → newest) from useGlucose24h — use as-is.
+  const chronological = [...readings];
 
   // Downsample to max 144 points — keep every Nth reading so we stay under the cap.
   // One pass of every-other can still leave 250+ points from dense CGM data, so compute N.

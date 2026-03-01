@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { View, Text, TextInput, TouchableOpacity, ActivityIndicator, Alert } from 'react-native';
-import { Colors } from '../../constants/colors';
+import { useColors } from '../../constants/colors';
 
 interface MealFormProps {
   onSubmit: (data: { carbs: number; description: string; timestamp: string }) => Promise<void>;
@@ -8,6 +8,7 @@ interface MealFormProps {
 }
 
 export function MealForm({ onSubmit, onCancel }: MealFormProps) {
+  const Colors = useColors();
   const [carbs, setCarbs] = useState('');
   const [description, setDescription] = useState('');
   const [loading, setLoading] = useState(false);

@@ -1,5 +1,5 @@
 import { View, Text } from 'react-native';
-import { Colors } from '../../constants/colors';
+import { useColors } from '../../constants/colors';
 
 interface EmptyStateProps {
   icon?: string;
@@ -8,6 +8,7 @@ interface EmptyStateProps {
 }
 
 export function EmptyState({ icon = '📭', title, subtitle }: EmptyStateProps) {
+  const Colors = useColors();
   return (
     <View style={{ alignItems: 'center', paddingVertical: 48 }}>
       <Text style={{ fontSize: 40, marginBottom: 12 }}>{icon}</Text>

@@ -1,6 +1,6 @@
 import { View, Text, ScrollView, Dimensions } from 'react-native';
 import { BarChart } from 'react-native-gifted-charts';
-import { Colors } from '../../constants/colors';
+import { useColors } from '../../constants/colors';
 import type { DayMetrics, WeekMetrics } from '../../hooks/useGlucose';
 
 const SCREEN_W = Dimensions.get('window').width;
@@ -14,6 +14,7 @@ interface Props {
 }
 
 export function DailyGlucoseBarChart({ daily, weekly, useWeekly }: Props) {
+  const Colors = useColors();
   const items = useWeekly ? weekly : daily;
   if (!items || items.length === 0) return null;
 

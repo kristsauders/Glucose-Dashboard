@@ -1,6 +1,7 @@
 import { View, Text, Dimensions } from 'react-native';
 import { LineChart } from 'react-native-gifted-charts';
-import { Colors } from '../../constants/colors';
+import { useColors } from '../../constants/colors';
+import type { ColorScheme } from '../../constants/colors';
 import type { WeekMetrics } from '../../hooks/useGlucose';
 
 const SCREEN_W = Dimensions.get('window').width;
@@ -18,13 +19,14 @@ function a1cLabel(a1c: number): string {
   return 'High — consider adjustment';
 }
 
-function a1cColor(a1c: number): string {
-  if (a1c < 6.5) return Colors.glucoseInRange;
-  if (a1c < 7.5) return Colors.glucoseHigh;
-  return Colors.glucoseLow;
+function a1cColor(a1c: number, colors: ColorScheme): string {
+  if (a1c < 6.5) return colors.glucoseInRange;
+  if (a1c < 7.5) return colors.glucoseHigh;
+  return colors.glucoseLow;
 }
 
 export function WeeklyA1CChart({ weekly }: Props) {
+  const Colors = useColors();
   if (!weekly || weekly.length < 2) return null;
 
   const a1cValues = weekly.map(w => w.estA1c);
@@ -40,7 +42,7 @@ export function WeeklyA1CChart({ weekly }: Props) {
     label: w.weekLabel,
   }));
 
-  const lineColor = a1cColor(avgA1c);
+  const lineColor = a1cColor(avgA1c, Colors);
 
   return (
     <View>

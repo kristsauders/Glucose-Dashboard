@@ -11,7 +11,7 @@ import { useQueryClient } from '@tanstack/react-query';
 import { MealForm } from '../../components/logging/MealForm';
 import { InsulinForm } from '../../components/logging/InsulinForm';
 import { ExerciseForm } from '../../components/logging/ExerciseForm';
-import { Colors } from '../../constants/colors';
+import { useColors } from '../../constants/colors';
 import { quickLog } from '../../services/api';
 import { useHealthKit } from '../../hooks/useHealthKit';
 
@@ -24,6 +24,7 @@ const TABS: { key: LogType; label: string; emoji: string }[] = [
 ];
 
 export default function LogScreen() {
+  const Colors = useColors();
   const [activeTab, setActiveTab] = useState<LogType>('meal');
   const queryClient = useQueryClient();
   const healthKit = useHealthKit();

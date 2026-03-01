@@ -1,6 +1,7 @@
 import { View, Text } from 'react-native';
 import { BarChart } from 'react-native-gifted-charts';
-import { Colors } from '../../constants/colors';
+import { useColors } from '../../constants/colors';
+import type { ColorScheme } from '../../constants/colors';
 import type { BucketData } from '../../hooks/useGlucose';
 import { Dimensions } from 'react-native';
 
@@ -11,13 +12,14 @@ interface Props {
   distribution: BucketData[];
 }
 
-function bucketColor(low: number): string {
-  if (low < 70)  return Colors.glucoseLow;
-  if (low < 180) return Colors.glucoseInRange;
-  return Colors.glucoseHigh;
+function bucketColor(low: number, colors: ColorScheme): string {
+  if (low < 70)  return colors.glucoseLow;
+  if (low < 180) return colors.glucoseInRange;
+  return colors.glucoseHigh;
 }
 
 export function DistributionChart({ distribution }: Props) {
+  const Colors = useColors();
   // Filter out empty edge buckets, keep a reasonable range (e.g. 40–380)
   const visible = distribution.filter(b => b.low >= 40 && b.low < 380);
   const maxPct  = Math.max(...visible.map(b => b.pct), 1);
@@ -26,7 +28,7 @@ export function DistributionChart({ distribution }: Props) {
 
   const barData = visible.map(b => ({
     value: parseFloat(b.pct.toFixed(1)),
-    frontColor: bucketColor(b.low),
+    frontColor: bucketColor(b.low, Colors),
     label: b.low % 40 === 0 ? `${b.low}` : '',  // label every 40mg/dL
   }));
 

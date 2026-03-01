@@ -1,7 +1,7 @@
 import { View, Text } from 'react-native';
 import Markdown from 'react-native-markdown-display';
-import { Colors } from '../../constants/colors';
-import { assistantMarkdownStyles } from './markdownStyles';
+import { useColors } from '../../constants/colors';
+import { getMarkdownStyles } from './markdownStyles';
 
 interface StreamingMessageProps {
   text: string;
@@ -9,6 +9,8 @@ interface StreamingMessageProps {
 }
 
 export function StreamingMessage({ text, statusText }: StreamingMessageProps) {
+  const Colors = useColors();
+  const markdownStyles = getMarkdownStyles(Colors);
   return (
     <View style={{ marginBottom: 12, paddingHorizontal: 4 }}>
       <View
@@ -22,7 +24,7 @@ export function StreamingMessage({ text, statusText }: StreamingMessageProps) {
         }}
       >
         {text ? (
-          <Markdown style={assistantMarkdownStyles}>{text}</Markdown>
+          <Markdown style={markdownStyles}>{text}</Markdown>
         ) : (
           <Text style={{ color: Colors.mutedForeground, fontSize: 14, fontFamily: 'TiemposText' }}>
             {statusText || 'Thinking…'}

@@ -1,4 +1,6 @@
-export const Colors = {
+import { useColorScheme } from 'react-native';
+
+const light = {
   background: '#f5f5f5',
   card: '#ffffff',
   cardBorder: '#e2e8f0',
@@ -26,16 +28,48 @@ export const Colors = {
   tabInactive: '#94a3b8',
 };
 
-export function getGlucoseColor(glucose: number): string {
-  if (glucose < 70) return Colors.glucoseLow;
-  if (glucose <= 180) return Colors.glucoseInRange;
-  if (glucose <= 250) return Colors.glucoseHigh;
-  return Colors.glucoseVeryHigh;
+const dark = {
+  background: '#0f172a',
+  card: '#1e293b',
+  cardBorder: '#334155',
+  primary: '#3b82f6',
+  primaryDark: '#2563eb',
+  primaryForeground: '#ffffff',
+  foreground: '#f1f5f9',
+  muted: '#1e293b',
+  mutedForeground: '#94a3b8',
+  border: '#334155',
+  destructive: '#ef4444',
+  success: '#22c55e',
+  warning: '#f59e0b',
+
+  // Glucose-specific
+  glucoseLow: '#ef4444',
+  glucoseInRange: '#22c55e',
+  glucoseHigh: '#f59e0b',
+  glucoseVeryHigh: '#dc2626',
+  glucoseChartLine: '#60a5fa',
+  glucoseTargetBand: 'rgba(34,197,94,0.15)',
+
+  // Tab bar
+  tabActive: '#60a5fa',
+  tabInactive: '#475569',
+};
+
+export type ColorScheme = typeof light;
+
+/** Call inside any React component or hook to get theme colors that update with system preference. */
+export function useColors(): ColorScheme {
+  const scheme = useColorScheme();
+  return scheme === 'dark' ? dark : light;
 }
 
+// Static palettes for non-component contexts (e.g. markdownStyles factory).
+export const lightColors: ColorScheme = light;
+export const darkColors: ColorScheme = dark;
+
 /** LibreLink Up API trend codes → arrow glyphs
- *  The Link Up API uses: 1=rapidly rising, 2=rising, 3=stable, 4=slowly falling, 5=falling, 6=rapidly falling
- *  (empirically confirmed from DB distribution — 3 is by far the most common, consistent with "stable") */
+ *  1=rapidly rising, 2=rising, 3=stable, 4=slowly falling, 5=falling, 6=rapidly falling */
 export function getTrendArrow(trend?: number | null): string {
   const map: Record<number, string> = {
     1: '↑↑',

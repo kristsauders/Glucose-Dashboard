@@ -1,5 +1,5 @@
 import { View, TextInput, TouchableOpacity, ActivityIndicator } from 'react-native';
-import { Colors } from '../../constants/colors';
+import { useColors } from '../../constants/colors';
 
 interface ChatInputProps {
   value: string;
@@ -20,6 +20,7 @@ export function ChatInput({
   disabled,
   placeholder = 'Ask Sage anything…',
 }: ChatInputProps) {
+  const Colors = useColors();
   const canSend = value.trim().length > 0 && !streaming && !disabled;
 
   return (
