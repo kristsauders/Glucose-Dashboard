@@ -210,6 +210,18 @@ router.post('/live-activity-register', async (req, res, next) => {
     const authReq = req as AuthRequest;
     const { activityId } = liveActivityRegisterSchema.parse(req.body);
 
+    // Remove any stale registrations for this user before inserting the new one.
+    // Each app launch creates a new activity ID; old ones accumulate and get pushed
+    // to unnecessarily. iOS already ends the old activity on the device, so the
+    // server rows are just dead weight until APNs returns 410.
+    const deleted = await query(
+      `DELETE FROM live_activity_tokens WHERE user_id = $1 AND activity_id != $2`,
+      [authReq.user!.id, activityId],
+    );
+    if ((deleted.rowCount ?? 0) > 0) {
+      console.log(`[LiveActivity] Removed ${deleted.rowCount} stale token(s) for user ${authReq.user!.id}`);
+    }
+
     // Insert a placeholder row so /live-activity-token can look up the user.
     // 'pending' token is filtered out by pushLiveActivityForUser until the
     // real APNs token arrives via the Swift URLSession call.

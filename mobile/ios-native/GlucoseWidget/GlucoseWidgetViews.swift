@@ -138,12 +138,12 @@ struct GlucoseLiveActivityView: View {
     var body: some View {
         HStack(spacing: 12) {
             VStack(alignment: .leading, spacing: 2) {
-                HStack(alignment: .firstTextBaseline, spacing: 4) {
+                HStack(alignment: .firstTextBaseline, spacing: 6) {
                     Text(isStale ? "--" : "\(state.glucose)")
-                        .font(.system(size: 28, weight: .bold, design: .rounded))
+                        .font(.system(size: 42, weight: .bold, design: .rounded))
                         .foregroundStyle(isStale ? Color.secondary : color)
                     Text(isStale ? "?" : state.trend)
-                        .font(.system(size: 20))
+                        .font(.system(size: 28))
                         .foregroundStyle(isStale ? Color.secondary : color)
                 }
                 if isStale {
@@ -160,8 +160,8 @@ struct GlucoseLiveActivityView: View {
                     .font(.caption.bold()).foregroundStyle(Color.orange)
                     .padding(.horizontal, 8).padding(.vertical, 4)
                     .background(Color.orange.opacity(0.15), in: Capsule())
-            } else {
-                Text(state.isLow ? "LOW" : state.isHigh ? "HIGH" : "IN RANGE")
+            } else if state.isLow || state.isHigh {
+                Text(state.isLow ? "LOW" : "HIGH")
                     .font(.caption.bold()).foregroundStyle(color)
                     .padding(.horizontal, 8).padding(.vertical, 4)
                     .background(color.opacity(0.15), in: Capsule())
