@@ -53,7 +53,7 @@ const dark = {
 
   // Tab bar
   tabActive: '#60a5fa',
-  tabInactive: '#475569',
+  tabInactive: '#94a3b8',
 };
 
 export type ColorScheme = typeof light;

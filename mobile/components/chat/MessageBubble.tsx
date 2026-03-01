@@ -33,45 +33,41 @@ export function MessageBubble({ message }: MessageBubbleProps) {
   const isUser = message.role === 'user';
   const charts: string[] = message.metadata?.charts ?? [];
 
-  return (
-    <View style={{ marginBottom: 12, paddingHorizontal: 4 }}>
-      <View
-        style={isUser ? {
-          alignSelf: 'flex-end',
-          maxWidth: '82%',
-          backgroundColor: Colors.primary,
-          borderRadius: 18,
-          borderBottomRightRadius: 4,
-          padding: 12,
-          paddingHorizontal: 14,
-        } : {
-          backgroundColor: Colors.card,
-          borderRadius: 16,
-          borderWidth: 1,
-          borderColor: Colors.cardBorder,
-          padding: 12,
-          paddingHorizontal: 14,
-        }}
-      >
-        {isUser ? (
-          <Text style={{ color: Colors.primaryForeground, fontSize: 15, lineHeight: 22 }}>
+  if (isUser) {
+    return (
+      <View style={{ marginBottom: 12, alignItems: 'flex-end' }}>
+        <View
+          style={{
+            maxWidth: '82%',
+            backgroundColor: Colors.primary,
+            borderRadius: 18,
+            borderBottomRightRadius: 4,
+            paddingVertical: 10,
+            paddingHorizontal: 14,
+          }}
+        >
+          <Text style={{ color: Colors.primaryForeground, fontSize: 14, lineHeight: 21 }}>
             {message.content}
           </Text>
-        ) : (
-          <Markdown style={markdownStyles} rules={markdownRules}>
-            {message.content}
-          </Markdown>
-        )}
-
-        {charts.map((b64, i) => (
-          <Image
-            key={i}
-            source={{ uri: `data:image/png;base64,${b64}` }}
-            style={{ width: '100%', height: 200, borderRadius: 8, marginTop: 10 }}
-            resizeMode="contain"
-          />
-        ))}
+        </View>
       </View>
+    );
+  }
+
+  // Assistant messages render flat on the background — no card, no border
+  return (
+    <View style={{ marginBottom: 20 }}>
+      <Markdown style={markdownStyles} rules={markdownRules}>
+        {message.content}
+      </Markdown>
+      {charts.map((b64, i) => (
+        <Image
+          key={i}
+          source={{ uri: `data:image/png;base64,${b64}` }}
+          style={{ width: '100%', height: 200, borderRadius: 8, marginTop: 10 }}
+          resizeMode="contain"
+        />
+      ))}
     </View>
   );
 }

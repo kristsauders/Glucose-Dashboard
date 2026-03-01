@@ -81,11 +81,9 @@ export function GlucoseChart({ readings, events = [] }: GlucoseChartProps) {
   const eventsByIndex = new Map<number, ChartEvent['type']>();
   for (const event of events) {
     const evTime = new Date(event.timestamp).getTime();
-    // Show events from up to 24h before chart start (covers a full day of prior context)
-    // and up to 5 min after chart end. Events before chartStart snap to index 0.
-    const PRE_BUFFER_MS  = 24 * 60 * 60 * 1000;
-    const POST_BUFFER_MS =  5 * 60 * 1000;
-    if (evTime < chartStart - PRE_BUFFER_MS || evTime > chartEnd + POST_BUFFER_MS) continue;
+    // Only plot events that fall within the chart window (small buffer for live updates).
+    const BUFFER_MS = 5 * 60 * 1000; // 5-minute buffer for just-logged events
+    if (evTime < chartStart - BUFFER_MS || evTime > chartEnd + BUFFER_MS) continue;
 
     let nearestIdx = 0;
     let minDiff = Infinity;

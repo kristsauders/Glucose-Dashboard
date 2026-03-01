@@ -1,4 +1,4 @@
-import { useState, useRef, useCallback } from 'react';
+import { useState, useRef, useCallback, useEffect } from 'react';
 import { streamChat } from '../services/sse';
 import type { Message, SSEEvent } from '../types/chat';
 
@@ -25,12 +25,28 @@ export function useChat(initialConversationId: string | null, initialMessages: M
 
   const abortRef = useRef<AbortController | null>(null);
 
+  // Char-by-char reveal — mirrors web UI's charQueueRef pattern
+  const charQueueRef = useRef('');
+  const charTimerRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  const charRevealDoneRef = useRef<(() => void) | null>(null);
+
+  // Clean up interval on unmount
+  useEffect(() => {
+    return () => {
+      if (charTimerRef.current) clearInterval(charTimerRef.current);
+    };
+  }, []);
+
   const sendMessage = useCallback(async (text: string) => {
     if (state.streaming) return;
 
     abortRef.current = new AbortController();
 
-    // Optimistically add user message
+    // Reset char-reveal state
+    charQueueRef.current = '';
+    if (charTimerRef.current) { clearInterval(charTimerRef.current); charTimerRef.current = null; }
+    charRevealDoneRef.current = null;
+
     const userMsg: Message = {
       id: `tmp-${Date.now()}`,
       conversation_id: state.conversationId ?? '',
@@ -45,13 +61,32 @@ export function useChat(initialConversationId: string | null, initialMessages: M
       streaming: true,
       streamingText: '',
       streamingCharts: [],
-      statusText: 'Thinking...',
+      statusText: 'Thinking…',
       error: null,
     }));
 
     let fullText = '';
     let charts: string[] = [];
     let finalConversationId = state.conversationId;
+    let contentStarted = false;
+
+    // ~143 chars/sec — same rate as web UI
+    const startReveal = () => {
+      if (charTimerRef.current) return;
+      charTimerRef.current = setInterval(() => {
+        if (charQueueRef.current.length === 0) {
+          clearInterval(charTimerRef.current!);
+          charTimerRef.current = null;
+          charRevealDoneRef.current?.();
+          charRevealDoneRef.current = null;
+          return;
+        }
+        const ch = charQueueRef.current[0];
+        charQueueRef.current = charQueueRef.current.slice(1);
+        fullText += ch;
+        setState(s => ({ ...s, streamingText: fullText }));
+      }, 7);
+    };
 
     try {
       await streamChat(
@@ -60,20 +95,35 @@ export function useChat(initialConversationId: string | null, initialMessages: M
         (event: SSEEvent) => {
           if (event.type === 'status') {
             setState(s => ({ ...s, statusText: event.content }));
+          } else if (event.type === 'thinking') {
+            setState(s => ({ ...s, statusText: event.content }));
           } else if (event.type === 'content') {
-            fullText += event.content;
-            setState(s => ({ ...s, streamingText: fullText }));
+            if (!contentStarted) {
+              contentStarted = true;
+              setState(s => ({ ...s, statusText: '' }));
+            }
+            charQueueRef.current += event.content;
+            startReveal();
           } else if (event.type === 'chart') {
             charts = [...charts, event.data];
             setState(s => ({ ...s, streamingCharts: charts }));
           } else if (event.type === 'done') {
-            finalConversationId = event.metadata.conversationId ?? finalConversationId;
+            finalConversationId = event.metadata?.conversationId ?? finalConversationId;
+          } else if (event.type === 'error') {
+            throw new Error(event.content);
           }
         },
         abortRef.current.signal,
       );
 
-      // Commit the assistant message
+      // Wait for the char-reveal queue to drain before committing
+      if (charQueueRef.current.length > 0 || charTimerRef.current) {
+        await new Promise<void>(resolve => {
+          charRevealDoneRef.current = resolve;
+          startReveal();
+        });
+      }
+
       const assistantMsg: Message = {
         id: `tmp-assistant-${Date.now()}`,
         conversation_id: finalConversationId ?? '',
@@ -93,6 +143,10 @@ export function useChat(initialConversationId: string | null, initialMessages: M
         conversationId: finalConversationId,
       }));
     } catch (err: any) {
+      if (charTimerRef.current) { clearInterval(charTimerRef.current); charTimerRef.current = null; }
+      charQueueRef.current = '';
+      charRevealDoneRef.current = null;
+
       if (err.name === 'AbortError') {
         setState(s => ({ ...s, streaming: false, streamingText: '', statusText: '' }));
       } else {
@@ -109,13 +163,15 @@ export function useChat(initialConversationId: string | null, initialMessages: M
 
   const abort = useCallback(() => {
     abortRef.current?.abort();
+    if (charTimerRef.current) { clearInterval(charTimerRef.current); charTimerRef.current = null; }
+    charQueueRef.current = '';
+    charRevealDoneRef.current = null;
   }, []);
 
   const clearError = useCallback(() => {
     setState(s => ({ ...s, error: null }));
   }, []);
 
-  // Called once after the conversation query resolves to hydrate history
   const resetMessages = useCallback((msgs: Message[]) => {
     setState(s => ({ ...s, messages: msgs }));
   }, []);

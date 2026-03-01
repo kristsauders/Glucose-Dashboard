@@ -1,6 +1,5 @@
-import { ScrollView, View, Text, TouchableOpacity, RefreshControl } from 'react-native';
+import { ScrollView, View, Text, RefreshControl } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { useRouter } from 'expo-router';
 import { useEffect, useRef, useMemo } from 'react';
 import { GlucoseCard } from '../../components/glucose/GlucoseCard';
 import { GlucoseChart } from '../../components/glucose/GlucoseChart';
@@ -15,7 +14,6 @@ import { useAuth } from '../../hooks/useAuth';
 
 export default function DashboardScreen() {
   const Colors = useColors();
-  const router = useRouter();
   const { user } = useAuth();
   const latest = useLatestGlucose();
   const readings = useGlucose24h();
@@ -96,28 +94,15 @@ export default function DashboardScreen() {
         }
       >
         {/* Header */}
-        <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 4 }}>
-          <View>
-            <Text style={{ fontSize: 24, fontWeight: '700', color: Colors.foreground }}>
-              Dashboard
+        <View style={{ marginBottom: 4 }}>
+          <Text style={{ fontSize: 24, fontWeight: '700', color: Colors.foreground }}>
+            Sage
+          </Text>
+          {user?.email ? (
+            <Text style={{ fontSize: 13, color: Colors.mutedForeground, marginTop: 2 }}>
+              {user.email}
             </Text>
-            {user?.email ? (
-              <Text style={{ fontSize: 13, color: Colors.mutedForeground, marginTop: 2 }}>
-                {user.email}
-              </Text>
-            ) : null}
-          </View>
-          <TouchableOpacity
-            onPress={() => router.push('/(tabs)/chat')}
-            style={{
-              backgroundColor: Colors.primary,
-              paddingHorizontal: 16,
-              paddingVertical: 8,
-              borderRadius: 20,
-            }}
-          >
-            <Text style={{ color: '#fff', fontWeight: '600', fontSize: 14 }}>Ask Sage</Text>
-          </TouchableOpacity>
+          ) : null}
         </View>
 
         {/* Current glucose */}
@@ -145,45 +130,6 @@ export default function DashboardScreen() {
           />
         </View>
 
-        {/* Quick log shortcuts */}
-        <View
-          style={{
-            backgroundColor: Colors.card,
-            borderRadius: 16,
-            borderWidth: 1,
-            borderColor: Colors.cardBorder,
-            padding: 16,
-          }}
-        >
-          <Text style={{ fontSize: 16, fontWeight: '600', color: Colors.foreground, marginBottom: 12 }}>
-            Quick log
-          </Text>
-          <View style={{ flexDirection: 'row', gap: 10 }}>
-            {[
-              { label: 'Meal', emoji: '🍽️' },
-              { label: 'Insulin', emoji: '💉' },
-              { label: 'Exercise', emoji: '🏃' },
-            ].map(({ label, emoji }) => (
-              <TouchableOpacity
-                key={label}
-                onPress={() => router.push('/(tabs)/log')}
-                style={{
-                  flex: 1,
-                  alignItems: 'center',
-                  paddingVertical: 14,
-                  backgroundColor: Colors.muted,
-                  borderRadius: 12,
-                  gap: 4,
-                }}
-              >
-                <Text style={{ fontSize: 24 }}>{emoji}</Text>
-                <Text style={{ fontSize: 13, fontWeight: '500', color: Colors.foreground }}>
-                  {label}
-                </Text>
-              </TouchableOpacity>
-            ))}
-          </View>
-        </View>
       </ScrollView>
     </SafeAreaView>
   );

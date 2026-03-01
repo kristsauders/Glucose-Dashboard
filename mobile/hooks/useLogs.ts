@@ -3,34 +3,32 @@ import * as api from '../services/api';
 import { subDays, formatISO } from 'date-fns';
 
 function rangeParams(days = 7) {
-  const end = new Date();
-  const start = subDays(end, days);
-  return { start: formatISO(start), end: formatISO(end) };
+  return { start: formatISO(subDays(new Date(), days)) };
 }
 
 export function useMealLogs(days = 7) {
-  const { start, end } = rangeParams(days);
+  const { start } = rangeParams(days);
   return useQuery({
     queryKey: ['logs', 'meals', days],
-    queryFn: () => api.getMealLogs(start, end),
+    queryFn: () => api.getMealLogs(start),
     staleTime: 60_000,
   });
 }
 
 export function useInsulinLogs(days = 7) {
-  const { start, end } = rangeParams(days);
+  const { start } = rangeParams(days);
   return useQuery({
     queryKey: ['logs', 'insulin', days],
-    queryFn: () => api.getInsulinLogs(start, end),
+    queryFn: () => api.getInsulinLogs(start),
     staleTime: 60_000,
   });
 }
 
 export function useExerciseLogs(days = 7) {
-  const { start, end } = rangeParams(days);
+  const { start } = rangeParams(days);
   return useQuery({
     queryKey: ['logs', 'exercise', days],
-    queryFn: () => api.getExerciseLogs(start, end),
+    queryFn: () => api.getExerciseLogs(start),
     staleTime: 60_000,
   });
 }

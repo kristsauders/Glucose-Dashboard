@@ -2,12 +2,12 @@ import { useState, useRef, useEffect, useCallback } from 'react';
 import {
   View,
   FlatList,
-  KeyboardAvoidingView,
   Platform,
   ActivityIndicator,
   Text,
+  Keyboard,
+  Animated,
 } from 'react-native';
-import { SafeAreaView } from 'react-native-safe-area-context';
 import { useLocalSearchParams, useNavigation } from 'expo-router';
 import { useQuery } from '@tanstack/react-query';
 import { getConversation } from '../../../services/api';
@@ -18,14 +18,38 @@ import { ChatInput } from '../../../components/chat/ChatInput';
 import { useColors } from '../../../constants/colors';
 import type { Message } from '../../../types/chat';
 
+// Must match the tab bar height in (tabs)/_layout.tsx
+const TAB_BAR_HEIGHT = 84;
+
 export default function ChatDetailScreen() {
   const Colors = useColors();
   const { id } = useLocalSearchParams<{ id: string }>();
   const navigation = useNavigation();
   const listRef = useRef<FlatList<Message>>(null);
   const [inputText, setInputText] = useState('');
+  const keyboardPad = useRef(new Animated.Value(0)).current;
 
   const isNew = id === 'new';
+
+  // Keyboard avoidance
+  useEffect(() => {
+    if (Platform.OS !== 'ios') return;
+    const show = Keyboard.addListener('keyboardWillShow', e => {
+      Animated.timing(keyboardPad, {
+        toValue: Math.max(0, e.endCoordinates.height - TAB_BAR_HEIGHT),
+        duration: e.duration || 250,
+        useNativeDriver: false,
+      }).start();
+    });
+    const hide = Keyboard.addListener('keyboardWillHide', e => {
+      Animated.timing(keyboardPad, {
+        toValue: 0,
+        duration: e.duration || 250,
+        useNativeDriver: false,
+      }).start();
+    });
+    return () => { show.remove(); hide.remove(); };
+  }, []);
 
   // Load existing messages if opening a saved conversation
   const { data, isLoading } = useQuery({
@@ -53,12 +77,13 @@ export default function ChatDetailScreen() {
     }
   }, [existingMessages]);
 
-  // Auto-scroll to bottom on new messages
+  // Scroll to bottom when a new committed message arrives or streaming begins/ends.
+  // onContentSizeChange handles scrolling during the char-by-char reveal.
   useEffect(() => {
     if (chat.messages.length > 0 || chat.streaming) {
       setTimeout(() => listRef.current?.scrollToEnd({ animated: true }), 100);
     }
-  }, [chat.messages.length, chat.streaming, chat.streamingText]);
+  }, [chat.messages.length, chat.streaming]);
 
   // Update nav title when conversation ID is assigned
   useEffect(() => {
@@ -71,8 +96,27 @@ export default function ChatDetailScreen() {
     const text = inputText.trim();
     if (!text) return;
     setInputText('');
+
+    // Index of the user message we're about to add (it lands at the end)
+    const targetIndex = chat.messages.length;
+
+    Keyboard.dismiss();
     chat.sendMessage(text);
-  }, [inputText, chat.sendMessage]);
+
+    // After keyboard animation finishes, scroll so the user message is near the
+    // top of the visible area and the streaming response has room to grow below it.
+    setTimeout(() => {
+      try {
+        listRef.current?.scrollToIndex({
+          index: targetIndex,
+          viewPosition: 0.05,
+          animated: true,
+        });
+      } catch {
+        listRef.current?.scrollToEnd({ animated: true });
+      }
+    }, 320);
+  }, [inputText, chat.sendMessage, chat.messages.length]);
 
   if (isLoading) {
     return (
@@ -83,55 +127,50 @@ export default function ChatDetailScreen() {
   }
 
   return (
-    <SafeAreaView style={{ flex: 1, backgroundColor: Colors.background }} edges={['bottom']}>
-      <KeyboardAvoidingView
+    <Animated.View style={{ flex: 1, paddingBottom: keyboardPad, backgroundColor: Colors.background }}>
+      <FlatList
+        ref={listRef}
         style={{ flex: 1 }}
-        behavior={Platform.OS === 'ios' ? 'padding' : undefined}
-        keyboardVerticalOffset={90}
-      >
-        <FlatList
-          ref={listRef}
-          data={chat.messages}
-          keyExtractor={item => item.id}
-          contentContainerStyle={{ padding: 12, paddingBottom: 8 }}
-          onContentSizeChange={() => listRef.current?.scrollToEnd({ animated: false })}
-          ListEmptyComponent={
-            !chat.streaming ? (
-              <View style={{ alignItems: 'center', marginTop: 80, gap: 10 }}>
-                <Text style={{ fontSize: 36 }}>🧠</Text>
-                <Text style={{ fontSize: 16, fontWeight: '600', color: Colors.foreground }}>
-                  Ask Sage anything
-                </Text>
-                <Text
-                  style={{ fontSize: 14, color: Colors.mutedForeground, textAlign: 'center', paddingHorizontal: 24 }}
-                >
-                  Ask about your glucose patterns, recent trends, meals, or insulin sensitivity.
-                </Text>
-              </View>
-            ) : null
-          }
-          renderItem={({ item }) => <MessageBubble message={item} />}
-          ListFooterComponent={
-            chat.streaming ? (
-              <StreamingMessage text={chat.streamingText} statusText={chat.statusText} />
-            ) : null
-          }
-        />
+        data={chat.messages}
+        keyExtractor={item => item.id}
+        contentContainerStyle={{ padding: 16, paddingBottom: 8 }}
+        onContentSizeChange={() => listRef.current?.scrollToEnd({ animated: false })}
+        ListEmptyComponent={
+          !chat.streaming ? (
+            <View style={{ alignItems: 'center', marginTop: 80, gap: 10 }}>
+              <Text style={{ fontSize: 36 }}>🧠</Text>
+              <Text style={{ fontSize: 15, fontWeight: '600', color: Colors.foreground }}>
+                Ask Sage anything
+              </Text>
+              <Text
+                style={{ fontSize: 13, color: Colors.mutedForeground, textAlign: 'center', paddingHorizontal: 24 }}
+              >
+                Ask about your glucose patterns, recent trends, meals, or insulin sensitivity.
+              </Text>
+            </View>
+          ) : null
+        }
+        renderItem={({ item }) => <MessageBubble message={item} />}
+        ListFooterComponent={
+          chat.streaming ? (
+            <StreamingMessage text={chat.streamingText} statusText={chat.statusText} />
+          ) : null
+        }
+      />
 
-        {chat.error ? (
-          <View style={{ paddingHorizontal: 16, paddingBottom: 8 }}>
-            <Text style={{ color: Colors.destructive, fontSize: 13 }}>{chat.error}</Text>
-          </View>
-        ) : null}
+      {chat.error ? (
+        <View style={{ paddingHorizontal: 16, paddingBottom: 8 }}>
+          <Text style={{ color: Colors.destructive, fontSize: 13 }}>{chat.error}</Text>
+        </View>
+      ) : null}
 
-        <ChatInput
-          value={inputText}
-          onChangeText={setInputText}
-          onSend={handleSend}
-          onAbort={chat.abort}
-          streaming={chat.streaming}
-        />
-      </KeyboardAvoidingView>
-    </SafeAreaView>
+      <ChatInput
+        value={inputText}
+        onChangeText={setInputText}
+        onSend={handleSend}
+        onAbort={chat.abort}
+        streaming={chat.streaming}
+      />
+    </Animated.View>
   );
 }

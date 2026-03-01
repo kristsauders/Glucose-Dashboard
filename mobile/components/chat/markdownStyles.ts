@@ -2,7 +2,7 @@ import type { ColorScheme } from '../../constants/colors';
 
 const SERIF = 'TiemposText';
 const MONO = 'Courier';
-const BASE = 15;
+const BASE = 14;
 
 // Mirrors the web .prose CSS as closely as react-native-markdown-display allows.
 // Call with the result of useColors() so the styles update with the color scheme.

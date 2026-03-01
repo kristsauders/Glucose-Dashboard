@@ -12,37 +12,26 @@ export function StreamingMessage({ text, statusText }: StreamingMessageProps) {
   const Colors = useColors();
   const markdownStyles = getMarkdownStyles(Colors);
   return (
-    <View style={{ marginBottom: 12, paddingHorizontal: 4 }}>
-      <View
-        style={{
-          backgroundColor: Colors.card,
-          borderRadius: 16,
-          borderWidth: 1,
-          borderColor: Colors.cardBorder,
-          padding: 12,
-          paddingHorizontal: 14,
-        }}
-      >
-        {text ? (
+    <View style={{ marginBottom: 12 }}>
+      {text ? (
+        <>
           <Markdown style={markdownStyles}>{text}</Markdown>
-        ) : (
-          <Text style={{ color: Colors.mutedForeground, fontSize: 14, fontFamily: 'TiemposText' }}>
-            {statusText || 'Thinking…'}
-          </Text>
-        )}
-        {/* Blinking cursor */}
-        {text ? (
+          {/* Blinking cursor */}
           <View
             style={{
               width: 2,
-              height: 16,
+              height: 14,
               backgroundColor: Colors.primary,
               marginTop: 2,
               borderRadius: 1,
             }}
           />
-        ) : null}
-      </View>
+        </>
+      ) : (
+        <Text style={{ color: Colors.mutedForeground, fontSize: 13 }}>
+          {statusText || 'Thinking…'}
+        </Text>
+      )}
     </View>
   );
 }

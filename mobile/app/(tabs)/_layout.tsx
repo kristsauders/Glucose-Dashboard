@@ -1,15 +1,7 @@
 import { Tabs } from 'expo-router';
 import { View, Text } from 'react-native';
+import { Ionicons } from '@expo/vector-icons';
 import { useColors } from '../../constants/colors';
-
-function TabIcon({ symbol, focused }: { symbol: string; focused: boolean }) {
-  const Colors = useColors();
-  return (
-    <Text style={{ fontSize: 22, color: focused ? Colors.tabActive : Colors.tabInactive }}>
-      {symbol}
-    </Text>
-  );
-}
 
 export default function TabsLayout() {
   const Colors = useColors();
@@ -32,22 +24,26 @@ export default function TabsLayout() {
       <Tabs.Screen
         name="index"
         options={{
-          title: 'Dashboard',
-          tabBarIcon: ({ focused }) => <TabIcon symbol="⌂" focused={focused} />,
+          title: 'Sage',
+          tabBarIcon: ({ focused, color }) => (
+            <Ionicons name={focused ? 'home' : 'home-outline'} size={24} color={color} />
+          ),
         }}
       />
       <Tabs.Screen
         name="chat"
         options={{
           title: 'Chat',
-          tabBarIcon: ({ focused }) => <TabIcon symbol="💬" focused={focused} />,
+          tabBarIcon: ({ focused, color }) => (
+            <Ionicons name={focused ? 'chatbubble' : 'chatbubble-outline'} size={24} color={color} />
+          ),
         }}
       />
       <Tabs.Screen
         name="log"
         options={{
           title: 'Log',
-          tabBarIcon: ({ focused }) => (
+          tabBarIcon: () => (
             <View
               style={{
                 width: 36,
@@ -68,14 +64,18 @@ export default function TabsLayout() {
         name="history"
         options={{
           title: 'History',
-          tabBarIcon: ({ focused }) => <TabIcon symbol="⏱" focused={focused} />,
+          tabBarIcon: ({ focused, color }) => (
+            <Ionicons name={focused ? 'time' : 'time-outline'} size={24} color={color} />
+          ),
         }}
       />
       <Tabs.Screen
         name="settings"
         options={{
           title: 'Settings',
-          tabBarIcon: ({ focused }) => <TabIcon symbol="⚙" focused={focused} />,
+          tabBarIcon: ({ focused, color }) => (
+            <Ionicons name={focused ? 'settings' : 'settings-outline'} size={24} color={color} />
+          ),
         }}
       />
     </Tabs>
