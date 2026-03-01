@@ -152,14 +152,15 @@ struct GlucoseLiveActivityView: View {
     }
 
     var body: some View {
-        HStack(spacing: 12) {
+        HStack(alignment: .center, spacing: 16) {
+            // Left: glucose value + trend arrow + timestamp
             VStack(alignment: .leading, spacing: 2) {
                 HStack(alignment: .firstTextBaseline, spacing: 6) {
                     Text(isStale ? "--" : "\(state.glucose)")
-                        .font(.system(size: 42, weight: .bold, design: .rounded))
+                        .font(.system(size: 48, weight: .bold, design: .rounded))
                         .foregroundStyle(isStale ? Color.secondary : color)
                     Text(isStale ? "?" : state.trend)
-                        .font(.system(size: 28))
+                        .font(.system(size: 30))
                         .foregroundStyle(isStale ? Color.secondary : color)
                 }
                 if isStale {
@@ -167,23 +168,31 @@ struct GlucoseLiveActivityView: View {
                         .font(.caption2.bold())
                         .foregroundStyle(Color.orange)
                 } else {
-                    Text(state.readingDate, style: .relative).font(.caption).foregroundStyle(.secondary)
-                }
-                if let label = insulinLabel {
-                    Text(label).font(.caption2).foregroundStyle(.secondary)
+                    Text(state.readingDate, style: .relative)
+                        .font(.caption).foregroundStyle(.secondary)
                 }
             }
+
             Spacer()
-            if isStale {
-                Text("DELAYED")
-                    .font(.caption.bold()).foregroundStyle(Color.orange)
-                    .padding(.horizontal, 8).padding(.vertical, 4)
-                    .background(Color.orange.opacity(0.15), in: Capsule())
-            } else if state.isLow || state.isHigh {
-                Text(state.isLow ? "LOW" : "HIGH")
-                    .font(.caption.bold()).foregroundStyle(color)
-                    .padding(.horizontal, 8).padding(.vertical, 4)
-                    .background(color.opacity(0.15), in: Capsule())
+
+            // Right: alert badge (if any) + last insulin dose
+            VStack(alignment: .trailing, spacing: 6) {
+                if isStale {
+                    Text("DELAYED")
+                        .font(.caption.bold()).foregroundStyle(Color.orange)
+                        .padding(.horizontal, 8).padding(.vertical, 4)
+                        .background(Color.orange.opacity(0.15), in: Capsule())
+                } else if state.isLow || state.isHigh {
+                    Text(state.isLow ? "LOW" : "HIGH")
+                        .font(.caption.bold()).foregroundStyle(color)
+                        .padding(.horizontal, 8).padding(.vertical, 4)
+                        .background(color.opacity(0.15), in: Capsule())
+                }
+                if let label = insulinLabel {
+                    Text(label)
+                        .font(.caption2).foregroundStyle(.secondary)
+                        .multilineTextAlignment(.trailing)
+                }
             }
         }
         .padding(12)

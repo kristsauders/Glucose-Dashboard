@@ -170,6 +170,7 @@ class LibreViewPollerService {
             [state.userId],
           );
           const lastDose = insulinResult.rows[0];
+          console.log(`[LiveActivityPush] INSULIN_DEBUG: found=${!!lastDose}${lastDose ? ` units=${lastDose.units} ts=${lastDose.timestamp}` : ' (no dose in last 24h — check insulin_doses table exists and has data for this user)'}`);
 
           pushLiveActivityForUser(state.userId, {
             glucose,
