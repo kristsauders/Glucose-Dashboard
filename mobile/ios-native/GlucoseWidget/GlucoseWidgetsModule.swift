@@ -51,7 +51,6 @@ class GlucoseWidgetsModule: NSObject {
                                   isHigh: Bool,
                                   resolve: @escaping RCTPromiseResolveBlock,
                                   reject: @escaping RCTPromiseRejectBlock) {
-        NSLog("[GlucoseWidgets] startLiveActivity ENTRY — build check v2")
         guard #available(iOS 16.2, *) else {
             reject("UNSUPPORTED", "Live Activities require iOS 16.2+", nil); return
         }
@@ -85,20 +84,7 @@ class GlucoseWidgetsModule: NSObject {
                 // Resolve immediately — no waiting for the push token here.
                 resolve(activity.id)
 
-                // ── Debug ping ── tells the server this code path ran and what URL was read.
                 let serverUrl = Bundle.main.infoDictionary?["T1DServerURL"] as? String ?? ""
-                if let pingUrl = URL(string: "\(serverUrl)/notifications/debug") {
-                    var pingReq = URLRequest(url: pingUrl)
-                    pingReq.httpMethod = "POST"
-                    pingReq.setValue("application/json", forHTTPHeaderField: "Content-Type")
-                    pingReq.httpBody = try? JSONSerialization.data(withJSONObject: [
-                        "step": "post-resolve",
-                        "activityId": activity.id,
-                        "serverUrl": serverUrl,
-                    ])
-                    URLSession.shared.dataTask(with: pingReq).resume()
-                }
-
                 let activityId = activity.id
 
                 // Observe pushTokenUpdates indefinitely; APNs may take >5 s.
@@ -171,5 +157,5 @@ class GlucoseWidgetsModule: NSObject {
         }
     }
 
-    @objc override static func requiresMainQueueSetup() -> Bool { false }
+    @objc static func requiresMainQueueSetup() -> Bool { false }
 }

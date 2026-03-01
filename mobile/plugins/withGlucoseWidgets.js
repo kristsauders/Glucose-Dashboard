@@ -92,12 +92,10 @@ function withWidgetExtension(config) {
         entitlementsContent,
       );
 
-      // Copy native module files into the main app target
+      // Copy native module files into the main app target (always overwrite so
+      // edits in ios-native/ are picked up without needing a full prebuild).
       for (const file of MAIN_MODULE_FILES) {
-        const dest = path.join(mainTargetDest, file);
-        if (!fs.existsSync(dest)) {
-          fs.copyFileSync(path.join(sourceRoot, file), dest);
-        }
+        fs.copyFileSync(path.join(sourceRoot, file), path.join(mainTargetDest, file));
       }
 
       // Ensure bridging header imports RCTBridgeModule so Swift can see RCT types
