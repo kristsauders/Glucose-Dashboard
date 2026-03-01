@@ -81,8 +81,37 @@ export class PushNotificationService {
               data: payload.data as Record<string, unknown>,
             }];
             const chunks = expo.chunkPushNotifications(messages);
+            const ticketIds: string[] = [];
             for (const chunk of chunks) {
-              await expo.sendPushNotificationsAsync(chunk);
+              const tickets = await expo.sendPushNotificationsAsync(chunk);
+              for (const ticket of tickets) {
+                if (ticket.status === 'error') {
+                  console.error(`[PushNotification] ✗ Expo ticket error for ${subscription.expo_push_token.substring(0, 30)}: ${ticket.message}`, ticket.details);
+                } else {
+                  console.log(`[PushNotification] Expo ticket ok, id: ${ticket.id}`);
+                  ticketIds.push(ticket.id);
+                }
+              }
+            }
+            // Check receipts after a brief delay (APNs delivery confirmation)
+            if (ticketIds.length > 0) {
+              setTimeout(async () => {
+                try {
+                  const receiptIdChunks = expo.chunkPushNotificationReceiptIds(ticketIds);
+                  for (const chunk of receiptIdChunks) {
+                    const receipts = await expo.getPushNotificationReceiptsAsync(chunk);
+                    for (const [receiptId, receipt] of Object.entries(receipts)) {
+                      if (receipt.status === 'error') {
+                        console.error(`[PushNotification] ✗ Expo receipt error (${receiptId}): ${receipt.message}`, (receipt as any).details);
+                      } else {
+                        console.log(`[PushNotification] ✓ Expo receipt ok (${receiptId})`);
+                      }
+                    }
+                  }
+                } catch (err: any) {
+                  console.warn('[PushNotification] Receipt check failed:', err.message);
+                }
+              }, 5000);
             }
             await query(
               'UPDATE push_subscriptions SET last_used_at = NOW() WHERE expo_push_token = $1',
