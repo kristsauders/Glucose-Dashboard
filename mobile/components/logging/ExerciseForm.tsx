@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { View, Text, TextInput, TouchableOpacity, ActivityIndicator, Alert } from 'react-native';
 import { useColors } from '../../constants/colors';
+import { TimePickerField } from './TimePickerField';
 
 const ACTIVITY_TYPES = ['walking', 'running', 'cycling', 'swimming', 'gym', 'yoga', 'other'] as const;
 const INTENSITY_LEVELS = ['low', 'moderate', 'high'] as const;
@@ -22,6 +23,7 @@ export function ExerciseForm({ onSubmit, onCancel }: ExerciseFormProps) {
   const [activity, setActivity] = useState<ActivityType>('walking');
   const [duration, setDuration] = useState('');
   const [intensity, setIntensity] = useState<Intensity>('moderate');
+  const [timestamp, setTimestamp] = useState(new Date());
   const [loading, setLoading] = useState(false);
 
   const handleSubmit = async () => {
@@ -36,7 +38,7 @@ export function ExerciseForm({ onSubmit, onCancel }: ExerciseFormProps) {
         activity,
         duration: durationNum,
         intensity,
-        timestamp: new Date().toISOString(),
+        timestamp: timestamp.toISOString(),
       });
     } finally {
       setLoading(false);
@@ -138,6 +140,8 @@ export function ExerciseForm({ onSubmit, onCancel }: ExerciseFormProps) {
           })}
         </View>
       </View>
+
+      <TimePickerField value={timestamp} onChange={setTimestamp} />
 
       <View style={{ flexDirection: 'row', gap: 12, marginTop: 4 }}>
         {onCancel && (

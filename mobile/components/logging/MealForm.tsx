@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { View, Text, TextInput, TouchableOpacity, ActivityIndicator, Alert } from 'react-native';
 import { useColors } from '../../constants/colors';
+import { TimePickerField } from './TimePickerField';
 
 interface MealFormProps {
   onSubmit: (data: { carbs: number; description: string; timestamp: string }) => Promise<void>;
@@ -11,6 +12,7 @@ export function MealForm({ onSubmit, onCancel }: MealFormProps) {
   const Colors = useColors();
   const [carbs, setCarbs] = useState('');
   const [description, setDescription] = useState('');
+  const [timestamp, setTimestamp] = useState(new Date());
   const [loading, setLoading] = useState(false);
 
   const handleSubmit = async () => {
@@ -24,7 +26,7 @@ export function MealForm({ onSubmit, onCancel }: MealFormProps) {
       await onSubmit({
         carbs: carbNum,
         description: description.trim() || 'Meal',
-        timestamp: new Date().toISOString(),
+        timestamp: timestamp.toISOString(),
       });
     } finally {
       setLoading(false);
@@ -75,6 +77,8 @@ export function MealForm({ onSubmit, onCancel }: MealFormProps) {
           }}
         />
       </View>
+
+      <TimePickerField value={timestamp} onChange={setTimestamp} />
 
       <View style={{ flexDirection: 'row', gap: 12, marginTop: 4 }}>
         {onCancel && (

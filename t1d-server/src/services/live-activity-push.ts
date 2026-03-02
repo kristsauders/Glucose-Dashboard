@@ -33,6 +33,9 @@ let cachedJwt: { token: string; issuedAt: number } | null = null;
 
 // Reuse the HTTP/2 connection to APNs for all pushes (Apple requires this).
 let apnsSession: http2.ClientHttp2Session | null = null;
+// Track when the session was opened so we can proactively cycle it before
+// Apple's ~1-hour connection TTL causes silent drops.
+let apnsSessionCreatedAt = 0;
 
 function isConfigured(): boolean {
   return !!(env.APNS_PRIVATE_KEY && env.APNS_KEY_ID && env.APNS_TEAM_ID && env.APNS_BUNDLE_ID);
@@ -68,24 +71,36 @@ function getApnsJwt(): string {
   return token;
 }
 
+const SESSION_MAX_AGE_MS = 55 * 60 * 1000; // 55 min — cycle before Apple's 1-hour TTL
+
 function destroySession(): void {
   if (apnsSession) {
     try { apnsSession.destroy(); } catch {}
     apnsSession = null;
+    apnsSessionCreatedAt = 0;
   }
 }
 
 function getApnsSession(): http2.ClientHttp2Session {
+  // Proactively cycle before Apple's silent connection expiry at ~1 hour.
+  if (apnsSession && Date.now() - apnsSessionCreatedAt > SESSION_MAX_AGE_MS) {
+    console.log('[LiveActivityPush] Proactively cycling APNs session (55-min age limit)');
+    destroySession();
+  }
+
   if (apnsSession && !apnsSession.destroyed && !apnsSession.closed) {
     return apnsSession;
   }
+
   const host = getApnsHost();
   apnsSession = http2.connect(`https://${host}`);
+  apnsSessionCreatedAt = Date.now();
+
   apnsSession.on('error', (err) => {
     console.warn('[LiveActivityPush] APNs session error:', err.message);
     destroySession();
   });
-  apnsSession.on('close', () => { apnsSession = null; });
+  apnsSession.on('close', () => { apnsSession = null; apnsSessionCreatedAt = 0; });
   // APNs signals connection close with GOAWAY before the 'close' event fires.
   // Destroy eagerly so the next getApnsSession() opens a fresh connection.
   apnsSession.on('goaway', (errorCode) => {
@@ -193,7 +208,14 @@ export async function sendLiveActivityPush(
       }
     });
 
-    req.on('error', (err) => { clearTimeout(timer); reject(err); });
+    req.on('error', (err) => {
+      clearTimeout(timer);
+      // Any request-level error (including our 15s timeout) likely means the
+      // underlying TCP/TLS connection is dead. Destroy the session so the next
+      // push opens a fresh HTTP/2 connection rather than reusing a zombie one.
+      destroySession();
+      reject(err);
+    });
   });
 }
 

@@ -152,14 +152,25 @@ export function MealImpactChart({ meals, glucoseReadings }: Props) {
         const sparkValues = impact.sparkline.map(s => s.value);
         const rawMin = Math.min(...sparkValues);
         const rawMax = Math.max(...sparkValues);
-        const padding = Math.max(2, Math.round((rawMax - rawMin) * 0.05));
+        const range = rawMax - rawMin;
+        const padding = Math.max(2, Math.round(range * 0.05));
         const sparkMin = Math.max(40, rawMin - padding);
         const N_SECTIONS = 3;
-        // stepValue controls where the y-axis floor lands:
-        // chart bottom = maxValue - stepValue * noOfSections
-        // so: stepValue = ceil((rawMax + padding - sparkMin) / N_SECTIONS)
         const stepValue = Math.max(1, Math.ceil((rawMax + padding - sparkMin) / N_SECTIONS));
-        const sparkMax = sparkMin + stepValue * N_SECTIONS; // exact top, aligns with bottom
+        const normalizedMax = stepValue * N_SECTIONS;
+
+        // gifted-charts always starts the y-axis at 0, so shift all values down
+        // by sparkMin so the rendered range is [0, normalizedMax].
+        const normalizedSparkline = impact.sparkline.map(s => ({
+          ...s,
+          value: Math.max(0, s.value - sparkMin),
+        }));
+        const normalizedBaseline = Math.max(0, impact.baseline - sparkMin);
+
+        // Re-label the y-axis with actual glucose values (bottom → top)
+        const yLabels = Array.from({ length: N_SECTIONS + 1 }, (_, i) =>
+          String(Math.round(sparkMin + i * stepValue))
+        );
         const sc = spikeColor(impact.spike, Colors);
         const sbg = spikeBgColor(impact.spike, Colors);
         const spikeSign = impact.spike >= 0 ? '+' : '';
@@ -199,14 +210,14 @@ export function MealImpactChart({ meals, glucoseReadings }: Props) {
                 3-hour glucose response
               </Text>
               <LineChart
-                data={impact.sparkline}
+                data={normalizedSparkline}
                 width={SPARKLINE_W}
                 height={60}
-                spacing={impact.sparkline.length > 1 ? Math.max(2, Math.floor((SPARKLINE_W - 20) / (impact.sparkline.length - 1))) : 10}
+                spacing={normalizedSparkline.length > 1 ? Math.max(2, Math.floor((SPARKLINE_W - 20) / (normalizedSparkline.length - 1))) : 10}
                 disableScroll
-                maxValue={sparkMax}
-                stepValue={stepValue}
+                maxValue={normalizedMax}
                 noOfSections={N_SECTIONS}
+                yAxisLabelTexts={yLabels}
                 color={Colors.primary}
                 thickness={2}
                 curved
@@ -220,7 +231,7 @@ export function MealImpactChart({ meals, glucoseReadings }: Props) {
                 xAxisColor={Colors.border + '60'}
                 backgroundColor="transparent"
                 referenceLine1={{
-                  value: impact.baseline,
+                  value: normalizedBaseline,
                   lineConfig: {
                     color: Colors.mutedForeground,
                     thickness: 1,

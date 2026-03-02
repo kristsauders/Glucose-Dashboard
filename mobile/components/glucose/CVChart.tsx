@@ -21,6 +21,7 @@ export function CVChart({ daily, weekly, useWeekly }: Props) {
   const Y_AXIS_W = 40;
   const CHART_W = SCREEN_W - 66 - Y_AXIS_W;
   const step = Math.ceil(items.length / 7);
+  const computedSpacing = items.length > 1 ? Math.max(2, Math.floor((CHART_W - 20) / (items.length - 1))) : 20;
 
   const cvValues = items.map(d => d.cv);
   const avgCV = Math.round((cvValues.reduce((s, v) => s + v, 0) / cvValues.length) * 10) / 10;
@@ -32,12 +33,14 @@ export function CVChart({ daily, weekly, useWeekly }: Props) {
   // 1-decimal % y-axis labels
   const yLabels = [0, 1, 2, 3, 4].map(i => `${(sectionSize * i).toFixed(1)}%`);
 
-  const lineData = items.map((d, i) => ({
-    value: d.cv,
-    label: i % step === 0 && i < items.length - 1
+  // Labels stored separately; data items get '' to avoid slot-width clipping
+  const labelTexts = items.map((d, i) =>
+    i % step === 0 && i < items.length - 1
       ? ('label' in d ? d.label : (d as WeekMetrics).weekLabel)
-      : '',
-  }));
+      : ''
+  );
+
+  const lineData = items.map(d => ({ value: d.cv, label: '' }));
 
   const cvColor = avgCV <= CV_TARGET ? Colors.glucoseInRange : Colors.glucoseHigh;
 
@@ -61,7 +64,7 @@ export function CVChart({ daily, weekly, useWeekly }: Props) {
         data={lineData}
         width={CHART_W}
         height={CHART_H}
-        spacing={items.length > 1 ? Math.max(2, Math.floor((CHART_W - 20) / (items.length - 1))) : 20}
+        spacing={computedSpacing}
         disableScroll
         maxValue={yMax}
         noOfSections={noOfSections}
@@ -73,8 +76,6 @@ export function CVChart({ daily, weekly, useWeekly }: Props) {
         hideDataPoints={items.length > 20}
         dataPointsColor={cvColor}
         dataPointsRadius={3}
-        xAxisLabelTextStyle={{ color: Colors.mutedForeground, fontSize: 9 }}
-        xAxisLabelContainerStyle={{ width: 36 }}
         yAxisTextStyle={{ color: Colors.mutedForeground, fontSize: 9 }}
         rulesColor={Colors.border + '40'}
         yAxisColor="transparent"
@@ -92,6 +93,19 @@ export function CVChart({ daily, weekly, useWeekly }: Props) {
         }}
         showReferenceLine1
       />
+
+      {/* Custom x-axis labels */}
+      <View style={{ height: 14, marginLeft: Y_AXIS_W, position: 'relative' }}>
+        {labelTexts.map((lbl, i) => {
+          if (!lbl) return null;
+          const cx = 20 + i * computedSpacing;
+          return (
+            <Text key={i} style={{ position: 'absolute', left: cx - 14, width: 28, fontSize: 9, color: Colors.mutedForeground, textAlign: 'center' }}>
+              {lbl}
+            </Text>
+          );
+        })}
+      </View>
     </View>
   );
 }

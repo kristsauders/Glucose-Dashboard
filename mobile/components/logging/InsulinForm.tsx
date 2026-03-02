@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { View, Text, TextInput, TouchableOpacity, ActivityIndicator, Alert } from 'react-native';
 import { useColors } from '../../constants/colors';
+import { TimePickerField } from './TimePickerField';
 
 const INSULIN_TYPES = ['bolus', 'correction', 'basal'] as const;
 type InsulinType = typeof INSULIN_TYPES[number];
@@ -14,6 +15,7 @@ export function InsulinForm({ onSubmit, onCancel }: InsulinFormProps) {
   const Colors = useColors();
   const [units, setUnits] = useState('');
   const [type, setType] = useState<InsulinType>('bolus');
+  const [timestamp, setTimestamp] = useState(new Date());
   const [loading, setLoading] = useState(false);
 
   const handleSubmit = async () => {
@@ -24,7 +26,7 @@ export function InsulinForm({ onSubmit, onCancel }: InsulinFormProps) {
     }
     setLoading(true);
     try {
-      await onSubmit({ units: unitsNum, type, timestamp: new Date().toISOString() });
+      await onSubmit({ units: unitsNum, type, timestamp: timestamp.toISOString() });
     } finally {
       setLoading(false);
     }
@@ -82,6 +84,8 @@ export function InsulinForm({ onSubmit, onCancel }: InsulinFormProps) {
           ))}
         </View>
       </View>
+
+      <TimePickerField value={timestamp} onChange={setTimestamp} />
 
       <View style={{ flexDirection: 'row', gap: 12, marginTop: 4 }}>
         {onCancel && (

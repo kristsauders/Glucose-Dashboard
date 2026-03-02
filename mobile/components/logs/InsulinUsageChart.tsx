@@ -7,11 +7,33 @@ import type { InsulinLog } from '../../types/logs';
 const SCREEN_W = Dimensions.get('window').width;
 const CHART_H = 140;
 
-const BASAL_BRANDS = ['lantus', 'tresiba', 'levemir', 'basaglar', 'toujeo', 'glargine', 'detemir', 'degludec'];
+// Keywords that definitively signal basal (long-acting) insulin
+const BASAL_KEYWORDS = [
+  'basal', 'long acting', 'long-acting',
+  'lantus', 'tresiba', 'levemir', 'basaglar', 'toujeo',
+  'glargine', 'detemir', 'degludec',
+];
+
+// Keywords that definitively signal bolus (rapid-acting) insulin
+const BOLUS_KEYWORDS = [
+  'bolus', 'rapid', 'fast', 'short acting', 'short-acting',
+  'fiasp', 'novorapid', 'novolog', 'humalog', 'apidra',
+  'lispro', 'aspart', 'glulisine',
+];
 
 function isBasal(log: InsulinLog): boolean {
-  const typeStr = ((log.insulin_type ?? '') + ' ' + (log.brand_name ?? '')).toLowerCase();
-  return BASAL_BRANDS.some(b => typeStr.includes(b));
+  // 1. Trust the purpose field first — most explicit signal
+  const purpose = (log.purpose ?? '').toLowerCase();
+  if (purpose.includes('basal') || purpose.includes('long')) return true;
+  if (purpose.includes('bolus') || purpose.includes('rapid') || purpose.includes('correction')) return false;
+
+  // 2. Search across insulin_type and brand_name for known keywords
+  const combined = ((log.insulin_type ?? '') + ' ' + (log.brand_name ?? '')).toLowerCase();
+  if (BOLUS_KEYWORDS.some(k => combined.includes(k))) return false;
+  if (BASAL_KEYWORDS.some(k => combined.includes(k))) return true;
+
+  // 3. Default to bolus (meal/correction doses are more common)
+  return false;
 }
 
 interface Props {

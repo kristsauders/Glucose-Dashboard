@@ -32,6 +32,7 @@ export function WeeklyA1CChart({ weekly }: Props) {
   const Y_AXIS_W = 40;
   const CHART_W = SCREEN_W - 66 - Y_AXIS_W;
   const step = Math.ceil(weekly.length / 7);
+  const computedSpacing = weekly.length > 1 ? Math.max(2, Math.floor((CHART_W - 20) / (weekly.length - 1))) : 20;
 
   const a1cValues = weekly.map(w => w.estA1c);
   const avgA1c = Math.round((a1cValues.reduce((s, v) => s + v, 0) / a1cValues.length) * 10) / 10;
@@ -46,10 +47,12 @@ export function WeeklyA1CChart({ weekly }: Props) {
   // 1-decimal % y-axis labels
   const yLabels = [0, 1, 2, 3, 4].map(i => `${(chartMin + sectionSize * i).toFixed(1)}%`);
 
-  const lineData = weekly.map((w, i) => ({
-    value: w.estA1c,
-    label: i % step === 0 && i < weekly.length - 1 ? w.weekLabel : '',
-  }));
+  // Labels stored separately; data items get '' to avoid slot-width clipping
+  const labelTexts = weekly.map((w, i) =>
+    i % step === 0 && i < weekly.length - 1 ? w.weekLabel : ''
+  );
+
+  const lineData = weekly.map(w => ({ value: w.estA1c, label: '' }));
 
   const lineColor = a1cColor(avgA1c, Colors);
 
@@ -73,7 +76,7 @@ export function WeeklyA1CChart({ weekly }: Props) {
         data={lineData}
         width={CHART_W}
         height={CHART_H}
-        spacing={weekly.length > 1 ? Math.max(2, Math.floor((CHART_W - 20) / (weekly.length - 1))) : 20}
+        spacing={computedSpacing}
         disableScroll
         maxValue={chartMax}
         mostNegativeValue={chartMin}
@@ -86,8 +89,6 @@ export function WeeklyA1CChart({ weekly }: Props) {
         hideDataPoints={weekly.length > 16}
         dataPointsColor={lineColor}
         dataPointsRadius={4}
-        xAxisLabelTextStyle={{ color: Colors.mutedForeground, fontSize: 9 }}
-        xAxisLabelContainerStyle={{ width: 36 }}
         yAxisTextStyle={{ color: Colors.mutedForeground, fontSize: 9 }}
         rulesColor={Colors.border + '40'}
         yAxisColor="transparent"
@@ -117,6 +118,19 @@ export function WeeklyA1CChart({ weekly }: Props) {
         showReferenceLine1
         showReferenceLine2
       />
+
+      {/* Custom x-axis labels */}
+      <View style={{ height: 14, marginLeft: Y_AXIS_W, position: 'relative' }}>
+        {labelTexts.map((lbl, i) => {
+          if (!lbl) return null;
+          const cx = 20 + i * computedSpacing;
+          return (
+            <Text key={i} style={{ position: 'absolute', left: cx - 14, width: 28, fontSize: 9, color: Colors.mutedForeground, textAlign: 'center' }}>
+              {lbl}
+            </Text>
+          );
+        })}
+      </View>
     </View>
   );
 }

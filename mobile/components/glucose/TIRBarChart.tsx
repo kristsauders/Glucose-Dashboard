@@ -28,11 +28,14 @@ export function TIRBarChart({ daily, weekly, useWeekly }: Props) {
   // Y-axis: integer % labels
   const yLabels = ['0%', '25%', '50%', '75%', '100%'];
 
-  // react-native-gifted-charts stackData format
-  const stackData = items.map((d, i) => {
-    const label = i % step === 0 && i < items.length - 1
+  // Labels stored separately; stackData items get '' to avoid slot-width clipping
+  const labelTexts = items.map((d, i) =>
+    i % step === 0 && i < items.length - 1
       ? ('label' in d ? d.label : (d as WeekMetrics).weekLabel)
-      : '';
+      : ''
+  );
+
+  const stackData = items.map(d => {
     const below = Math.max(0, d.below70);
     const inRange = Math.max(0, d.tir70_180);
     const above = Math.max(0, 100 - below - inRange);
@@ -42,7 +45,7 @@ export function TIRBarChart({ daily, weekly, useWeekly }: Props) {
         { value: inRange, color: Colors.glucoseInRange },
         { value: above, color: Colors.glucoseHigh },
       ],
-      label,
+      label: '',
     };
   });
 
@@ -71,8 +74,6 @@ export function TIRBarChart({ daily, weekly, useWeekly }: Props) {
         spacing={spacing}
         initialSpacing={INIT}
         disableScroll
-        xAxisLabelTextStyle={{ color: Colors.mutedForeground, fontSize: 9 }}
-        xAxisLabelContainerStyle={{ width: 36 }}
         yAxisTextStyle={{ color: Colors.mutedForeground, fontSize: 10 }}
         yAxisLabelWidth={Y_AXIS_W}
         yAxisLabelTexts={yLabels}
@@ -83,8 +84,21 @@ export function TIRBarChart({ daily, weekly, useWeekly }: Props) {
         referenceLine1Config={{ color: Colors.glucoseInRange, dashWidth: 4, dashGap: 4, thickness: 1 }}
       />
 
+      {/* Custom x-axis labels */}
+      <View style={{ height: 14, marginLeft: Y_AXIS_W, position: 'relative' }}>
+        {labelTexts.map((lbl, i) => {
+          if (!lbl) return null;
+          const cx = INIT + i * (barWidth + spacing) + barWidth / 2;
+          return (
+            <Text key={i} style={{ position: 'absolute', left: cx - 14, width: 28, fontSize: 9, color: Colors.mutedForeground, textAlign: 'center' }}>
+              {lbl}
+            </Text>
+          );
+        })}
+      </View>
+
       {/* Legend */}
-      <View style={{ flexDirection: 'row', gap: 12, marginTop: 6 }}>
+      <View style={{ flexDirection: 'row', gap: 12, marginTop: 4 }}>
         {[
           { color: Colors.glucoseLow, label: 'Low (<70)' },
           { color: Colors.glucoseInRange, label: 'In range (70–180)' },

@@ -21,18 +21,27 @@ export function OvernightBedtimeChart({ daily }: Props) {
   const Y_AXIS_W = 36;
   const CHART_W = SCREEN_W - 66 - Y_AXIS_W;
   const step = Math.ceil(filtered.length / 7);
+  const computedSpacing = filtered.length > 1 ? Math.max(2, Math.floor((CHART_W - 20) / (filtered.length - 1))) : 20;
 
-  const overnightData = filtered.map((d, i) => ({
-    value: d.overnightAvg ?? 0,
-    hideDataPoint: d.overnightAvg === null,
-    label: i % step === 0 && i < filtered.length - 1 ? d.label : '',
-  }));
+  // Labels stored separately; data items get '' to avoid slot-width clipping
+  const labelTexts = filtered.map((d, i) =>
+    i % step === 0 && i < filtered.length - 1 ? d.label : ''
+  );
 
-  const bedtimeData = filtered.map(d => ({
-    value: d.bedtimeAvg ?? 0,
-    hideDataPoint: d.bedtimeAvg === null,
-    label: '',
-  }));
+  // Carry the last valid value forward for null entries so the line doesn't
+  // plummet to 0 for days/times that haven't occurred yet (e.g. today's bedtime).
+  let lastOvernight = filtered.find(d => d.overnightAvg !== null)?.overnightAvg ?? 0;
+  let lastBedtime   = filtered.find(d => d.bedtimeAvg   !== null)?.bedtimeAvg   ?? 0;
+
+  const overnightData = filtered.map(d => {
+    if (d.overnightAvg !== null) lastOvernight = d.overnightAvg;
+    return { value: lastOvernight, hideDataPoint: d.overnightAvg === null, label: '' };
+  });
+
+  const bedtimeData = filtered.map(d => {
+    if (d.bedtimeAvg !== null) lastBedtime = d.bedtimeAvg;
+    return { value: lastBedtime, hideDataPoint: d.bedtimeAvg === null, label: '' };
+  });
 
   const allVals = filtered.flatMap(d =>
     [d.overnightAvg, d.bedtimeAvg].filter((v): v is number => v !== null)
@@ -118,15 +127,13 @@ export function OvernightBedtimeChart({ daily }: Props) {
         ]}
         width={CHART_W}
         height={CHART_H}
-        spacing={filtered.length > 1 ? Math.max(2, Math.floor((CHART_W - 20) / (filtered.length - 1))) : 20}
+        spacing={computedSpacing}
         disableScroll
         maxValue={yMax}
         mostNegativeValue={yBase}
         noOfSections={noOfSections}
         yAxisLabelTexts={yLabels}
         yAxisLabelWidth={Y_AXIS_W}
-        xAxisLabelTextStyle={{ color: Colors.mutedForeground, fontSize: 9 }}
-        xAxisLabelContainerStyle={{ width: 36 }}
         yAxisTextStyle={{ color: Colors.mutedForeground, fontSize: 9 }}
         rulesColor={Colors.border + '40'}
         yAxisColor="transparent"
@@ -144,6 +151,19 @@ export function OvernightBedtimeChart({ daily }: Props) {
         }}
         showReferenceLine1
       />
+
+      {/* Custom x-axis labels */}
+      <View style={{ height: 14, marginLeft: Y_AXIS_W, position: 'relative' }}>
+        {labelTexts.map((lbl, i) => {
+          if (!lbl) return null;
+          const cx = 20 + i * computedSpacing;
+          return (
+            <Text key={i} style={{ position: 'absolute', left: cx - 14, width: 28, fontSize: 9, color: Colors.mutedForeground, textAlign: 'center' }}>
+              {lbl}
+            </Text>
+          );
+        })}
+      </View>
     </View>
   );
 }

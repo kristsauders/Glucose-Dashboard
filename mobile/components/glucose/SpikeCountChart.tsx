@@ -42,16 +42,20 @@ export function SpikeCountChart({ daily, weekly, useWeekly }: Props) {
   const sectionSize = yMax / noOfSections;
   const yLabels = [0, 1, 2, 3, 4].map(i => Math.round(sectionSize * i).toString());
 
+  // Labels stored separately; barData items get '' to avoid slot-width clipping
+  const labelTexts = items.map((d, i) =>
+    i % step === 0 && i < items.length - 1
+      ? ('label' in d ? d.label : (d as WeekMetrics).weekLabel)
+      : ''
+  );
+
   const barData = items.map((d, i) => {
     const val = isWeekly
       ? (d as WeekMetrics).above180
       : (d as DayMetrics).spikesAbove180;
-    const label = i % step === 0 && i < items.length - 1
-      ? ('label' in d ? d.label : (d as WeekMetrics).weekLabel)
-      : '';
     return {
       value: val,
-      label,
+      label: '',
       frontColor: val === 0 ? Colors.glucoseInRange : Colors.glucoseHigh,
     };
   });
@@ -90,13 +94,24 @@ export function SpikeCountChart({ daily, weekly, useWeekly }: Props) {
         spacing={spacing}
         initialSpacing={INIT}
         disableScroll
-        xAxisLabelTextStyle={{ color: Colors.mutedForeground, fontSize: 9 }}
-        xAxisLabelContainerStyle={{ width: 36 }}
         yAxisTextStyle={{ color: Colors.mutedForeground, fontSize: 9 }}
         rulesColor={Colors.border + '40'}
         yAxisColor="transparent"
         xAxisColor={Colors.border}
       />
+
+      {/* Custom x-axis labels */}
+      <View style={{ height: 14, marginLeft: Y_AXIS_W, position: 'relative' }}>
+        {labelTexts.map((lbl, i) => {
+          if (!lbl) return null;
+          const cx = INIT + i * (barWidth + spacing) + barWidth / 2;
+          return (
+            <Text key={i} style={{ position: 'absolute', left: cx - 14, width: 28, fontSize: 9, color: Colors.mutedForeground, textAlign: 'center' }}>
+              {lbl}
+            </Text>
+          );
+        })}
+      </View>
     </View>
   );
 }

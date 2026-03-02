@@ -21,23 +21,18 @@ export function DailyGlucoseBarChart({ daily, weekly, useWeekly }: Props) {
   const Y_AXIS_W = 36;
   const CHART_W = SCREEN_W - 66 - Y_AXIS_W;
   const step = Math.ceil(items.length / 7);
+  const computedSpacing = items.length > 1 ? Math.max(2, Math.floor((CHART_W - 20) / (items.length - 1))) : 20;
 
-  const avgData = items.map((d, i) => ({
-    value: d.avg,
-    label: i % step === 0 && i < items.length - 1
+  // Labels stored separately; data items get '' so gifted-charts won't clip them
+  const labelTexts = items.map((d, i) =>
+    i % step === 0 && i < items.length - 1
       ? ('label' in d ? d.label : (d as WeekMetrics).weekLabel)
-      : '',
-  }));
+      : ''
+  );
 
-  const maxData = items.map(d => ({
-    value: d.max,
-    label: '',
-  }));
-
-  const minData = items.map(d => ({
-    value: d.min,
-    label: '',
-  }));
+  const avgData = items.map(d => ({ value: d.avg, label: '' }));
+  const maxData = items.map(d => ({ value: d.max, label: '' }));
+  const minData = items.map(d => ({ value: d.min, label: '' }));
 
   // Compute y-axis range
   const allVals = items.flatMap(d => [d.avg, d.max, d.min]);
@@ -106,15 +101,13 @@ export function DailyGlucoseBarChart({ daily, weekly, useWeekly }: Props) {
         ]}
         height={CHART_H}
         width={CHART_W}
-        spacing={items.length > 1 ? Math.max(2, Math.floor((CHART_W - 20) / (items.length - 1))) : 20}
+        spacing={computedSpacing}
         disableScroll
         maxValue={adjustedMax}
         mostNegativeValue={chartMin}
         noOfSections={noOfSections}
         yAxisLabelTexts={yLabels}
         yAxisLabelWidth={Y_AXIS_W}
-        xAxisLabelTextStyle={{ color: Colors.mutedForeground, fontSize: 9 }}
-        xAxisLabelContainerStyle={{ width: 36 }}
         yAxisTextStyle={{ color: Colors.mutedForeground, fontSize: 10 }}
         rulesColor={Colors.border + '40'}
         yAxisColor="transparent"
@@ -142,8 +135,21 @@ export function DailyGlucoseBarChart({ daily, weekly, useWeekly }: Props) {
         showReferenceLine2
       />
 
+      {/* Custom x-axis labels — positioned outside the chart to avoid slot-width clipping */}
+      <View style={{ height: 14, marginLeft: Y_AXIS_W, position: 'relative' }}>
+        {labelTexts.map((lbl, i) => {
+          if (!lbl) return null;
+          const cx = 20 + i * computedSpacing;
+          return (
+            <Text key={i} style={{ position: 'absolute', left: cx - 14, width: 28, fontSize: 9, color: Colors.mutedForeground, textAlign: 'center' }}>
+              {lbl}
+            </Text>
+          );
+        })}
+      </View>
+
       {/* Legend */}
-      <View style={{ flexDirection: 'row', gap: 14, marginTop: 8 }}>
+      <View style={{ flexDirection: 'row', gap: 14, marginTop: 4 }}>
         {[
           { color: Colors.primary, label: 'Avg' },
           { color: Colors.warning, label: 'Max' },
