@@ -68,6 +68,13 @@ function getApnsJwt(): string {
   return token;
 }
 
+function destroySession(): void {
+  if (apnsSession) {
+    try { apnsSession.destroy(); } catch {}
+    apnsSession = null;
+  }
+}
+
 function getApnsSession(): http2.ClientHttp2Session {
   if (apnsSession && !apnsSession.destroyed && !apnsSession.closed) {
     return apnsSession;
@@ -76,9 +83,15 @@ function getApnsSession(): http2.ClientHttp2Session {
   apnsSession = http2.connect(`https://${host}`);
   apnsSession.on('error', (err) => {
     console.warn('[LiveActivityPush] APNs session error:', err.message);
-    apnsSession = null;
+    destroySession();
   });
   apnsSession.on('close', () => { apnsSession = null; });
+  // APNs signals connection close with GOAWAY before the 'close' event fires.
+  // Destroy eagerly so the next getApnsSession() opens a fresh connection.
+  apnsSession.on('goaway', (errorCode) => {
+    console.warn('[LiveActivityPush] APNs GOAWAY received, errorCode:', errorCode, '— resetting session');
+    destroySession();
+  });
   return apnsSession;
 }
 
@@ -157,6 +170,11 @@ export async function sendLiveActivityPush(
       'authorization':  `bearer ${jwt}`,
     });
 
+    // Guard against stalled connections — APNs normally responds in <2s.
+    const timer = setTimeout(() => {
+      req.destroy(new Error('APNs push timed out after 15s'));
+    }, 15_000);
+
     req.write(body);
     req.end();
 
@@ -167,6 +185,7 @@ export async function sendLiveActivityPush(
     req.on('data', (chunk) => { responseBody += chunk; });
 
     req.on('end', () => {
+      clearTimeout(timer);
       if (statusCode === 200) {
         resolve();
       } else {
@@ -174,7 +193,7 @@ export async function sendLiveActivityPush(
       }
     });
 
-    req.on('error', reject);
+    req.on('error', (err) => { clearTimeout(timer); reject(err); });
   });
 }
 
@@ -210,13 +229,19 @@ export async function pushLiveActivityForUser(
         console.log(`[LiveActivityPush] Pushed to activity ${row.activity_id.slice(0, 8)}… for user ${userId}`);
       } catch (err: any) {
         const msg: string = err.message ?? '';
-        // APNs 410 = activity no longer active → clean up the stale token
-        if (msg.includes('410') || msg.includes('Gone') || msg.includes('ExpiredToken')) {
+        // 410 = activity ended; 400 BadDeviceToken = token was rotated by iOS.
+        // Both mean the stored token is dead and must be removed so the next
+        // token update from the app takes over.
+        const isStaleToken = msg.includes('410')
+          || msg.includes('Gone')
+          || msg.includes('ExpiredToken')
+          || (msg.includes('400') && msg.includes('BadDeviceToken'));
+        if (isStaleToken) {
           await query(
             'DELETE FROM live_activity_tokens WHERE user_id = $1 AND activity_id = $2',
             [userId, row.activity_id],
           );
-          console.log(`[LiveActivityPush] Removed expired token for activity ${row.activity_id.slice(0, 8)}…`);
+          console.log(`[LiveActivityPush] Removed stale token for activity ${row.activity_id.slice(0, 8)}…`);
         } else {
           console.warn(`[LiveActivityPush] Push failed for user ${userId}:`, msg);
         }
