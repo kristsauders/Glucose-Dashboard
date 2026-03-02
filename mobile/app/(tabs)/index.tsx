@@ -17,16 +17,23 @@ export default function DashboardScreen() {
   const readings = useGlucose24h();
   const { syncReading } = useGlucoseWidgets();
 
-  // Sync the latest reading to the lock-screen widget and Live Activity whenever it changes
+  // Sync the latest reading to the lock-screen widget and Live Activity whenever it changes.
+  // We track two conditions to avoid redundant syncs but still re-sync when 24h history
+  // arrives after the initial reading (history loads slower than the latest-reading query).
   const lastSyncedId = useRef<string | null>(null);
+  const lastSyncedWithHistory = useRef(false);
   useEffect(() => {
     const reading = (latest.data as any)?.reading;
     const allReadings = (readings.data as any)?.readings as GlucoseReading[] | undefined;
-    if (reading && reading.id !== lastSyncedId.current) {
-      lastSyncedId.current = reading.id;
-      syncReading(reading, allReadings);
-    }
-  }, [(latest.data as any)?.reading]);
+    const hasHistory = !!allReadings && allReadings.length > 0;
+    if (!reading) return;
+    const isNewReading = reading.id !== lastSyncedId.current;
+    const historyJustArrived = hasHistory && !lastSyncedWithHistory.current;
+    if (!isNewReading && !historyJustArrived) return;
+    lastSyncedId.current = reading.id;
+    lastSyncedWithHistory.current = hasHistory;
+    syncReading(reading, allReadings);
+  }, [(latest.data as any)?.reading, (readings.data as any)?.readings]);
   // Compute today's summary from the already-fetched 24h readings (type-1 only, same window as chart)
   const todaySummary = useMemo<GlucoseSummary | undefined>(() => {
     const rds = (readings.data as any)?.readings as GlucoseReading[] | undefined;

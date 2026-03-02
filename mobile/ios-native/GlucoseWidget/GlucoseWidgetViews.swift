@@ -1,5 +1,6 @@
 import SwiftUI
 import WidgetKit
+import Charts
 
 let APP_GROUP = "group.com.auders.t1dsage"
 
@@ -13,9 +14,11 @@ func sharedGlucoseEntry() -> GlucoseEntry {
 }
 
 func glucoseColor(_ g: Int) -> Color {
-    if g < 70  { return Color(red: 0.94, green: 0.27, blue: 0.27) }
-    if g > 180 { return Color(red: 0.98, green: 0.62, blue: 0.04) }
-    return Color(red: 0.13, green: 0.77, blue: 0.37)
+    if g < 55  { return Color(red: 0.94, green: 0.27, blue: 0.27) }  // critically low — red
+    if g < 70  { return Color(red: 0.98, green: 0.62, blue: 0.04) }  // low — yellow
+    if g <= 140 { return Color(red: 0.13, green: 0.77, blue: 0.37) } // in target — green
+    if g <= 180 { return Color(red: 0.98, green: 0.62, blue: 0.04) } // above target — yellow
+    return Color(red: 0.94, green: 0.27, blue: 0.27)                 // high — red
 }
 
 
@@ -127,6 +130,63 @@ struct GlucoseWidget: Widget {
     }
 }
 
+// MARK: - Mini chart for Live Activity
+
+struct GlucoseMiniChart: View {
+    let history: [GlucosePoint]
+    let color: Color
+
+    var body: some View {
+        // Sort oldest → newest so the line draws left to right
+        let sorted = history.sorted { $0.minutesAgo > $1.minutesAgo }
+        let values = sorted.map { $0.glucose }
+        let rawMin = values.min() ?? 70
+        let rawMax = values.max() ?? 180
+        // Give the line breathing room above and below, clamped to sensor range
+        let yMin = max(40, rawMin - 15)
+        let yMax = min(400, rawMax + 15)
+        // X domain: oldest point (negative minutesAgo) to 0 (now)
+        let xMin = -(sorted.first?.minutesAgo ?? 120)
+
+        Chart {
+            ForEach(sorted.indices, id: \.self) { i in
+                AreaMark(
+                    x: .value("t", -sorted[i].minutesAgo),
+                    y: .value("g", sorted[i].glucose)
+                )
+                .foregroundStyle(
+                    LinearGradient(
+                        colors: [color.opacity(0.20), color.opacity(0.0)],
+                        startPoint: .top, endPoint: .bottom
+                    )
+                )
+                .interpolationMethod(.catmullRom)
+
+                LineMark(
+                    x: .value("t", -sorted[i].minutesAgo),
+                    y: .value("g", sorted[i].glucose)
+                )
+                .foregroundStyle(color)
+                .lineStyle(StrokeStyle(lineWidth: 1.5))
+                .interpolationMethod(.catmullRom)
+            }
+            // Low threshold
+            RuleMark(y: .value("Low", 70))
+                .lineStyle(StrokeStyle(lineWidth: 0.5, dash: [3, 2]))
+                .foregroundStyle(.red.opacity(0.35))
+            // High threshold
+            RuleMark(y: .value("High", 180))
+                .lineStyle(StrokeStyle(lineWidth: 0.5, dash: [3, 2]))
+                .foregroundStyle(.orange.opacity(0.35))
+        }
+        .chartXScale(domain: xMin...0)
+        .chartYScale(domain: yMin...yMax)
+        .chartXAxis(.hidden)
+        .chartYAxis(.hidden)
+        .chartLegend(.hidden)
+    }
+}
+
 // MARK: - Live Activity view
 
 // Shared helpers for Live Activity views
@@ -153,34 +213,33 @@ struct GlucoseLiveActivityPhoneView: View {
     var isStale: Bool { Date().timeIntervalSince(state.readingDate) > 15 * 60 }
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 6) {
-            // Top row: glucose + trend fills width; alert badge on the right if needed
-            HStack(alignment: .firstTextBaseline, spacing: 8) {
-                Text(isStale ? "--" : "\(state.glucose)")
-                    .font(.system(size: 52, weight: .bold, design: .rounded))
-                    .foregroundStyle(isStale ? Color.secondary : color)
-                Text(isStale ? "?" : state.trend)
-                    .font(.system(size: 36))
-                    .foregroundStyle(isStale ? Color.secondary : color)
-                Spacer()
+        HStack(alignment: .top, spacing: 12) {
+            // Left column: glucose value + metadata (takes its natural width)
+            VStack(alignment: .leading, spacing: 2) {
+                HStack(alignment: .firstTextBaseline, spacing: 6) {
+                    Text(isStale ? "--" : "\(state.glucose)")
+                        .font(.system(size: 52, weight: .bold, design: .rounded))
+                        .foregroundStyle(isStale ? Color.secondary : color)
+                    Text(isStale ? "?" : state.trend)
+                        .font(.system(size: 36))
+                        .foregroundStyle(isStale ? Color.secondary : color)
+                }
                 if isStale {
                     Label("No data", systemImage: "exclamationmark.circle")
                         .font(.caption.bold()).foregroundStyle(Color.orange)
-                } else if state.isLow || state.isHigh {
-                    Text(state.isLow ? "LOW" : "HIGH")
-                        .font(.caption.bold()).foregroundStyle(color)
-                        .padding(.horizontal, 8).padding(.vertical, 3)
-                        .background(color.opacity(0.15), in: Capsule())
+                } else {
+                    Text(state.readingDate, style: .relative)
+                        .font(.caption).foregroundStyle(.secondary)
                 }
-            }
-            // Bottom row: timestamp left, insulin right — same size so they balance
-            HStack {
-                Text(state.readingDate, style: .relative)
-                    .font(.caption).foregroundStyle(.secondary)
-                Spacer()
                 if let label = insulinLabel(units: state.lastInsulinUnits, date: state.lastInsulinDate) {
                     Text(label).font(.caption).foregroundStyle(.secondary)
                 }
+            }
+
+            // Right column: chart fills remaining width; minHeight anchors the dynamic height
+            if let hist = state.history, !hist.isEmpty, !isStale {
+                GlucoseMiniChart(history: hist, color: color)
+                    .frame(maxWidth: .infinity, minHeight: 70)
             }
         }
         .padding(12)
@@ -194,36 +253,36 @@ struct GlucoseLiveActivityWatchView: View {
     var isStale: Bool { Date().timeIntervalSince(state.readingDate) > 15 * 60 }
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 4) {
-            HStack(alignment: .firstTextBaseline, spacing: 4) {
-                Text(isStale ? "--" : "\(state.glucose)")
-                    .font(.system(size: 44, weight: .bold, design: .rounded))
-                    .foregroundStyle(isStale ? Color.secondary : color)
-                    .minimumScaleFactor(0.7)
-                Text(isStale ? "?" : state.trend)
-                    .font(.system(size: 26))
-                    .foregroundStyle(isStale ? Color.secondary : color)
-                Spacer()
+        HStack(alignment: .top, spacing: 6) {
+            // Left column: glucose value + metadata
+            VStack(alignment: .leading, spacing: 2) {
+                HStack(alignment: .firstTextBaseline, spacing: 3) {
+                    Text(isStale ? "--" : "\(state.glucose)")
+                        .font(.system(size: 40, weight: .bold, design: .rounded))
+                        .foregroundStyle(isStale ? Color.secondary : color)
+                        .minimumScaleFactor(0.7)
+                    Text(isStale ? "?" : state.trend)
+                        .font(.system(size: 22))
+                        .foregroundStyle(isStale ? Color.secondary : color)
+                }
                 if isStale {
                     Image(systemName: "exclamationmark.circle.fill").foregroundStyle(Color.orange)
-                } else if state.isLow || state.isHigh {
-                    Text(state.isLow ? "LOW" : "HIGH")
-                        .font(.caption2.bold()).foregroundStyle(color)
-                        .padding(.horizontal, 5).padding(.vertical, 2)
-                        .background(color.opacity(0.2), in: Capsule())
+                } else {
+                    Text(state.readingDate, style: .relative)
+                        .font(.caption2).foregroundStyle(.secondary)
                 }
-            }
-            HStack {
-                if !isStale {
-                    Text(state.readingDate, style: .relative).font(.caption2).foregroundStyle(.secondary)
-                }
-                Spacer()
                 if let label = insulinLabel(units: state.lastInsulinUnits, date: state.lastInsulinDate, compact: true) {
                     Text(label).font(.caption2).foregroundStyle(.secondary)
                 }
             }
+
+            // Right column: chart fills remaining width; minHeight anchors the dynamic height
+            if let hist = state.history, !hist.isEmpty, !isStale {
+                GlucoseMiniChart(history: hist, color: color)
+                    .frame(maxWidth: .infinity, minHeight: 50)
+            }
         }
-        .padding(10)
+        .padding(8)
     }
 }
 

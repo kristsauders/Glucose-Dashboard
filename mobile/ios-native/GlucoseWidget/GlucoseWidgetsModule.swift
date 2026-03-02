@@ -17,7 +17,8 @@ class GlucoseWidgetsModule: NSObject {
                               trend: String,
                               timestamp: Double,
                               isLow: Bool,
-                              isHigh: Bool) {
+                              isHigh: Bool,
+                              history: NSArray) {
         let defaults = UserDefaults(suiteName: APP_GROUP)
         defaults?.set(Int(glucose), forKey: "currentGlucose")
         defaults?.set(trend,        forKey: "currentTrend")
@@ -26,10 +27,11 @@ class GlucoseWidgetsModule: NSObject {
         WidgetCenter.shared.reloadAllTimelines()
 
         if #available(iOS 16.2, *) {
+            let historyPoints = parseHistory(history)
             Task {
                 await GlucoseWidgetsModule.updateActivity(
                     glucose: Int(glucose), trend: trend, timestamp: timestamp,
-                    isLow: isLow, isHigh: isHigh)
+                    isLow: isLow, isHigh: isHigh, history: historyPoints)
             }
         }
     }
@@ -49,11 +51,13 @@ class GlucoseWidgetsModule: NSObject {
                                   timestamp: Double,
                                   isLow: Bool,
                                   isHigh: Bool,
+                                  history: NSArray,
                                   resolve: @escaping RCTPromiseResolveBlock,
                                   reject: @escaping RCTPromiseRejectBlock) {
         guard #available(iOS 16.2, *) else {
             reject("UNSUPPORTED", "Live Activities require iOS 16.2+", nil); return
         }
+        let historyPoints = parseHistory(history)
         Task {
             do {
                 let readingDate = Date(timeIntervalSince1970: timestamp)
@@ -61,7 +65,8 @@ class GlucoseWidgetsModule: NSObject {
                 let state = GlucoseActivityAttributes.ContentState(
                     glucose: Int(glucose), trend: trend,
                     readingDate: readingDate,
-                    isLow: isLow, isHigh: isHigh)
+                    isLow: isLow, isHigh: isHigh,
+                    history: historyPoints.isEmpty ? nil : historyPoints)
                 let content = ActivityContent(state: state, staleDate: staleDate)
 
                 let activity: Activity<GlucoseActivityAttributes>
@@ -119,16 +124,27 @@ class GlucoseWidgetsModule: NSObject {
 
     @available(iOS 16.2, *)
     static func updateActivity(glucose: Int, trend: String, timestamp: Double,
-                                isLow: Bool, isHigh: Bool) async {
+                                isLow: Bool, isHigh: Bool,
+                                history: [GlucosePoint] = []) async {
         let readingDate = Date(timeIntervalSince1970: timestamp)
         let staleDate   = readingDate.addingTimeInterval(STALE_INTERVAL)
         let state = GlucoseActivityAttributes.ContentState(
             glucose: glucose, trend: trend,
             readingDate: readingDate,
-            isLow: isLow, isHigh: isHigh)
+            isLow: isLow, isHigh: isHigh,
+            history: history.isEmpty ? nil : history)
         let content = ActivityContent(state: state, staleDate: staleDate)
         for activity in Activity<GlucoseActivityAttributes>.activities {
             await activity.update(content)
+        }
+    }
+
+    private func parseHistory(_ arr: NSArray) -> [GlucosePoint] {
+        arr.compactMap { item in
+            guard let dict = item as? [String: Any],
+                  let g = (dict["glucose"] as? NSNumber)?.intValue,
+                  let m = (dict["minutesAgo"] as? NSNumber)?.intValue else { return nil }
+            return GlucosePoint(glucose: g, minutesAgo: m)
         }
     }
 

@@ -69,10 +69,11 @@ export const lightColors: ColorScheme = light;
 export const darkColors: ColorScheme = dark;
 
 export function getGlucoseColor(glucose: number, colors: ColorScheme = light): string {
-  if (glucose < 70) return colors.glucoseLow;
-  if (glucose <= 180) return colors.glucoseInRange;
-  if (glucose <= 250) return colors.glucoseHigh;
-  return colors.glucoseVeryHigh;
+  if (glucose < 55) return colors.glucoseLow;        // critically low — red
+  if (glucose < 70) return colors.glucoseHigh;       // low — yellow
+  if (glucose <= 140) return colors.glucoseInRange;  // in target — green
+  if (glucose <= 180) return colors.glucoseHigh;     // above target — yellow
+  return colors.glucoseVeryHigh;                     // high — red
 }
 
 /** LibreLink Up API trend codes → arrow glyphs

@@ -28,23 +28,20 @@ struct GlucoseLiveActivityWidget: Widget {
                         Text(context.state.trend).font(.system(size: 24)).foregroundStyle(color)
                     }
                 }
-                DynamicIslandExpandedRegion(.trailing) {
-                    if context.state.isLow || context.state.isHigh {
-                        let color = glucoseColor(context.state.glucose)
-                        Text(context.state.isLow ? "LOW" : "HIGH")
-                            .font(.caption.bold()).foregroundStyle(color)
-                            .padding(.horizontal, 6).padding(.vertical, 3)
-                            .background(color.opacity(0.2), in: Capsule())
-                    }
-                }
                 DynamicIslandExpandedRegion(.bottom) {
-                    HStack {
-                        Text(context.state.readingDate, style: .relative)
-                            .font(.caption2).foregroundStyle(.secondary)
-                        Spacer()
-                        if let label = insulinLabel(units: context.state.lastInsulinUnits,
-                                                    date: context.state.lastInsulinDate) {
-                            Text(label).font(.caption2).foregroundStyle(.secondary)
+                    VStack(spacing: 4) {
+                        if let hist = context.state.history, !hist.isEmpty {
+                            GlucoseMiniChart(history: hist, color: glucoseColor(context.state.glucose))
+                                .frame(height: 28)
+                        }
+                        HStack {
+                            Text(context.state.readingDate, style: .relative)
+                                .font(.caption2).foregroundStyle(.secondary)
+                            Spacer()
+                            if let label = insulinLabel(units: context.state.lastInsulinUnits,
+                                                        date: context.state.lastInsulinDate) {
+                                Text(label).font(.caption2).foregroundStyle(.secondary)
+                            }
                         }
                     }
                 }
