@@ -187,7 +187,7 @@ func insulinLabel(units: Double?, date: Date?, compact: Bool = false) -> String?
     if compact {
         if mins < 60 { return "💉\(u)u \(mins)m" }
         let hrs = mins / 60; let rem = mins % 60
-        return rem == 0 ? "💉\(u)u \(hrs)h" : "💉\(u)u \(hrs)h\(rem)m"
+        return rem == 0 ? "💉\(u)u \(hrs)h" : "💉\(u)u \(hrs)h\(rem)"
     }
     if mins < 60 { return "💉 \(u)u · \(mins)m ago" }
     let hrs = mins / 60; let rem = mins % 60
@@ -216,11 +216,8 @@ struct GlucoseLiveActivityPhoneView: View {
                     Label("No data", systemImage: "exclamationmark.circle")
                         .font(.caption.bold()).foregroundStyle(Color.orange)
                 } else {
-                    HStack(spacing: 3) {
-                        Image(systemName: "clock")
-                        Text(state.readingDate, style: .relative)
-                    }
-                    .font(.caption).foregroundStyle(.secondary)
+                    (Text("🕐 ") + Text(state.readingDate, style: .relative))
+                        .font(.caption).foregroundStyle(.secondary)
                 }
                 if let label = insulinLabel(units: state.lastInsulinUnits, date: state.lastInsulinDate) {
                     Text(label).font(.caption).foregroundStyle(.secondary)
