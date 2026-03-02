@@ -1,5 +1,7 @@
+import { useState } from 'react';
 import { View, Text, Dimensions } from 'react-native';
 import { LineChart } from 'react-native-gifted-charts';
+import { format } from 'date-fns';
 import { useColors } from '../../constants/colors';
 import { GLUCOSE_LOW, GLUCOSE_HIGH } from '../../constants/config';
 import type { GlucoseReading } from '../../types/glucose';
@@ -8,6 +10,7 @@ import type { GlucoseReading } from '../../types/glucose';
 const Y_AXIS_W = 30;
 const INIT_SPACE = 4;
 const END_SPACE = 4;
+const CHART_H = 160;
 
 // Total container width: full screen minus horizontal padding (16px scroll + 16px card on each side)
 const CONTAINER_W = Dimensions.get('window').width - 64;
@@ -43,9 +46,11 @@ interface GlucoseChartProps {
 
 export function GlucoseChart({ readings, events = [] }: GlucoseChartProps) {
   const Colors = useColors();
+  const [selectedIdx, setSelectedIdx] = useState<number | null>(null);
+
   if (!readings || readings.length === 0) {
     return (
-      <View style={{ height: 160, justifyContent: 'center', alignItems: 'center' }}>
+      <View style={{ height: CHART_H, justifyContent: 'center', alignItems: 'center' }}>
         <Text style={{ color: Colors.mutedForeground }}>No data</Text>
       </View>
     );
@@ -55,7 +60,6 @@ export function GlucoseChart({ readings, events = [] }: GlucoseChartProps) {
   const chronological = [...readings];
 
   // Downsample to max 144 points — keep every Nth reading so we stay under the cap.
-  // One pass of every-other can still leave 250+ points from dense CGM data, so compute N.
   const MAX_POINTS = 144;
   const step = chronological.length > MAX_POINTS
     ? Math.ceil(chronological.length / MAX_POINTS)
@@ -71,18 +75,13 @@ export function GlucoseChart({ readings, events = [] }: GlucoseChartProps) {
     : 2;
 
   // Map each event to the nearest sampled data point index.
-  // No fixed distance limit — LibreView readings (parsed by server) and meal logs (from iPhone)
-  // can have differing timezone offsets, so we match to nearest reading within a reasonable
-  // multiple of the chart span to avoid matching completely unrelated data.
   const chartStart = sampled.length > 0 ? new Date(sampled[0].timestamp).getTime() : 0;
   const chartEnd   = sampled.length > 0 ? new Date(sampled[sampled.length - 1].timestamp).getTime() : 0;
-  const chartSpan  = chartEnd - chartStart;
 
   const eventsByIndex = new Map<number, ChartEvent['type']>();
   for (const event of events) {
     const evTime = new Date(event.timestamp).getTime();
-    // Only plot events that fall within the chart window (small buffer for live updates).
-    const BUFFER_MS = 5 * 60 * 1000; // 5-minute buffer for just-logged events
+    const BUFFER_MS = 5 * 60 * 1000;
     if (evTime < chartStart - BUFFER_MS || evTime > chartEnd + BUFFER_MS) continue;
 
     let nearestIdx = 0;
@@ -97,16 +96,11 @@ export function GlucoseChart({ readings, events = [] }: GlucoseChartProps) {
   }
 
   // Build time axis labels by finding the nearest data point to each 3-hour boundary.
-  // This is more reliable than checking minutes < 10, since downsampled readings
-  // may land at :10 or :20 and would otherwise be skipped.
   const timeLabels: { x: number; label: string }[] = [];
   if (sampled.length > 0) {
     const firstMs = new Date(sampled[0].timestamp).getTime();
     const lastMs  = new Date(sampled[sampled.length - 1].timestamp).getTime();
 
-    // Generate all 3-hour local-time boundaries that fall within (or near) the data range.
-    // Check both the calendar day of the first reading and the next day, in case the 24h
-    // window crosses midnight.
     const usedIndices = new Set<number>();
     for (let dayOffset = 0; dayOffset <= 1; dayOffset++) {
       for (let h = 0; h < 24; h += 3) {
@@ -115,11 +109,9 @@ export function GlucoseChart({ readings, events = [] }: GlucoseChartProps) {
         boundary.setHours(h, 0, 0, 0);
         const boundaryMs = boundary.getTime();
 
-        // Skip if this boundary is outside the data range by more than one interval
         if (boundaryMs < firstMs - 10 * 60 * 1000) continue;
         if (boundaryMs > lastMs  + 10 * 60 * 1000) continue;
 
-        // Find the nearest data point
         let nearestIdx = 0;
         let minDiff = Infinity;
         sampled.forEach((r, i) => {
@@ -127,7 +119,6 @@ export function GlucoseChart({ readings, events = [] }: GlucoseChartProps) {
           if (diff < minDiff) { minDiff = diff; nearestIdx = i; }
         });
 
-        // Accept if within 15 minutes and the index hasn't been used by a closer mark
         if (minDiff < 15 * 60 * 1000 && !usedIndices.has(nearestIdx)) {
           usedIndices.add(nearestIdx);
           const x = Y_AXIS_W + INIT_SPACE + nearestIdx * spacing;
@@ -142,56 +133,73 @@ export function GlucoseChart({ readings, events = [] }: GlucoseChartProps) {
     dataPointColor: Number(r.glucose) < GLUCOSE_LOW || Number(r.glucose) > GLUCOSE_HIGH
       ? Colors.glucoseLow
       : Colors.glucoseInRange,
+    ts: r.timestamp,
   }));
 
   const values = sampled.map(r => Number(r.glucose));
   const minVal = Math.max(40, Math.min(...values) - 20);
   const maxVal = Math.min(400, Math.max(...values) + 20);
 
-  // Legend shows only types that have a matched marker (helps diagnose missing markers)
   const presentTypes = new Set(eventsByIndex.values());
+
+  const handleTouch = (e: any) => {
+    const dataX = e.nativeEvent.locationX - Y_AXIS_W - INIT_SPACE;
+    if (dataX < 0) { setSelectedIdx(null); return; }
+    setSelectedIdx(Math.max(0, Math.min(Math.round(dataX / spacing), sampled.length - 1)));
+  };
+  const stripX = selectedIdx !== null ? Y_AXIS_W + INIT_SPACE + selectedIdx * spacing : 0;
+  const tooltipLeft = Math.max(Y_AXIS_W, Math.min(Y_AXIS_W + LINE_CHART_W - 100, stripX - 50));
 
   return (
     <View>
       {/* Chart + event line overlay */}
-      <View style={{ position: 'relative' }}>
+      <View
+        style={{ position: 'relative' }}
+        onStartShouldSetResponder={() => true}
+        onMoveShouldSetResponder={() => true}
+        onResponderTerminationRequest={() => false}
+        onResponderGrant={handleTouch}
+        onResponderMove={handleTouch}
+        onResponderRelease={() => setSelectedIdx(null)}
+        onResponderTerminate={() => setSelectedIdx(null)}
+      >
         <LineChart
           data={data}
           width={LINE_CHART_W}
-          height={160}
-        spacing={spacing}
-        color={Colors.primary}
-        thickness={2}
-        dataPointsRadius={0}
-        hideDataPoints
-        rulesColor={Colors.border}
-        rulesType="solid"
-        yAxisColor="transparent"
-        xAxisColor={Colors.border}
-        yAxisTextStyle={{ color: Colors.mutedForeground, fontSize: 10 }}
-        yAxisLabelWidth={Y_AXIS_W}
-        maxValue={maxVal}
-        minValue={minVal}
-        noOfSections={4}
-        referenceLine1Config={{
-          color: Colors.glucoseLow,
-          dashWidth: 4,
-          dashGap: 4,
-          thickness: 1,
-        }}
-        referenceLine1Position={GLUCOSE_LOW}
-        referenceLine2Config={{
-          color: Colors.glucoseHigh,
-          dashWidth: 4,
-          dashGap: 4,
-          thickness: 1,
-        }}
-        referenceLine2Position={GLUCOSE_HIGH}
-        curved
-        animateOnDataChange
-        initialSpacing={INIT_SPACE}
-        endSpacing={END_SPACE}
-      />
+          height={CHART_H}
+          spacing={spacing}
+          color={Colors.primary}
+          thickness={2}
+          dataPointsRadius={0}
+          hideDataPoints
+          rulesColor={Colors.border}
+          rulesType="solid"
+          yAxisColor="transparent"
+          xAxisColor={Colors.border}
+          yAxisTextStyle={{ color: Colors.mutedForeground, fontSize: 10 }}
+          yAxisLabelWidth={Y_AXIS_W}
+          maxValue={maxVal}
+          minValue={minVal}
+          noOfSections={4}
+          referenceLine1Config={{
+            color: Colors.glucoseLow,
+            dashWidth: 4,
+            dashGap: 4,
+            thickness: 1,
+          }}
+          referenceLine1Position={GLUCOSE_LOW}
+          referenceLine2Config={{
+            color: Colors.glucoseHigh,
+            dashWidth: 4,
+            dashGap: 4,
+            thickness: 1,
+          }}
+          referenceLine2Position={GLUCOSE_HIGH}
+          curved
+          animateOnDataChange
+          initialSpacing={INIT_SPACE}
+          endSpacing={END_SPACE}
+        />
 
         {/* Event marker lines — absolutely overlaid so they always render */}
         {Array.from(eventsByIndex.entries()).map(([idx, type]) => {
@@ -211,6 +219,48 @@ export function GlucoseChart({ readings, events = [] }: GlucoseChartProps) {
             />
           );
         })}
+
+        {/* Pointer strip */}
+        {selectedIdx !== null && (
+          <View
+            pointerEvents="none"
+            style={{
+              position: 'absolute',
+              top: 0,
+              left: stripX - 0.5,
+              width: 1,
+              height: CHART_H,
+              backgroundColor: Colors.mutedForeground + '50',
+            }}
+          />
+        )}
+
+        {/* Tooltip — fixed at top so it's always above the finger */}
+        {selectedIdx !== null && (
+          <View
+            pointerEvents="none"
+            style={{
+              position: 'absolute',
+              top: 8,
+              left: tooltipLeft,
+              width: 100,
+              backgroundColor: Colors.card,
+              borderRadius: 8,
+              borderWidth: 1,
+              borderColor: Colors.cardBorder,
+              padding: 8,
+              alignItems: 'center',
+              gap: 2,
+            }}
+          >
+            <Text style={{ fontSize: 15, fontWeight: '700', color: Colors.foreground }}>
+              {Math.round(data[selectedIdx].value)}
+            </Text>
+            <Text style={{ fontSize: 10, color: Colors.mutedForeground }}>
+              {format(new Date(data[selectedIdx].ts), 'h:mm a')}
+            </Text>
+          </View>
+        )}
       </View>
 
       {/* Custom time-axis labels — pixel-aligned to chart data point positions */}

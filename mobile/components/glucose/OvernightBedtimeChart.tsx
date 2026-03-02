@@ -1,3 +1,4 @@
+import { useState } from 'react';
 import { View, Text, Dimensions } from 'react-native';
 import { LineChart } from 'react-native-gifted-charts';
 import { useColors } from '../../constants/colors';
@@ -5,6 +6,7 @@ import type { DayMetrics } from '../../hooks/useGlucose';
 
 const SCREEN_W = Dimensions.get('window').width;
 const CHART_H = 160;
+const INITIAL_SPACING = 20;
 
 interface Props {
   daily: DayMetrics[];
@@ -12,6 +14,8 @@ interface Props {
 
 export function OvernightBedtimeChart({ daily }: Props) {
   const Colors = useColors();
+  const [selectedIdx, setSelectedIdx] = useState<number | null>(null);
+
   if (!daily || daily.length === 0) return null;
 
   // Only include days that have at least one of the two values
@@ -21,7 +25,7 @@ export function OvernightBedtimeChart({ daily }: Props) {
   const Y_AXIS_W = 36;
   const CHART_W = SCREEN_W - 66 - Y_AXIS_W;
   const step = Math.ceil(filtered.length / 7);
-  const computedSpacing = filtered.length > 1 ? Math.max(2, Math.floor((CHART_W - 20) / (filtered.length - 1))) : 20;
+  const computedSpacing = filtered.length > 1 ? Math.max(2, Math.floor((CHART_W - INITIAL_SPACING) / (filtered.length - 1))) : 20;
 
   // Labels stored separately; data items get '' to avoid slot-width clipping
   const labelTexts = filtered.map((d, i) =>
@@ -70,6 +74,14 @@ export function OvernightBedtimeChart({ daily }: Props) {
     ? Math.round(avgBedtime.reduce((s, v) => s + v, 0) / avgBedtime.length)
     : null;
 
+  const handleTouch = (e: any) => {
+    const dataX = e.nativeEvent.locationX - Y_AXIS_W - INITIAL_SPACING;
+    if (dataX < 0) { setSelectedIdx(null); return; }
+    setSelectedIdx(Math.max(0, Math.min(Math.round(dataX / computedSpacing), filtered.length - 1)));
+  };
+  const stripX = selectedIdx !== null ? Y_AXIS_W + INITIAL_SPACING + selectedIdx * computedSpacing : 0;
+  const tooltipLeft = Math.max(Y_AXIS_W, Math.min(Y_AXIS_W + CHART_W - 96, stripX - 48));
+
   return (
     <View>
       <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'baseline', marginBottom: 8 }}>
@@ -104,59 +116,121 @@ export function OvernightBedtimeChart({ daily }: Props) {
         </View>
       </View>
 
-      <LineChart
-        dataSet={[
-          {
-            data: overnightData,
-            color: '#34D399',
-            thickness: 2,
-            curved: true,
-            hideDataPoints: filtered.length > 20,
-            dataPointsColor: '#34D399',
-            dataPointsRadius: 3,
-          },
-          {
-            data: bedtimeData,
-            color: '#A78BFA',
-            thickness: 2,
-            curved: true,
-            hideDataPoints: filtered.length > 20,
-            dataPointsColor: '#A78BFA',
-            dataPointsRadius: 3,
-          },
-        ]}
-        width={CHART_W}
-        height={CHART_H}
-        spacing={computedSpacing}
-        disableScroll
-        maxValue={yMax}
-        mostNegativeValue={yBase}
-        noOfSections={noOfSections}
-        yAxisLabelTexts={yLabels}
-        yAxisLabelWidth={Y_AXIS_W}
-        yAxisTextStyle={{ color: Colors.mutedForeground, fontSize: 9 }}
-        rulesColor={Colors.border + '40'}
-        yAxisColor="transparent"
-        xAxisColor={Colors.border}
-        referenceLine1={{
-          value: 100,
-          lineConfig: {
-            color: Colors.mutedForeground,
-            thickness: 1,
-            dashWidth: 4,
-            dashGap: 4,
-            labelText: '100',
-            labelTextStyle: { color: Colors.mutedForeground, fontSize: 8 },
-          },
-        }}
-        showReferenceLine1
-      />
+      <View
+        style={{ position: 'relative' }}
+        onStartShouldSetResponder={() => true}
+        onMoveShouldSetResponder={() => true}
+        onResponderTerminationRequest={() => false}
+        onResponderGrant={handleTouch}
+        onResponderMove={handleTouch}
+        onResponderRelease={() => setSelectedIdx(null)}
+        onResponderTerminate={() => setSelectedIdx(null)}
+      >
+        <LineChart
+          dataSet={[
+            {
+              data: overnightData,
+              color: '#34D399',
+              thickness: 2,
+              curved: true,
+              hideDataPoints: filtered.length > 20,
+              dataPointsColor: '#34D399',
+              dataPointsRadius: 3,
+            },
+            {
+              data: bedtimeData,
+              color: '#A78BFA',
+              thickness: 2,
+              curved: true,
+              hideDataPoints: filtered.length > 20,
+              dataPointsColor: '#A78BFA',
+              dataPointsRadius: 3,
+            },
+          ]}
+          width={CHART_W}
+          height={CHART_H}
+          spacing={computedSpacing}
+          disableScroll
+          maxValue={yMax}
+          mostNegativeValue={yBase}
+          noOfSections={noOfSections}
+          yAxisLabelTexts={yLabels}
+          yAxisLabelWidth={Y_AXIS_W}
+          yAxisTextStyle={{ color: Colors.mutedForeground, fontSize: 9 }}
+          rulesColor={Colors.border + '40'}
+          yAxisColor="transparent"
+          xAxisColor={Colors.border}
+          referenceLine1={{
+            value: 100,
+            lineConfig: {
+              color: Colors.mutedForeground,
+              thickness: 1,
+              dashWidth: 4,
+              dashGap: 4,
+              labelText: '100',
+              labelTextStyle: { color: Colors.mutedForeground, fontSize: 8 },
+            },
+          }}
+          showReferenceLine1
+        />
+
+        {/* Pointer strip */}
+        {selectedIdx !== null && (
+          <View
+            pointerEvents="none"
+            style={{
+              position: 'absolute',
+              top: 0,
+              left: stripX - 0.5,
+              width: 1,
+              height: CHART_H,
+              backgroundColor: Colors.mutedForeground + '50',
+            }}
+          />
+        )}
+
+        {/* Tooltip — fixed at top so it's always above the finger */}
+        {selectedIdx !== null && (
+          <View
+            pointerEvents="none"
+            style={{
+              position: 'absolute',
+              top: 8,
+              left: tooltipLeft,
+              width: 96,
+              backgroundColor: Colors.card,
+              borderRadius: 8,
+              borderWidth: 1,
+              borderColor: Colors.cardBorder,
+              padding: 8,
+              alignItems: 'center',
+              gap: 3,
+            }}
+          >
+            <Text style={{ fontSize: 9, color: Colors.mutedForeground }}>{filtered[selectedIdx].label}</Text>
+            <View style={{ flexDirection: 'row', alignItems: 'center', gap: 4 }}>
+              <View style={{ width: 6, height: 6, borderRadius: 3, backgroundColor: '#34D399' }} />
+              <Text style={{ fontSize: 12, fontWeight: '700', color: '#34D399' }}>
+                {Math.round(overnightData[selectedIdx].value)}
+              </Text>
+              <Text style={{ fontSize: 9, color: Colors.mutedForeground }}>overnight</Text>
+            </View>
+            <View style={{ flexDirection: 'row', alignItems: 'center', gap: 4 }}>
+              <View style={{ width: 6, height: 6, borderRadius: 3, backgroundColor: '#A78BFA' }} />
+              <Text style={{ fontSize: 12, fontWeight: '700', color: '#A78BFA' }}>
+                {Math.round(bedtimeData[selectedIdx].value)}
+              </Text>
+              <Text style={{ fontSize: 9, color: Colors.mutedForeground }}>bedtime</Text>
+            </View>
+          </View>
+        )}
+      </View>
 
       {/* Custom x-axis labels */}
       <View style={{ height: 14, marginLeft: Y_AXIS_W, position: 'relative' }}>
         {labelTexts.map((lbl, i) => {
           if (!lbl) return null;
-          const cx = 20 + i * computedSpacing;
+          const cx = INITIAL_SPACING + i * computedSpacing;
           return (
             <Text key={i} style={{ position: 'absolute', left: cx - 14, width: 28, fontSize: 9, color: Colors.mutedForeground, textAlign: 'center' }}>
               {lbl}

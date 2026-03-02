@@ -1,3 +1,4 @@
+import { useState } from 'react';
 import { View, Text, Dimensions } from 'react-native';
 import { BarChart } from 'react-native-gifted-charts';
 import { useColors } from '../../constants/colors';
@@ -14,6 +15,8 @@ interface Props {
 
 export function TIRBarChart({ daily, weekly, useWeekly }: Props) {
   const Colors = useColors();
+  const [selectedIdx, setSelectedIdx] = useState<number | null>(null);
+
   const items = useWeekly ? weekly : daily;
   if (!items || items.length === 0) return null;
 
@@ -24,6 +27,9 @@ export function TIRBarChart({ daily, weekly, useWeekly }: Props) {
   const slotW = Math.max(3, (CHART_W - INIT) / items.length);
   const barWidth = Math.max(2, Math.floor(slotW * 0.6));
   const spacing = Math.max(1, Math.floor(slotW) - barWidth);
+
+  // Full date labels (every item) for tooltip
+  const fullLabels = items.map(d => 'label' in d ? d.label : (d as WeekMetrics).weekLabel);
 
   // Y-axis: integer % labels
   const yLabels = ['0%', '25%', '50%', '75%', '100%'];
@@ -52,6 +58,13 @@ export function TIRBarChart({ daily, weekly, useWeekly }: Props) {
   // Average TIR stat
   const avgTIR = Math.round(items.reduce((s, d) => s + d.tir70_180, 0) / items.length);
 
+  // Tooltip position
+  const selectedItem = selectedIdx !== null ? items[selectedIdx] : null;
+  const barCenterX = selectedIdx !== null
+    ? Y_AXIS_W + INIT + selectedIdx * (barWidth + spacing) + barWidth / 2
+    : 0;
+  const tooltipLeft = Math.max(Y_AXIS_W, Math.min(Y_AXIS_W + CHART_W - 110, barCenterX - 55));
+
   return (
     <View>
       <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'baseline', marginBottom: 8 }}>
@@ -64,37 +77,87 @@ export function TIRBarChart({ daily, weekly, useWeekly }: Props) {
         </View>
       </View>
 
-      <BarChart
-        stackData={stackData}
-        width={CHART_W}
-        height={CHART_H}
-        maxValue={100}
-        noOfSections={4}
-        barWidth={barWidth}
-        spacing={spacing}
-        initialSpacing={INIT}
-        disableScroll
-        yAxisTextStyle={{ color: Colors.mutedForeground, fontSize: 10 }}
-        yAxisLabelWidth={Y_AXIS_W}
-        yAxisLabelTexts={yLabels}
-        rulesColor={Colors.border + '40'}
-        yAxisColor="transparent"
-        xAxisColor={Colors.border}
-        referenceLine1Position={70}
-        referenceLine1Config={{ color: Colors.glucoseInRange, dashWidth: 4, dashGap: 4, thickness: 1 }}
-      />
+      <View
+        style={{ position: 'relative' }}
+        onStartShouldSetResponder={() => true}
+        onMoveShouldSetResponder={() => true}
+        onResponderTerminationRequest={() => false}
+        onResponderGrant={(e) => {
+          const dataX = e.nativeEvent.locationX - Y_AXIS_W - INIT;
+          if (dataX < 0) { setSelectedIdx(null); return; }
+          setSelectedIdx(Math.max(0, Math.min(Math.round(dataX / (barWidth + spacing)), items.length - 1)));
+        }}
+        onResponderMove={(e) => {
+          const dataX = e.nativeEvent.locationX - Y_AXIS_W - INIT;
+          if (dataX < 0) { setSelectedIdx(null); return; }
+          setSelectedIdx(Math.max(0, Math.min(Math.round(dataX / (barWidth + spacing)), items.length - 1)));
+        }}
+        onResponderRelease={() => setSelectedIdx(null)}
+        onResponderTerminate={() => setSelectedIdx(null)}
+      >
+        <BarChart
+          stackData={stackData}
+          width={CHART_W}
+          height={CHART_H}
+          maxValue={100}
+          noOfSections={4}
+          barWidth={barWidth}
+          spacing={spacing}
+          initialSpacing={INIT}
+          disableScroll
+          yAxisTextStyle={{ color: Colors.mutedForeground, fontSize: 10 }}
+          yAxisLabelWidth={Y_AXIS_W}
+          yAxisLabelTexts={yLabels}
+          rulesColor={Colors.border + '40'}
+          yAxisColor="transparent"
+          xAxisColor={Colors.border}
+          referenceLine1Position={70}
+          referenceLine1Config={{ color: Colors.glucoseInRange, dashWidth: 4, dashGap: 4, thickness: 1 }}
+        />
 
-      {/* Custom x-axis labels */}
-      <View style={{ height: 14, marginLeft: Y_AXIS_W, position: 'relative' }}>
-        {labelTexts.map((lbl, i) => {
-          if (!lbl) return null;
-          const cx = INIT + i * (barWidth + spacing) + barWidth / 2;
-          return (
-            <Text key={i} style={{ position: 'absolute', left: cx - 14, width: 28, fontSize: 9, color: Colors.mutedForeground, textAlign: 'center' }}>
-              {lbl}
+        {/* Custom x-axis labels */}
+        <View style={{ height: 14, marginLeft: Y_AXIS_W, position: 'relative' }}>
+          {labelTexts.map((lbl, i) => {
+            if (!lbl) return null;
+            const cx = INIT + i * (barWidth + spacing) + barWidth / 2;
+            return (
+              <Text key={i} style={{ position: 'absolute', left: cx - 14, width: 28, fontSize: 9, color: Colors.mutedForeground, textAlign: 'center' }}>
+                {lbl}
+              </Text>
+            );
+          })}
+        </View>
+
+        {/* Tooltip overlay */}
+        {selectedItem !== null && selectedIdx !== null && (
+          <View
+            pointerEvents="none"
+            style={{
+              position: 'absolute',
+              top: 6,
+              left: tooltipLeft,
+              width: 110,
+              backgroundColor: Colors.card,
+              borderRadius: 8,
+              borderWidth: 1,
+              borderColor: Colors.cardBorder,
+              padding: 8,
+              alignItems: 'center',
+              gap: 2,
+            }}
+          >
+            <Text style={{ fontSize: 9, color: Colors.mutedForeground }}>{fullLabels[selectedIdx]}</Text>
+            <Text style={{ fontSize: 12, fontWeight: '700', color: Colors.glucoseInRange }}>
+              {Math.round(selectedItem.tir70_180)}% in range
             </Text>
-          );
-        })}
+            <Text style={{ fontSize: 10, color: Colors.glucoseLow }}>
+              {Math.round(selectedItem.below70)}% low
+            </Text>
+            <Text style={{ fontSize: 10, color: Colors.glucoseHigh }}>
+              {Math.round(Math.max(0, 100 - selectedItem.tir70_180 - selectedItem.below70))}% high
+            </Text>
+          </View>
+        )}
       </View>
 
       {/* Legend */}

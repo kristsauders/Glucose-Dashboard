@@ -1,3 +1,4 @@
+import { useState } from 'react';
 import { View, Text, Dimensions } from 'react-native';
 import { LineChart } from 'react-native-gifted-charts';
 import { useColors } from '../../constants/colors';
@@ -6,6 +7,7 @@ import type { WeekMetrics } from '../../hooks/useGlucose';
 
 const SCREEN_W = Dimensions.get('window').width;
 const CHART_H = 160;
+const INITIAL_SPACING = 20;
 
 interface Props {
   weekly: WeekMetrics[];
@@ -27,12 +29,14 @@ function a1cColor(a1c: number, colors: ColorScheme): string {
 
 export function WeeklyA1CChart({ weekly }: Props) {
   const Colors = useColors();
+  const [selectedIdx, setSelectedIdx] = useState<number | null>(null);
+
   if (!weekly || weekly.length < 2) return null;
 
   const Y_AXIS_W = 40;
   const CHART_W = SCREEN_W - 66 - Y_AXIS_W;
   const step = Math.ceil(weekly.length / 7);
-  const computedSpacing = weekly.length > 1 ? Math.max(2, Math.floor((CHART_W - 20) / (weekly.length - 1))) : 20;
+  const computedSpacing = weekly.length > 1 ? Math.max(2, Math.floor((CHART_W - INITIAL_SPACING) / (weekly.length - 1))) : 20;
 
   const a1cValues = weekly.map(w => w.estA1c);
   const avgA1c = Math.round((a1cValues.reduce((s, v) => s + v, 0) / a1cValues.length) * 10) / 10;
@@ -56,6 +60,14 @@ export function WeeklyA1CChart({ weekly }: Props) {
 
   const lineColor = a1cColor(avgA1c, Colors);
 
+  const handleTouch = (e: any) => {
+    const dataX = e.nativeEvent.locationX - Y_AXIS_W - INITIAL_SPACING;
+    if (dataX < 0) { setSelectedIdx(null); return; }
+    setSelectedIdx(Math.max(0, Math.min(Math.round(dataX / computedSpacing), weekly.length - 1)));
+  };
+  const stripX = selectedIdx !== null ? Y_AXIS_W + INITIAL_SPACING + selectedIdx * computedSpacing : 0;
+  const tooltipLeft = Math.max(Y_AXIS_W, Math.min(Y_AXIS_W + CHART_W - 80, stripX - 40));
+
   return (
     <View>
       <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'baseline', marginBottom: 4 }}>
@@ -72,58 +84,111 @@ export function WeeklyA1CChart({ weekly }: Props) {
         {a1cLabel(avgA1c)} · avg {avgA1c.toFixed(1)}%
       </Text>
 
-      <LineChart
-        data={lineData}
-        width={CHART_W}
-        height={CHART_H}
-        spacing={computedSpacing}
-        disableScroll
-        maxValue={chartMax}
-        mostNegativeValue={chartMin}
-        noOfSections={noOfSections}
-        yAxisLabelTexts={yLabels}
-        yAxisLabelWidth={Y_AXIS_W}
-        color={lineColor}
-        thickness={2.5}
-        curved
-        hideDataPoints={weekly.length > 16}
-        dataPointsColor={lineColor}
-        dataPointsRadius={4}
-        yAxisTextStyle={{ color: Colors.mutedForeground, fontSize: 9 }}
-        rulesColor={Colors.border + '40'}
-        yAxisColor="transparent"
-        xAxisColor={Colors.border}
-        referenceLine1={{
-          value: 5.7,
-          lineConfig: {
-            color: Colors.glucoseInRange,
-            thickness: 1,
-            dashWidth: 4,
-            dashGap: 4,
-            labelText: '5.7%',
-            labelTextStyle: { color: Colors.glucoseInRange, fontSize: 8 },
-          },
-        }}
-        referenceLine2={{
-          value: 6.5,
-          lineConfig: {
-            color: Colors.glucoseHigh,
-            thickness: 1,
-            dashWidth: 4,
-            dashGap: 4,
-            labelText: '6.5%',
-            labelTextStyle: { color: Colors.glucoseHigh, fontSize: 8 },
-          },
-        }}
-        showReferenceLine1
-        showReferenceLine2
-      />
+      <View
+        style={{ position: 'relative' }}
+        onStartShouldSetResponder={() => true}
+        onMoveShouldSetResponder={() => true}
+        onResponderTerminationRequest={() => false}
+        onResponderGrant={handleTouch}
+        onResponderMove={handleTouch}
+        onResponderRelease={() => setSelectedIdx(null)}
+        onResponderTerminate={() => setSelectedIdx(null)}
+      >
+        <LineChart
+          data={lineData}
+          width={CHART_W}
+          height={CHART_H}
+          spacing={computedSpacing}
+          disableScroll
+          maxValue={chartMax}
+          mostNegativeValue={chartMin}
+          noOfSections={noOfSections}
+          yAxisLabelTexts={yLabels}
+          yAxisLabelWidth={Y_AXIS_W}
+          color={lineColor}
+          thickness={2.5}
+          curved
+          hideDataPoints={weekly.length > 16}
+          dataPointsColor={lineColor}
+          dataPointsRadius={4}
+          yAxisTextStyle={{ color: Colors.mutedForeground, fontSize: 9 }}
+          rulesColor={Colors.border + '40'}
+          yAxisColor="transparent"
+          xAxisColor={Colors.border}
+          referenceLine1={{
+            value: 5.7,
+            lineConfig: {
+              color: Colors.glucoseInRange,
+              thickness: 1,
+              dashWidth: 4,
+              dashGap: 4,
+              labelText: '5.7%',
+              labelTextStyle: { color: Colors.glucoseInRange, fontSize: 8 },
+            },
+          }}
+          referenceLine2={{
+            value: 6.5,
+            lineConfig: {
+              color: Colors.glucoseHigh,
+              thickness: 1,
+              dashWidth: 4,
+              dashGap: 4,
+              labelText: '6.5%',
+              labelTextStyle: { color: Colors.glucoseHigh, fontSize: 8 },
+            },
+          }}
+          showReferenceLine1
+          showReferenceLine2
+        />
+
+        {/* Pointer strip */}
+        {selectedIdx !== null && (
+          <View
+            pointerEvents="none"
+            style={{
+              position: 'absolute',
+              top: 0,
+              left: stripX - 0.5,
+              width: 1,
+              height: CHART_H,
+              backgroundColor: Colors.mutedForeground + '50',
+            }}
+          />
+        )}
+
+        {/* Tooltip — fixed at top so it's always above the finger */}
+        {selectedIdx !== null && (
+          <View
+            pointerEvents="none"
+            style={{
+              position: 'absolute',
+              top: 8,
+              left: tooltipLeft,
+              width: 80,
+              backgroundColor: Colors.card,
+              borderRadius: 8,
+              borderWidth: 1,
+              borderColor: Colors.cardBorder,
+              padding: 8,
+              alignItems: 'center',
+              gap: 2,
+            }}
+          >
+            <Text style={{ fontSize: 14, fontWeight: '700', color: lineColor }}>
+              {weekly[selectedIdx].estA1c.toFixed(1)}%
+            </Text>
+            <Text style={{ fontSize: 9, color: Colors.mutedForeground }}>
+              {weekly[selectedIdx].weekLabel}
+            </Text>
+          </View>
+        )}
+      </View>
 
       {/* Custom x-axis labels */}
       <View style={{ height: 14, marginLeft: Y_AXIS_W, position: 'relative' }}>
         {labelTexts.map((lbl, i) => {
           if (!lbl) return null;
-          const cx = 20 + i * computedSpacing;
+          const cx = INITIAL_SPACING + i * computedSpacing;
           return (
             <Text key={i} style={{ position: 'absolute', left: cx - 14, width: 28, fontSize: 9, color: Colors.mutedForeground, textAlign: 'center' }}>
               {lbl}

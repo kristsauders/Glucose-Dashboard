@@ -10,11 +10,9 @@ import { useGlucoseWidgets } from '../../hooks/useGlucoseWidgets';
 import type { ChartEvent } from '../../components/glucose/GlucoseChart';
 import type { GlucoseReading, GlucoseSummary } from '../../types/glucose';
 import { useColors } from '../../constants/colors';
-import { useAuth } from '../../hooks/useAuth';
 
 export default function DashboardScreen() {
   const Colors = useColors();
-  const { user } = useAuth();
   const latest = useLatestGlucose();
   const readings = useGlucose24h();
   const { syncReading } = useGlucoseWidgets();
@@ -98,11 +96,6 @@ export default function DashboardScreen() {
           <Text style={{ fontSize: 24, fontWeight: '700', color: Colors.foreground }}>
             Sage
           </Text>
-          {user?.email ? (
-            <Text style={{ fontSize: 13, color: Colors.mutedForeground, marginTop: 2 }}>
-              {user.email}
-            </Text>
-          ) : null}
         </View>
 
         {/* Current glucose */}

@@ -1,3 +1,4 @@
+import { useState } from 'react';
 import { View, Text, Dimensions } from 'react-native';
 import { LineChart } from 'react-native-gifted-charts';
 import { useColors } from '../../constants/colors';
@@ -5,6 +6,7 @@ import type { DayMetrics, WeekMetrics } from '../../hooks/useGlucose';
 
 const SCREEN_W = Dimensions.get('window').width;
 const CHART_H = 180;
+const INITIAL_SPACING = 20;
 
 interface Props {
   daily?: DayMetrics[];
@@ -15,13 +17,15 @@ interface Props {
 
 export function DailyGlucoseBarChart({ daily, weekly, useWeekly }: Props) {
   const Colors = useColors();
+  const [selectedIdx, setSelectedIdx] = useState<number | null>(null);
+
   const items = useWeekly ? weekly : daily;
   if (!items || items.length === 0) return null;
 
   const Y_AXIS_W = 36;
   const CHART_W = SCREEN_W - 66 - Y_AXIS_W;
   const step = Math.ceil(items.length / 7);
-  const computedSpacing = items.length > 1 ? Math.max(2, Math.floor((CHART_W - 20) / (items.length - 1))) : 20;
+  const computedSpacing = items.length > 1 ? Math.max(2, Math.floor((CHART_W - INITIAL_SPACING) / (items.length - 1))) : 20;
 
   // Labels stored separately; data items get '' so gifted-charts won't clip them
   const labelTexts = items.map((d, i) =>
@@ -30,6 +34,7 @@ export function DailyGlucoseBarChart({ daily, weekly, useWeekly }: Props) {
       : ''
   );
 
+  const getDateLabel = (d: typeof items[0]) => 'label' in d ? d.label : (d as WeekMetrics).weekLabel;
   const avgData = items.map(d => ({ value: d.avg, label: '' }));
   const maxData = items.map(d => ({ value: d.max, label: '' }));
   const minData = items.map(d => ({ value: d.min, label: '' }));
@@ -53,6 +58,14 @@ export function DailyGlucoseBarChart({ daily, weekly, useWeekly }: Props) {
   const overallMin = Math.min(...items.map(d => d.min));
   const overallMax = Math.max(...items.map(d => d.max));
 
+  const handleTouch = (e: any) => {
+    const dataX = e.nativeEvent.locationX - Y_AXIS_W - INITIAL_SPACING;
+    if (dataX < 0) { setSelectedIdx(null); return; }
+    setSelectedIdx(Math.max(0, Math.min(Math.round(dataX / computedSpacing), items.length - 1)));
+  };
+  const stripX = selectedIdx !== null ? Y_AXIS_W + INITIAL_SPACING + selectedIdx * computedSpacing : 0;
+  const tooltipLeft = Math.max(Y_AXIS_W, Math.min(Y_AXIS_W + CHART_W - 96, stripX - 48));
+
   return (
     <View>
       <Text style={{ fontSize: 13, fontWeight: '600', color: Colors.foreground, marginBottom: 4 }}>
@@ -75,71 +88,130 @@ export function DailyGlucoseBarChart({ daily, weekly, useWeekly }: Props) {
         </View>
       </View>
 
-      <LineChart
-        dataSet={[
-          {
-            data: avgData,
-            color: Colors.primary,
-            thickness: 2,
-            curved: true,
-            hideDataPoints: true,
-          },
-          {
-            data: maxData,
-            color: Colors.warning,
-            thickness: 1.5,
-            curved: true,
-            hideDataPoints: true,
-          },
-          {
-            data: minData,
-            color: Colors.glucoseChartLine,
-            thickness: 1.5,
-            curved: true,
-            hideDataPoints: true,
-          },
-        ]}
-        height={CHART_H}
-        width={CHART_W}
-        spacing={computedSpacing}
-        disableScroll
-        maxValue={adjustedMax}
-        mostNegativeValue={chartMin}
-        noOfSections={noOfSections}
-        yAxisLabelTexts={yLabels}
-        yAxisLabelWidth={Y_AXIS_W}
-        yAxisTextStyle={{ color: Colors.mutedForeground, fontSize: 10 }}
-        rulesColor={Colors.border + '40'}
-        yAxisColor="transparent"
-        xAxisColor={Colors.border}
-        backgroundColor="transparent"
-        referenceLine1={{
-          value: 180,
-          lineConfig: {
-            color: Colors.glucoseHigh,
-            thickness: 1,
-            dashWidth: 3,
-            dashGap: 3,
-          },
-        }}
-        referenceLine2={{
-          value: 70,
-          lineConfig: {
-            color: Colors.glucoseLow,
-            thickness: 1,
-            dashWidth: 3,
-            dashGap: 3,
-          },
-        }}
-        showReferenceLine1
-        showReferenceLine2
-      />
+      <View
+        style={{ position: 'relative' }}
+        onStartShouldSetResponder={() => true}
+        onMoveShouldSetResponder={() => true}
+        onResponderTerminationRequest={() => false}
+        onResponderGrant={handleTouch}
+        onResponderMove={handleTouch}
+        onResponderRelease={() => setSelectedIdx(null)}
+        onResponderTerminate={() => setSelectedIdx(null)}
+      >
+        <LineChart
+          dataSet={[
+            {
+              data: avgData,
+              color: Colors.primary,
+              thickness: 2,
+              curved: true,
+              hideDataPoints: true,
+            },
+            {
+              data: maxData,
+              color: Colors.warning,
+              thickness: 1.5,
+              curved: true,
+              hideDataPoints: true,
+            },
+            {
+              data: minData,
+              color: Colors.glucoseChartLine,
+              thickness: 1.5,
+              curved: true,
+              hideDataPoints: true,
+            },
+          ]}
+          height={CHART_H}
+          width={CHART_W}
+          spacing={computedSpacing}
+          disableScroll
+          maxValue={adjustedMax}
+          mostNegativeValue={chartMin}
+          noOfSections={noOfSections}
+          yAxisLabelTexts={yLabels}
+          yAxisLabelWidth={Y_AXIS_W}
+          yAxisTextStyle={{ color: Colors.mutedForeground, fontSize: 10 }}
+          rulesColor={Colors.border + '40'}
+          yAxisColor="transparent"
+          xAxisColor={Colors.border}
+          backgroundColor="transparent"
+          referenceLine1={{
+            value: 180,
+            lineConfig: {
+              color: Colors.glucoseHigh,
+              thickness: 1,
+              dashWidth: 3,
+              dashGap: 3,
+            },
+          }}
+          referenceLine2={{
+            value: 70,
+            lineConfig: {
+              color: Colors.glucoseLow,
+              thickness: 1,
+              dashWidth: 3,
+              dashGap: 3,
+            },
+          }}
+          showReferenceLine1
+          showReferenceLine2
+        />
+
+        {/* Pointer strip */}
+        {selectedIdx !== null && (
+          <View
+            pointerEvents="none"
+            style={{
+              position: 'absolute',
+              top: 0,
+              left: stripX - 0.5,
+              width: 1,
+              height: CHART_H,
+              backgroundColor: Colors.mutedForeground + '50',
+            }}
+          />
+        )}
+
+        {/* Tooltip — fixed at top so it's always above the finger */}
+        {selectedIdx !== null && (
+          <View
+            pointerEvents="none"
+            style={{
+              position: 'absolute',
+              top: 8,
+              left: tooltipLeft,
+              width: 96,
+              backgroundColor: Colors.card,
+              borderRadius: 8,
+              borderWidth: 1,
+              borderColor: Colors.cardBorder,
+              padding: 8,
+              alignItems: 'center',
+              gap: 2,
+            }}
+          >
+            <Text style={{ fontSize: 9, color: Colors.mutedForeground, marginBottom: 1 }}>
+              {getDateLabel(items[selectedIdx])}
+            </Text>
+            <Text style={{ fontSize: 12, fontWeight: '700', color: Colors.primary }}>
+              avg {Math.round(items[selectedIdx].avg)}
+            </Text>
+            <Text style={{ fontSize: 11, color: Colors.warning }}>
+              max {Math.round(items[selectedIdx].max)}
+            </Text>
+            <Text style={{ fontSize: 11, color: Colors.glucoseChartLine }}>
+              min {Math.round(items[selectedIdx].min)}
+            </Text>
+          </View>
+        )}
+      </View>
 
       {/* Custom x-axis labels — positioned outside the chart to avoid slot-width clipping */}
       <View style={{ height: 14, marginLeft: Y_AXIS_W, position: 'relative' }}>
         {labelTexts.map((lbl, i) => {
           if (!lbl) return null;
-          const cx = 20 + i * computedSpacing;
+          const cx = INITIAL_SPACING + i * computedSpacing;
           return (
             <Text key={i} style={{ position: 'absolute', left: cx - 14, width: 28, fontSize: 9, color: Colors.mutedForeground, textAlign: 'center' }}>
               {lbl}

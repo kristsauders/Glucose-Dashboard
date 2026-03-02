@@ -1,3 +1,4 @@
+import { useState } from 'react';
 import { View, Text, Dimensions } from 'react-native';
 import { LineChart } from 'react-native-gifted-charts';
 import { useColors } from '../../constants/colors';
@@ -6,6 +7,7 @@ import type { MealLog, InsulinLog } from '../../types/logs';
 
 const SCREEN_W = Dimensions.get('window').width;
 const CHART_H = 180;
+const INITIAL_SPACING = 20;
 
 const BASAL_TYPES = ['lantus', 'tresiba', 'levemir', 'toujeo', 'glargine', 'detemir', 'basaglar', 'degludec'];
 
@@ -61,6 +63,7 @@ function computeDailyRatios(meals: MealLog[], doses: InsulinLog[]): DayRatio[] {
 
 export function CarbRatioChart({ meals, insulin }: Props) {
   const Colors = useColors();
+  const [selectedIdx, setSelectedIdx] = useState<number | null>(null);
 
   if (!meals || meals.length === 0) return null;
   if (!insulin || insulin.length === 0) return null;
@@ -86,12 +89,20 @@ export function CarbRatioChart({ meals, insulin }: Props) {
   const isInTarget = avgRatio >= TARGET_MIN && avgRatio <= TARGET_MAX;
   const lineColor = isInTarget ? Colors.glucoseInRange : Colors.warning;
 
-  const computedSpacing = ratios.length > 1 ? Math.max(2, Math.floor((CHART_W - 20) / (ratios.length - 1))) : 20;
+  const computedSpacing = ratios.length > 1 ? Math.max(2, Math.floor((CHART_W - INITIAL_SPACING) / (ratios.length - 1))) : 20;
 
   const lineData = ratios.map(r => ({
     value: parseFloat(r.ratio.toFixed(1)),
     label: '',
   }));
+
+  const handleTouch = (e: any) => {
+    const dataX = e.nativeEvent.locationX - Y_AXIS_W - INITIAL_SPACING;
+    if (dataX < 0) { setSelectedIdx(null); return; }
+    setSelectedIdx(Math.max(0, Math.min(Math.round(dataX / computedSpacing), ratios.length - 1)));
+  };
+  const stripX = selectedIdx !== null ? Y_AXIS_W + INITIAL_SPACING + selectedIdx * computedSpacing : 0;
+  const tooltipLeft = Math.max(Y_AXIS_W, Math.min(Y_AXIS_W + CHART_W - 90, stripX - 45));
 
   return (
     <View style={{
@@ -124,58 +135,114 @@ export function CarbRatioChart({ meals, insulin }: Props) {
         }
       </Text>
 
-      <LineChart
-        data={lineData}
-        width={CHART_W}
-        height={CHART_H}
-        spacing={computedSpacing}
-        disableScroll
-        maxValue={yMax}
-        mostNegativeValue={0}
-        noOfSections={noOfSections}
-        yAxisLabelTexts={yLabels}
-        yAxisLabelWidth={Y_AXIS_W}
-        color={lineColor}
-        thickness={2}
-        curved
-        hideDataPoints={ratios.length > 20}
-        dataPointsColor={lineColor}
-        dataPointsRadius={4}
-        yAxisTextStyle={{ color: Colors.mutedForeground, fontSize: 9 }}
-        rulesColor={Colors.border + '40'}
-        yAxisColor="transparent"
-        xAxisColor={Colors.border}
-        referenceLine1={{
-          value: TARGET_MIN,
-          lineConfig: {
-            color: Colors.glucoseInRange,
-            thickness: 1,
-            dashWidth: 4,
-            dashGap: 4,
-            labelText: '8',
-            labelTextStyle: { color: Colors.glucoseInRange, fontSize: 8 },
-          },
-        }}
-        referenceLine2={{
-          value: TARGET_MAX,
-          lineConfig: {
-            color: Colors.glucoseInRange,
-            thickness: 1,
-            dashWidth: 4,
-            dashGap: 4,
-            labelText: '15',
-            labelTextStyle: { color: Colors.glucoseInRange, fontSize: 8 },
-          },
-        }}
-        showReferenceLine1
-        showReferenceLine2
-      />
+      <View
+        style={{ position: 'relative' }}
+        onStartShouldSetResponder={() => true}
+        onMoveShouldSetResponder={() => true}
+        onResponderTerminationRequest={() => false}
+        onResponderGrant={handleTouch}
+        onResponderMove={handleTouch}
+        onResponderRelease={() => setSelectedIdx(null)}
+        onResponderTerminate={() => setSelectedIdx(null)}
+      >
+        <LineChart
+          data={lineData}
+          width={CHART_W}
+          height={CHART_H}
+          spacing={computedSpacing}
+          disableScroll
+          maxValue={yMax}
+          mostNegativeValue={0}
+          noOfSections={noOfSections}
+          yAxisLabelTexts={yLabels}
+          yAxisLabelWidth={Y_AXIS_W}
+          color={lineColor}
+          thickness={2}
+          curved
+          hideDataPoints={ratios.length > 20}
+          dataPointsColor={lineColor}
+          dataPointsRadius={4}
+          yAxisTextStyle={{ color: Colors.mutedForeground, fontSize: 9 }}
+          rulesColor={Colors.border + '40'}
+          yAxisColor="transparent"
+          xAxisColor={Colors.border}
+          referenceLine1={{
+            value: TARGET_MIN,
+            lineConfig: {
+              color: Colors.glucoseInRange,
+              thickness: 1,
+              dashWidth: 4,
+              dashGap: 4,
+              labelText: '8',
+              labelTextStyle: { color: Colors.glucoseInRange, fontSize: 8 },
+            },
+          }}
+          referenceLine2={{
+            value: TARGET_MAX,
+            lineConfig: {
+              color: Colors.glucoseInRange,
+              thickness: 1,
+              dashWidth: 4,
+              dashGap: 4,
+              labelText: '15',
+              labelTextStyle: { color: Colors.glucoseInRange, fontSize: 8 },
+            },
+          }}
+          showReferenceLine1
+          showReferenceLine2
+        />
+
+        {/* Pointer strip */}
+        {selectedIdx !== null && (
+          <View
+            pointerEvents="none"
+            style={{
+              position: 'absolute',
+              top: 0,
+              left: stripX - 0.5,
+              width: 1,
+              height: CHART_H,
+              backgroundColor: Colors.mutedForeground + '50',
+            }}
+          />
+        )}
+
+        {/* Tooltip — fixed at top so it's always above the finger */}
+        {selectedIdx !== null && (
+          <View
+            pointerEvents="none"
+            style={{
+              position: 'absolute',
+              top: 8,
+              left: tooltipLeft,
+              width: 90,
+              backgroundColor: Colors.card,
+              borderRadius: 8,
+              borderWidth: 1,
+              borderColor: Colors.cardBorder,
+              padding: 8,
+              alignItems: 'center',
+              gap: 2,
+            }}
+          >
+            <Text style={{ fontSize: 14, fontWeight: '700', color: lineColor }}>
+              {ratios[selectedIdx].ratio.toFixed(1)}:1
+            </Text>
+            <Text style={{ fontSize: 9, color: Colors.mutedForeground }}>
+              {format(new Date(ratios[selectedIdx].date + 'T12:00:00'), 'M/d')}
+            </Text>
+            <Text style={{ fontSize: 9, color: Colors.mutedForeground }}>
+              {Math.round(ratios[selectedIdx].carbs)}g · {ratios[selectedIdx].insulin.toFixed(1)}u
+            </Text>
+          </View>
+        )}
+      </View>
 
       {/* Custom x-axis labels — positioned manually to avoid gifted-charts slot-width clipping */}
       <View style={{ height: 14, marginLeft: Y_AXIS_W, position: 'relative' }}>
         {ratios.map((r, i) => {
           if (i % step !== 0 || i >= ratios.length - 1) return null;
-          const cx = 20 + i * computedSpacing;
+          const cx = INITIAL_SPACING + i * computedSpacing;
           return (
             <Text
               key={i}

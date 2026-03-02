@@ -1,3 +1,4 @@
+import { useState } from 'react';
 import { View, Text, Dimensions } from 'react-native';
 import { BarChart } from 'react-native-gifted-charts';
 import { useColors } from '../../constants/colors';
@@ -14,6 +15,8 @@ interface Props {
 
 export function SpikeCountChart({ daily, weekly, useWeekly }: Props) {
   const Colors = useColors();
+  const [selectedIdx, setSelectedIdx] = useState<number | null>(null);
+
   const items = useWeekly ? weekly : daily;
   if (!items || items.length === 0) return null;
 
@@ -42,6 +45,9 @@ export function SpikeCountChart({ daily, weekly, useWeekly }: Props) {
   const sectionSize = yMax / noOfSections;
   const yLabels = [0, 1, 2, 3, 4].map(i => Math.round(sectionSize * i).toString());
 
+  // Full date labels (every item) for tooltip
+  const fullLabels = items.map(d => 'label' in d ? d.label : (d as WeekMetrics).weekLabel);
+
   // Labels stored separately; barData items get '' to avoid slot-width clipping
   const labelTexts = items.map((d, i) =>
     i % step === 0 && i < items.length - 1
@@ -49,7 +55,7 @@ export function SpikeCountChart({ daily, weekly, useWeekly }: Props) {
       : ''
   );
 
-  const barData = items.map((d, i) => {
+  const barData = items.map((d) => {
     const val = isWeekly
       ? (d as WeekMetrics).above180
       : (d as DayMetrics).spikesAbove180;
@@ -59,6 +65,13 @@ export function SpikeCountChart({ daily, weekly, useWeekly }: Props) {
       frontColor: val === 0 ? Colors.glucoseInRange : Colors.glucoseHigh,
     };
   });
+
+  // Tooltip position
+  const selectedVal = selectedIdx !== null ? spikeCounts[selectedIdx] : null;
+  const barCenterX = selectedIdx !== null
+    ? Y_AXIS_W + INIT + selectedIdx * (barWidth + spacing) + barWidth / 2
+    : 0;
+  const tooltipLeft = Math.max(Y_AXIS_W, Math.min(Y_AXIS_W + CHART_W - 90, barCenterX - 45));
 
   return (
     <View>
@@ -82,35 +95,82 @@ export function SpikeCountChart({ daily, weekly, useWeekly }: Props) {
         </View>
       </View>
 
-      <BarChart
-        data={barData}
-        width={CHART_W}
-        height={CHART_H}
-        maxValue={yMax}
-        noOfSections={noOfSections}
-        yAxisLabelTexts={yLabels}
-        yAxisLabelWidth={Y_AXIS_W}
-        barWidth={barWidth}
-        spacing={spacing}
-        initialSpacing={INIT}
-        disableScroll
-        yAxisTextStyle={{ color: Colors.mutedForeground, fontSize: 9 }}
-        rulesColor={Colors.border + '40'}
-        yAxisColor="transparent"
-        xAxisColor={Colors.border}
-      />
+      <View
+        style={{ position: 'relative' }}
+        onStartShouldSetResponder={() => true}
+        onMoveShouldSetResponder={() => true}
+        onResponderTerminationRequest={() => false}
+        onResponderGrant={(e) => {
+          const dataX = e.nativeEvent.locationX - Y_AXIS_W - INIT;
+          if (dataX < 0) { setSelectedIdx(null); return; }
+          setSelectedIdx(Math.max(0, Math.min(Math.round(dataX / (barWidth + spacing)), items.length - 1)));
+        }}
+        onResponderMove={(e) => {
+          const dataX = e.nativeEvent.locationX - Y_AXIS_W - INIT;
+          if (dataX < 0) { setSelectedIdx(null); return; }
+          setSelectedIdx(Math.max(0, Math.min(Math.round(dataX / (barWidth + spacing)), items.length - 1)));
+        }}
+        onResponderRelease={() => setSelectedIdx(null)}
+        onResponderTerminate={() => setSelectedIdx(null)}
+      >
+        <BarChart
+          data={barData}
+          width={CHART_W}
+          height={CHART_H}
+          maxValue={yMax}
+          noOfSections={noOfSections}
+          yAxisLabelTexts={yLabels}
+          yAxisLabelWidth={Y_AXIS_W}
+          barWidth={barWidth}
+          spacing={spacing}
+          initialSpacing={INIT}
+          disableScroll
+          yAxisTextStyle={{ color: Colors.mutedForeground, fontSize: 9 }}
+          rulesColor={Colors.border + '40'}
+          yAxisColor="transparent"
+          xAxisColor={Colors.border}
+        />
 
-      {/* Custom x-axis labels */}
-      <View style={{ height: 14, marginLeft: Y_AXIS_W, position: 'relative' }}>
-        {labelTexts.map((lbl, i) => {
-          if (!lbl) return null;
-          const cx = INIT + i * (barWidth + spacing) + barWidth / 2;
-          return (
-            <Text key={i} style={{ position: 'absolute', left: cx - 14, width: 28, fontSize: 9, color: Colors.mutedForeground, textAlign: 'center' }}>
-              {lbl}
+        {/* Custom x-axis labels */}
+        <View style={{ height: 14, marginLeft: Y_AXIS_W, position: 'relative' }}>
+          {labelTexts.map((lbl, i) => {
+            if (!lbl) return null;
+            const cx = INIT + i * (barWidth + spacing) + barWidth / 2;
+            return (
+              <Text key={i} style={{ position: 'absolute', left: cx - 14, width: 28, fontSize: 9, color: Colors.mutedForeground, textAlign: 'center' }}>
+                {lbl}
+              </Text>
+            );
+          })}
+        </View>
+
+        {/* Tooltip overlay */}
+        {selectedVal !== null && selectedIdx !== null && (
+          <View
+            pointerEvents="none"
+            style={{
+              position: 'absolute',
+              top: 6,
+              left: tooltipLeft,
+              width: 90,
+              backgroundColor: Colors.card,
+              borderRadius: 8,
+              borderWidth: 1,
+              borderColor: Colors.cardBorder,
+              padding: 8,
+              alignItems: 'center',
+              gap: 2,
+            }}
+          >
+            <Text style={{ fontSize: 9, color: Colors.mutedForeground }}>{fullLabels[selectedIdx]}</Text>
+            <Text style={{ fontSize: 14, fontWeight: '700', color: selectedVal === 0 ? Colors.glucoseInRange : Colors.glucoseHigh }}>
+              {selectedVal}
             </Text>
-          );
-        })}
+            <Text style={{ fontSize: 9, color: Colors.mutedForeground }}>
+              {isWeekly ? '% above 180' : 'readings >180'}
+            </Text>
+          </View>
+        )}
       </View>
     </View>
   );

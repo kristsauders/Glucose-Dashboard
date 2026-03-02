@@ -1,3 +1,4 @@
+import { useState } from 'react';
 import { View, Text, Dimensions } from 'react-native';
 import { BarChart } from 'react-native-gifted-charts';
 import { useColors } from '../../constants/colors';
@@ -20,6 +21,8 @@ interface Props {
 
 export function ExercisePatternChart({ exercises }: Props) {
   const Colors = useColors();
+  const [selectedIdx, setSelectedIdx] = useState<number | null>(null);
+
   if (!exercises || exercises.length === 0) return null;
 
   const byDay = new Map<string, { light: number; moderate: number; intense: number }>();
@@ -51,16 +54,20 @@ export function ExercisePatternChart({ exercises }: Props) {
   const sectionSize = yMax / noOfSections;
   const yLabels = [0, 1, 2, 3, 4].map(i => `${Math.round(sectionSize * i)}m`);
 
-  const stackData = entries.map(([dateIso, v], i) => ({
+  const stackData = entries.map(([, v]) => ({
     stacks: [
       { value: v.light, color: '#93C5FD' },    // light blue
       { value: v.moderate, color: '#34D399' },  // green
       { value: v.intense, color: '#F87171' },   // red
     ],
-    label: i % step === 0 && i < entries.length - 1
-      ? format(new Date(dateIso + 'T12:00:00'), 'M/d')
-      : '',
+    label: '',
   }));
+
+  // Tooltip position
+  const barCenterX = selectedIdx !== null
+    ? Y_AXIS_W + INIT + selectedIdx * (barWidth + spacing) + barWidth / 2
+    : 0;
+  const tooltipLeft = Math.max(Y_AXIS_W, Math.min(Y_AXIS_W + CHART_W - 110, barCenterX - 55));
 
   return (
     <View style={{
@@ -96,25 +103,116 @@ export function ExercisePatternChart({ exercises }: Props) {
         ))}
       </View>
 
-      <BarChart
-        stackData={stackData}
-        width={CHART_W}
-        height={CHART_H}
-        maxValue={yMax}
-        noOfSections={noOfSections}
-        barWidth={barWidth}
-        spacing={spacing}
-        initialSpacing={INIT}
-        disableScroll
-        xAxisLabelTextStyle={{ color: Colors.mutedForeground, fontSize: 9 }}
-        xAxisLabelContainerStyle={{ width: 36 }}
-        yAxisTextStyle={{ color: Colors.mutedForeground, fontSize: 9 }}
-        yAxisLabelWidth={Y_AXIS_W}
-        yAxisLabelTexts={yLabels}
-        rulesColor={Colors.border + '40'}
-        yAxisColor="transparent"
-        xAxisColor={Colors.border}
-      />
+      <View
+        style={{ position: 'relative' }}
+        onStartShouldSetResponder={() => true}
+        onMoveShouldSetResponder={() => true}
+        onResponderTerminationRequest={() => false}
+        onResponderGrant={(e) => {
+          const dataX = e.nativeEvent.locationX - Y_AXIS_W - INIT;
+          if (dataX < 0) { setSelectedIdx(null); return; }
+          setSelectedIdx(Math.max(0, Math.min(Math.round(dataX / (barWidth + spacing)), entries.length - 1)));
+        }}
+        onResponderMove={(e) => {
+          const dataX = e.nativeEvent.locationX - Y_AXIS_W - INIT;
+          if (dataX < 0) { setSelectedIdx(null); return; }
+          setSelectedIdx(Math.max(0, Math.min(Math.round(dataX / (barWidth + spacing)), entries.length - 1)));
+        }}
+        onResponderRelease={() => setSelectedIdx(null)}
+        onResponderTerminate={() => setSelectedIdx(null)}
+      >
+        <BarChart
+          stackData={stackData}
+          width={CHART_W}
+          height={CHART_H}
+          maxValue={yMax}
+          noOfSections={noOfSections}
+          barWidth={barWidth}
+          spacing={spacing}
+          initialSpacing={INIT}
+          disableScroll
+          yAxisTextStyle={{ color: Colors.mutedForeground, fontSize: 9 }}
+          yAxisLabelWidth={Y_AXIS_W}
+          yAxisLabelTexts={yLabels}
+          rulesColor={Colors.border + '40'}
+          yAxisColor="transparent"
+          xAxisColor={Colors.border}
+        />
+
+        {/* Custom x-axis labels */}
+        <View style={{ height: 14, marginLeft: Y_AXIS_W, position: 'relative' }}>
+          {entries.map(([dateIso], i) => {
+            if (i % step !== 0 || i >= entries.length - 1) return null;
+            const cx = INIT + i * (barWidth + spacing) + barWidth / 2;
+            return (
+              <Text
+                key={i}
+                style={{
+                  position: 'absolute',
+                  left: cx - 14,
+                  width: 28,
+                  fontSize: 9,
+                  color: Colors.mutedForeground,
+                  textAlign: 'center',
+                }}
+              >
+                {format(new Date(dateIso + 'T12:00:00'), 'M/d')}
+              </Text>
+            );
+          })}
+        </View>
+
+        {/* Tooltip overlay */}
+        {selectedIdx !== null && (
+          <View
+            pointerEvents="none"
+            style={{
+              position: 'absolute',
+              top: 6,
+              left: tooltipLeft,
+              width: 110,
+              backgroundColor: Colors.card,
+              borderRadius: 8,
+              borderWidth: 1,
+              borderColor: Colors.cardBorder,
+              padding: 8,
+              alignItems: 'center',
+              gap: 2,
+            }}
+          >
+            <Text style={{ fontSize: 9, color: Colors.mutedForeground }}>
+              {format(new Date(entries[selectedIdx][0] + 'T12:00:00'), 'MMM d')}
+            </Text>
+            {entries[selectedIdx][1].light > 0 && (
+              <View style={{ flexDirection: 'row', alignItems: 'center', gap: 3 }}>
+                <View style={{ width: 6, height: 6, borderRadius: 3, backgroundColor: '#93C5FD' }} />
+                <Text style={{ fontSize: 11, fontWeight: '600', color: '#93C5FD' }}>
+                  {Math.round(entries[selectedIdx][1].light)}m
+                </Text>
+                <Text style={{ fontSize: 9, color: Colors.mutedForeground }}>light</Text>
+              </View>
+            )}
+            {entries[selectedIdx][1].moderate > 0 && (
+              <View style={{ flexDirection: 'row', alignItems: 'center', gap: 3 }}>
+                <View style={{ width: 6, height: 6, borderRadius: 3, backgroundColor: '#34D399' }} />
+                <Text style={{ fontSize: 11, fontWeight: '600', color: '#34D399' }}>
+                  {Math.round(entries[selectedIdx][1].moderate)}m
+                </Text>
+                <Text style={{ fontSize: 9, color: Colors.mutedForeground }}>mod</Text>
+              </View>
+            )}
+            {entries[selectedIdx][1].intense > 0 && (
+              <View style={{ flexDirection: 'row', alignItems: 'center', gap: 3 }}>
+                <View style={{ width: 6, height: 6, borderRadius: 3, backgroundColor: '#F87171' }} />
+                <Text style={{ fontSize: 11, fontWeight: '600', color: '#F87171' }}>
+                  {Math.round(entries[selectedIdx][1].intense)}m
+                </Text>
+                <Text style={{ fontSize: 9, color: Colors.mutedForeground }}>intense</Text>
+              </View>
+            )}
+          </View>
+        )}
+      </View>
     </View>
   );
 }
