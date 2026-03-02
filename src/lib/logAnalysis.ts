@@ -4,8 +4,8 @@ import type { InsulinLog, MealLog, ExerciseLog } from '@/types/logs';
 /**
  * Check if an insulin type is a basal (long-acting) insulin
  */
-function isBasalInsulin(insulinType: string): boolean {
-  const type = insulinType.toLowerCase();
+function isBasalInsulin(insulinType: string | null | undefined): boolean {
+  const type = (insulinType ?? '').toLowerCase();
   return type.includes('lantus') ||
          type.includes('basal') ||
          type.includes('tresiba') ||

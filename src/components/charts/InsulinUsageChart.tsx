@@ -38,7 +38,7 @@ export function InsulinUsageChart({ insulin }: InsulinUsageChartProps) {
       const current = dailyInsulin.get(date) || { basal: 0, rapid: 0 };
 
       // Categorize insulin type - detect all basal insulin types
-      const type = dose.insulin_type.toLowerCase();
+      const type = (dose.insulin_type ?? '').toLowerCase();
       const isBasal = type.includes('lantus') ||
                       type.includes('basal') ||
                       type.includes('tresiba') ||
