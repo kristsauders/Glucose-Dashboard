@@ -53,6 +53,11 @@ function AuthGuard({ children }: { children: React.ReactNode }) {
       const data = response.notification.request.content.data as Record<string, any>;
       const conversationId = data?.conversationId;
       if (conversationId) {
+        // Seed the conversation list into the chat Stack before pushing the
+        // specific conversation. Without this, [id] is the only screen in
+        // the Stack — Back escapes past the list to the dashboard, and the
+        // Chat tab stays stuck on that conversation until the app restarts.
+        router.navigate('/(tabs)/chat');
         router.push(`/(tabs)/chat/${conversationId}`);
       }
     }

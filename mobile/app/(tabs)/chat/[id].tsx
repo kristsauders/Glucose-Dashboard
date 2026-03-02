@@ -80,7 +80,7 @@ export default function ChatDetailScreen() {
             if (navigation.canGoBack()) {
               navigation.goBack();
             } else {
-              router.replace('/(tabs)/chat');
+              router.navigate('/(tabs)/chat');
             }
           }}
           hitSlop={{ top: 12, bottom: 12, left: 12, right: 12 }}

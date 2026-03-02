@@ -149,8 +149,17 @@ export function MealImpactChart({ meals, glucoseReadings }: Props) {
       </Text>
 
       {impacts.map((impact, index) => {
-        const sparkMin = Math.max(40, Math.min(...impact.sparkline.map(s => s.value)) - 5);
-        const sparkMax = Math.min(300, Math.max(...impact.sparkline.map(s => s.value)) + 5);
+        const sparkValues = impact.sparkline.map(s => s.value);
+        const rawMin = Math.min(...sparkValues);
+        const rawMax = Math.max(...sparkValues);
+        const padding = Math.max(2, Math.round((rawMax - rawMin) * 0.05));
+        const sparkMin = Math.max(40, rawMin - padding);
+        const N_SECTIONS = 3;
+        // stepValue controls where the y-axis floor lands:
+        // chart bottom = maxValue - stepValue * noOfSections
+        // so: stepValue = ceil((rawMax + padding - sparkMin) / N_SECTIONS)
+        const stepValue = Math.max(1, Math.ceil((rawMax + padding - sparkMin) / N_SECTIONS));
+        const sparkMax = sparkMin + stepValue * N_SECTIONS; // exact top, aligns with bottom
         const sc = spikeColor(impact.spike, Colors);
         const sbg = spikeBgColor(impact.spike, Colors);
         const spikeSign = impact.spike >= 0 ? '+' : '';
@@ -196,8 +205,8 @@ export function MealImpactChart({ meals, glucoseReadings }: Props) {
                 spacing={impact.sparkline.length > 1 ? Math.max(2, Math.floor((SPARKLINE_W - 20) / (impact.sparkline.length - 1))) : 10}
                 disableScroll
                 maxValue={sparkMax}
-                mostNegativeValue={sparkMin}
-                noOfSections={3}
+                stepValue={stepValue}
+                noOfSections={N_SECTIONS}
                 color={Colors.primary}
                 thickness={2}
                 curved
