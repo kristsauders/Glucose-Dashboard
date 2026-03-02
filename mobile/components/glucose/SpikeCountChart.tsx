@@ -20,8 +20,10 @@ export function SpikeCountChart({ daily, weekly, useWeekly }: Props) {
   const Y_AXIS_W = 36;
   const CHART_W = SCREEN_W - 66 - Y_AXIS_W;
   const step = Math.ceil(items.length / 7);
-  const barWidth = Math.max(6, Math.floor(CHART_W / items.length) - 4);
-  const spacing = Math.max(2, Math.floor(CHART_W / items.length) - barWidth - 2);
+  const INIT = 8;
+  const slotW = Math.max(3, (CHART_W - INIT) / items.length);
+  const barWidth = Math.max(2, Math.floor(slotW * 0.6));
+  const spacing = Math.max(1, Math.floor(slotW) - barWidth);
 
   // For weekly we use above180 %, for daily we use raw spikesAbove180 count
   const isWeekly = useWeekly && !('spikesAbove180' in (items[0] ?? {}));
@@ -44,7 +46,7 @@ export function SpikeCountChart({ daily, weekly, useWeekly }: Props) {
     const val = isWeekly
       ? (d as WeekMetrics).above180
       : (d as DayMetrics).spikesAbove180;
-    const label = i % step === 0
+    const label = i % step === 0 && i < items.length - 1
       ? ('label' in d ? d.label : (d as WeekMetrics).weekLabel)
       : '';
     return {
@@ -86,7 +88,10 @@ export function SpikeCountChart({ daily, weekly, useWeekly }: Props) {
         yAxisLabelWidth={Y_AXIS_W}
         barWidth={barWidth}
         spacing={spacing}
+        initialSpacing={INIT}
+        disableScroll
         xAxisLabelTextStyle={{ color: Colors.mutedForeground, fontSize: 9 }}
+        xAxisLabelContainerStyle={{ width: 36 }}
         yAxisTextStyle={{ color: Colors.mutedForeground, fontSize: 9 }}
         rulesColor={Colors.border + '40'}
         yAxisColor="transparent"

@@ -24,7 +24,7 @@ export function DailyGlucoseBarChart({ daily, weekly, useWeekly }: Props) {
 
   const avgData = items.map((d, i) => ({
     value: d.avg,
-    label: i % step === 0
+    label: i % step === 0 && i < items.length - 1
       ? ('label' in d ? d.label : (d as WeekMetrics).weekLabel)
       : '',
   }));
@@ -106,12 +106,15 @@ export function DailyGlucoseBarChart({ daily, weekly, useWeekly }: Props) {
         ]}
         height={CHART_H}
         width={CHART_W}
+        spacing={items.length > 1 ? Math.max(2, Math.floor((CHART_W - 20) / (items.length - 1))) : 20}
+        disableScroll
         maxValue={adjustedMax}
         mostNegativeValue={chartMin}
         noOfSections={noOfSections}
         yAxisLabelTexts={yLabels}
         yAxisLabelWidth={Y_AXIS_W}
         xAxisLabelTextStyle={{ color: Colors.mutedForeground, fontSize: 9 }}
+        xAxisLabelContainerStyle={{ width: 36 }}
         yAxisTextStyle={{ color: Colors.mutedForeground, fontSize: 10 }}
         rulesColor={Colors.border + '40'}
         yAxisColor="transparent"

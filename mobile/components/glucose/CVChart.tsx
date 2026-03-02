@@ -34,7 +34,7 @@ export function CVChart({ daily, weekly, useWeekly }: Props) {
 
   const lineData = items.map((d, i) => ({
     value: d.cv,
-    label: i % step === 0
+    label: i % step === 0 && i < items.length - 1
       ? ('label' in d ? d.label : (d as WeekMetrics).weekLabel)
       : '',
   }));
@@ -61,6 +61,8 @@ export function CVChart({ daily, weekly, useWeekly }: Props) {
         data={lineData}
         width={CHART_W}
         height={CHART_H}
+        spacing={items.length > 1 ? Math.max(2, Math.floor((CHART_W - 20) / (items.length - 1))) : 20}
+        disableScroll
         maxValue={yMax}
         noOfSections={noOfSections}
         yAxisLabelTexts={yLabels}
@@ -72,6 +74,7 @@ export function CVChart({ daily, weekly, useWeekly }: Props) {
         dataPointsColor={cvColor}
         dataPointsRadius={3}
         xAxisLabelTextStyle={{ color: Colors.mutedForeground, fontSize: 9 }}
+        xAxisLabelContainerStyle={{ width: 36 }}
         yAxisTextStyle={{ color: Colors.mutedForeground, fontSize: 9 }}
         rulesColor={Colors.border + '40'}
         yAxisColor="transparent"

@@ -130,12 +130,17 @@ struct GlucoseWidget: Widget {
 // MARK: - Live Activity view
 
 // Shared helpers for Live Activity views
-func insulinLabel(units: Double?, date: Date?) -> String? {
+func insulinLabel(units: Double?, date: Date?, compact: Bool = false) -> String? {
     guard let units, let date else { return nil }
     let u = units.truncatingRemainder(dividingBy: 1) == 0
         ? String(format: "%.0f", units)
         : String(format: "%.1f", units)
     let mins = Int(Date().timeIntervalSince(date) / 60)
+    if compact {
+        if mins < 60 { return "💉\(u)u \(mins)m" }
+        let hrs = mins / 60; let rem = mins % 60
+        return rem == 0 ? "💉\(u)u \(hrs)h" : "💉\(u)u \(hrs)h\(rem)m"
+    }
     if mins < 60 { return "💉 \(u)u · \(mins)m ago" }
     let hrs = mins / 60; let rem = mins % 60
     return rem == 0 ? "💉 \(u)u · \(hrs)h ago" : "💉 \(u)u · \(hrs)h \(rem)m ago"
@@ -208,10 +213,14 @@ struct GlucoseLiveActivityWatchView: View {
                         .background(color.opacity(0.2), in: Capsule())
                 }
             }
-            if let label = insulinLabel(units: state.lastInsulinUnits, date: state.lastInsulinDate) {
-                Text(label).font(.caption2).foregroundStyle(.secondary)
-            } else if !isStale {
-                Text(state.readingDate, style: .relative).font(.caption2).foregroundStyle(.secondary)
+            HStack {
+                if !isStale {
+                    Text(state.readingDate, style: .relative).font(.caption2).foregroundStyle(.secondary)
+                }
+                Spacer()
+                if let label = insulinLabel(units: state.lastInsulinUnits, date: state.lastInsulinDate, compact: true) {
+                    Text(label).font(.caption2).foregroundStyle(.secondary)
+                }
             }
         }
         .padding(10)

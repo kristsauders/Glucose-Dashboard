@@ -29,8 +29,10 @@ export function DistributionChart({ distribution }: Props) {
   const CHART_W = SCREEN_W - 66 - Y_AXIS_W;
 
   // Dynamic bar sizing to fill width
-  const barWidth = Math.max(4, Math.floor(CHART_W / visible.length) - 2);
-  const spacing = Math.max(1, Math.floor(CHART_W / visible.length) - barWidth - 1);
+  const INIT = 8;
+  const slotW = Math.max(3, (CHART_W - INIT) / visible.length);
+  const barWidth = Math.max(2, Math.floor(slotW * 0.6));
+  const spacing = Math.max(1, Math.floor(slotW) - barWidth);
 
   // Integer y-axis labels (percentage)
   const yMax = Math.ceil(maxPct / 5) * 5;
@@ -56,7 +58,10 @@ export function DistributionChart({ distribution }: Props) {
         noOfSections={4}
         barWidth={barWidth}
         spacing={spacing}
+        initialSpacing={INIT}
+        disableScroll
         xAxisLabelTextStyle={{ color: Colors.mutedForeground, fontSize: 8 }}
+        xAxisLabelContainerStyle={{ width: 36 }}
         yAxisTextStyle={{ color: Colors.mutedForeground, fontSize: 9 }}
         yAxisLabelWidth={Y_AXIS_W}
         yAxisLabelTexts={yLabels}

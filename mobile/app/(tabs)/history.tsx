@@ -353,15 +353,16 @@ function GlucoseAnalyticsView() {
 function LogsView() {
   const Colors = useColors();
   const [activeTab, setActiveTab] = useState<LogTab>('meal');
+  const [logsRange, setLogsRange] = useState<DateRange>(30);
   const queryClient = useQueryClient();
 
-  const start30d = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString();
-  const meals    = useQuery({ queryKey: ['logs', 'meal'],     queryFn: () => getMealLogs(start30d, undefined, 100) });
-  const insulin  = useQuery({ queryKey: ['logs', 'insulin'],  queryFn: () => getInsulinLogs(start30d, undefined, 100) });
-  const exercise = useQuery({ queryKey: ['logs', 'exercise'], queryFn: () => getExerciseLogs(start30d, undefined, 100) });
+  const logsStart = new Date(Date.now() - logsRange * 24 * 60 * 60 * 1000).toISOString();
+  const meals    = useQuery({ queryKey: ['logs', 'meal',     logsRange], queryFn: () => getMealLogs(logsStart, undefined, 500) });
+  const insulin  = useQuery({ queryKey: ['logs', 'insulin',  logsRange], queryFn: () => getInsulinLogs(logsStart, undefined, 500) });
+  const exercise = useQuery({ queryKey: ['logs', 'exercise', logsRange], queryFn: () => getExerciseLogs(logsStart, undefined, 500) });
 
-  // Fetch 30-day glucose readings for MealImpactChart correlation
-  const glucoseHistory = useGlucoseHistory(30);
+  // Fetch glucose readings for MealImpactChart correlation (same range as logs)
+  const glucoseHistory = useGlucoseHistory(logsRange);
   const rawReadings: GlucoseReading[] = glucoseHistory.data?.readings ?? [];
 
   const deleteMealMutation     = useMutation({ mutationFn: deleteMeal,     onSuccess: () => queryClient.invalidateQueries({ queryKey: ['logs', 'meal'] }) });
@@ -399,8 +400,33 @@ function LogsView() {
 
   return (
     <View style={{ flex: 1 }}>
+      {/* Date range selector */}
+      <View style={{ paddingHorizontal: 16, paddingTop: 12, paddingBottom: 0, flexDirection: 'row', gap: 8 }}>
+        {DATE_RANGES.map(r => (
+          <TouchableOpacity
+            key={r.days}
+            onPress={() => setLogsRange(r.days)}
+            style={{
+              flex: 1,
+              paddingVertical: 7,
+              borderRadius: 10,
+              backgroundColor: logsRange === r.days ? Colors.primary : Colors.muted,
+              alignItems: 'center',
+            }}
+          >
+            <Text style={{
+              fontSize: 13,
+              fontWeight: '600',
+              color: logsRange === r.days ? '#FFFFFF' : Colors.mutedForeground,
+            }}>
+              {r.label}
+            </Text>
+          </TouchableOpacity>
+        ))}
+      </View>
+
       {/* Log tab selector */}
-      <View style={{ paddingHorizontal: 16, paddingTop: 12, paddingBottom: 4 }}>
+      <View style={{ paddingHorizontal: 16, paddingTop: 10, paddingBottom: 4 }}>
         <View style={{ flexDirection: 'row', backgroundColor: Colors.muted, borderRadius: 12, padding: 4 }}>
           {LOG_TABS.map(tab => (
             <TouchableOpacity

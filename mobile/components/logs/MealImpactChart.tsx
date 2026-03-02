@@ -36,17 +36,22 @@ function analyzeMeals(meals: MealLog[], readings: GlucoseReading[]): MealImpact[
   return meals
     .map(meal => {
       const mealMs = new Date(meal.timestamp).getTime();
+      const windowStart = mealMs - 10 * 60 * 1000; // look back 10 min for pre-meal baseline
       const windowEnd = mealMs + 3 * 60 * 60 * 1000; // 3 hours
 
-      // Get readings in the 3-hour window
+      // Get readings in the window
       const windowReadings = readings
         .filter(r => {
           const t = new Date(r.timestamp).getTime();
-          return t >= mealMs && t <= windowEnd;
+          return t >= windowStart && t <= windowEnd;
         })
         .sort((a, b) => new Date(a.timestamp).getTime() - new Date(b.timestamp).getTime());
 
       if (windowReadings.length < 3) return null;
+
+      // Require at least 2 hours of post-meal data so we see the full arc
+      const lastMs = new Date(windowReadings[windowReadings.length - 1].timestamp).getTime();
+      if (lastMs - mealMs < 2 * 60 * 60 * 1000) return null;
 
       // Baseline: reading closest to meal time
       const baseline = Number(windowReadings[0].glucose);
@@ -144,8 +149,8 @@ export function MealImpactChart({ meals, glucoseReadings }: Props) {
       </Text>
 
       {impacts.map((impact, index) => {
-        const sparkMin = Math.max(40, Math.min(...impact.sparkline.map(s => s.value)) - 15);
-        const sparkMax = Math.min(300, Math.max(...impact.sparkline.map(s => s.value)) + 15);
+        const sparkMin = Math.max(40, Math.min(...impact.sparkline.map(s => s.value)) - 5);
+        const sparkMax = Math.min(300, Math.max(...impact.sparkline.map(s => s.value)) + 5);
         const sc = spikeColor(impact.spike, Colors);
         const sbg = spikeBgColor(impact.spike, Colors);
         const spikeSign = impact.spike >= 0 ? '+' : '';
@@ -188,8 +193,10 @@ export function MealImpactChart({ meals, glucoseReadings }: Props) {
                 data={impact.sparkline}
                 width={SPARKLINE_W}
                 height={60}
+                spacing={impact.sparkline.length > 1 ? Math.max(2, Math.floor((SPARKLINE_W - 20) / (impact.sparkline.length - 1))) : 10}
+                disableScroll
                 maxValue={sparkMax}
-                minValue={sparkMin}
+                mostNegativeValue={sparkMin}
                 noOfSections={3}
                 color={Colors.primary}
                 thickness={2}

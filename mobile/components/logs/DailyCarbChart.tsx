@@ -28,8 +28,10 @@ export function DailyCarbChart({ meals }: Props) {
   const Y_AXIS_W = 36;
   const CHART_W = SCREEN_W - 66 - Y_AXIS_W;
   const step = Math.ceil(entries.length / 7);
-  const barWidth = Math.max(6, Math.floor(CHART_W / entries.length) - 4);
-  const spacing = Math.max(2, Math.floor(CHART_W / entries.length) - barWidth - 2);
+  const INIT = 8;
+  const slotW = Math.max(3, (CHART_W - INIT) / entries.length);
+  const barWidth = Math.max(2, Math.floor(slotW * 0.6));
+  const spacing = Math.max(1, Math.floor(slotW) - barWidth);
 
   const totals = entries.map(([, v]) => v);
   const avgCarbs = Math.round(totals.reduce((s, v) => s + v, 0) / totals.length);
@@ -41,11 +43,9 @@ export function DailyCarbChart({ meals }: Props) {
   const sectionSize = yMax / noOfSections;
   const yLabels = [0, 1, 2, 3, 4].map(i => `${Math.round(sectionSize * i)}g`);
 
-  const barData = entries.map(([dateIso, total], i) => ({
+  const barData = entries.map(([, total]) => ({
     value: total,
-    label: i % step === 0
-      ? format(new Date(dateIso + 'T12:00:00'), 'M/d')
-      : '',
+    label: '',
     frontColor: Colors.primary,
   }));
 
@@ -77,7 +77,8 @@ export function DailyCarbChart({ meals }: Props) {
         noOfSections={noOfSections}
         barWidth={barWidth}
         spacing={spacing}
-        xAxisLabelTextStyle={{ color: Colors.mutedForeground, fontSize: 9 }}
+        initialSpacing={INIT}
+        disableScroll
         yAxisTextStyle={{ color: Colors.mutedForeground, fontSize: 9 }}
         yAxisLabelWidth={Y_AXIS_W}
         yAxisLabelTexts={yLabels}
@@ -97,6 +98,29 @@ export function DailyCarbChart({ meals }: Props) {
         }}
         showReferenceLine1
       />
+
+      {/* Custom x-axis labels — positioned manually to avoid gifted-charts slot-width clipping */}
+      <View style={{ height: 14, marginLeft: Y_AXIS_W, position: 'relative' }}>
+        {entries.map(([dateIso], i) => {
+          if (i % step !== 0 || i >= entries.length - 1) return null;
+          const cx = INIT + i * (barWidth + spacing) + barWidth / 2;
+          return (
+            <Text
+              key={i}
+              style={{
+                position: 'absolute',
+                left: cx - 14,
+                width: 28,
+                fontSize: 9,
+                color: Colors.mutedForeground,
+                textAlign: 'center',
+              }}
+            >
+              {format(new Date(dateIso + 'T12:00:00'), 'M/d')}
+            </Text>
+          );
+        })}
+      </View>
     </View>
   );
 }

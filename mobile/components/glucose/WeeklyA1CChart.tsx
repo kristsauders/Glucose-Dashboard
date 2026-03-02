@@ -48,7 +48,7 @@ export function WeeklyA1CChart({ weekly }: Props) {
 
   const lineData = weekly.map((w, i) => ({
     value: w.estA1c,
-    label: i % step === 0 ? w.weekLabel : '',
+    label: i % step === 0 && i < weekly.length - 1 ? w.weekLabel : '',
   }));
 
   const lineColor = a1cColor(avgA1c, Colors);
@@ -73,6 +73,8 @@ export function WeeklyA1CChart({ weekly }: Props) {
         data={lineData}
         width={CHART_W}
         height={CHART_H}
+        spacing={weekly.length > 1 ? Math.max(2, Math.floor((CHART_W - 20) / (weekly.length - 1))) : 20}
+        disableScroll
         maxValue={chartMax}
         mostNegativeValue={chartMin}
         noOfSections={noOfSections}
@@ -85,6 +87,7 @@ export function WeeklyA1CChart({ weekly }: Props) {
         dataPointsColor={lineColor}
         dataPointsRadius={4}
         xAxisLabelTextStyle={{ color: Colors.mutedForeground, fontSize: 9 }}
+        xAxisLabelContainerStyle={{ width: 36 }}
         yAxisTextStyle={{ color: Colors.mutedForeground, fontSize: 9 }}
         rulesColor={Colors.border + '40'}
         yAxisColor="transparent"

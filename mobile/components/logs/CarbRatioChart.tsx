@@ -86,11 +86,11 @@ export function CarbRatioChart({ meals, insulin }: Props) {
   const isInTarget = avgRatio >= TARGET_MIN && avgRatio <= TARGET_MAX;
   const lineColor = isInTarget ? Colors.glucoseInRange : Colors.warning;
 
-  const lineData = ratios.map((r, i) => ({
+  const computedSpacing = ratios.length > 1 ? Math.max(2, Math.floor((CHART_W - 20) / (ratios.length - 1))) : 20;
+
+  const lineData = ratios.map(r => ({
     value: parseFloat(r.ratio.toFixed(1)),
-    label: i % step === 0
-      ? format(new Date(r.date + 'T12:00:00'), 'M/d')
-      : '',
+    label: '',
   }));
 
   return (
@@ -128,6 +128,8 @@ export function CarbRatioChart({ meals, insulin }: Props) {
         data={lineData}
         width={CHART_W}
         height={CHART_H}
+        spacing={computedSpacing}
+        disableScroll
         maxValue={yMax}
         mostNegativeValue={0}
         noOfSections={noOfSections}
@@ -139,7 +141,6 @@ export function CarbRatioChart({ meals, insulin }: Props) {
         hideDataPoints={ratios.length > 20}
         dataPointsColor={lineColor}
         dataPointsRadius={4}
-        xAxisLabelTextStyle={{ color: Colors.mutedForeground, fontSize: 9 }}
         yAxisTextStyle={{ color: Colors.mutedForeground, fontSize: 9 }}
         rulesColor={Colors.border + '40'}
         yAxisColor="transparent"
@@ -169,6 +170,29 @@ export function CarbRatioChart({ meals, insulin }: Props) {
         showReferenceLine1
         showReferenceLine2
       />
+
+      {/* Custom x-axis labels — positioned manually to avoid gifted-charts slot-width clipping */}
+      <View style={{ height: 14, marginLeft: Y_AXIS_W, position: 'relative' }}>
+        {ratios.map((r, i) => {
+          if (i % step !== 0 || i >= ratios.length - 1) return null;
+          const cx = 20 + i * computedSpacing;
+          return (
+            <Text
+              key={i}
+              style={{
+                position: 'absolute',
+                left: cx - 14,
+                width: 28,
+                fontSize: 9,
+                color: Colors.mutedForeground,
+                textAlign: 'center',
+              }}
+            >
+              {format(new Date(r.date + 'T12:00:00'), 'M/d')}
+            </Text>
+          );
+        })}
+      </View>
 
       {/* Reference zone legend */}
       <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6, marginTop: 8 }}>

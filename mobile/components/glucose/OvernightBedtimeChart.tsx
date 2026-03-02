@@ -25,7 +25,7 @@ export function OvernightBedtimeChart({ daily }: Props) {
   const overnightData = filtered.map((d, i) => ({
     value: d.overnightAvg ?? 0,
     hideDataPoint: d.overnightAvg === null,
-    label: i % step === 0 ? d.label : '',
+    label: i % step === 0 && i < filtered.length - 1 ? d.label : '',
   }));
 
   const bedtimeData = filtered.map(d => ({
@@ -118,12 +118,15 @@ export function OvernightBedtimeChart({ daily }: Props) {
         ]}
         width={CHART_W}
         height={CHART_H}
+        spacing={filtered.length > 1 ? Math.max(2, Math.floor((CHART_W - 20) / (filtered.length - 1))) : 20}
+        disableScroll
         maxValue={yMax}
         mostNegativeValue={yBase}
         noOfSections={noOfSections}
         yAxisLabelTexts={yLabels}
         yAxisLabelWidth={Y_AXIS_W}
         xAxisLabelTextStyle={{ color: Colors.mutedForeground, fontSize: 9 }}
+        xAxisLabelContainerStyle={{ width: 36 }}
         yAxisTextStyle={{ color: Colors.mutedForeground, fontSize: 9 }}
         rulesColor={Colors.border + '40'}
         yAxisColor="transparent"

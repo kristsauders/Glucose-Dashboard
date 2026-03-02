@@ -17,7 +17,6 @@ struct GlucoseLiveActivityWidget: Widget {
     var body: some WidgetConfiguration {
         ActivityConfiguration(for: GlucoseActivityAttributes.self) { context in
             GlucoseLiveActivityView(state: context.state)
-                .activityBackgroundTint(Color(.systemBackground))
         } dynamicIsland: { context in
             DynamicIsland {
                 DynamicIslandExpandedRegion(.leading) {

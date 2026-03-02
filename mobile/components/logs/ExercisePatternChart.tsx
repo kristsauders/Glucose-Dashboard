@@ -36,8 +36,10 @@ export function ExercisePatternChart({ exercises }: Props) {
   const Y_AXIS_W = 36;
   const CHART_W = SCREEN_W - 66 - Y_AXIS_W;
   const step = Math.ceil(entries.length / 7);
-  const barWidth = Math.max(6, Math.floor(CHART_W / entries.length) - 4);
-  const spacing = Math.max(2, Math.floor(CHART_W / entries.length) - barWidth - 2);
+  const INIT = 8;
+  const slotW = Math.max(3, (CHART_W - INIT) / entries.length);
+  const barWidth = Math.max(2, Math.floor(slotW * 0.6));
+  const spacing = Math.max(1, Math.floor(slotW) - barWidth);
 
   const totals = entries.map(([, v]) => v.light + v.moderate + v.intense);
   const avgTotal = Math.round(totals.reduce((s, v) => s + v, 0) / totals.length);
@@ -55,7 +57,7 @@ export function ExercisePatternChart({ exercises }: Props) {
       { value: v.moderate, color: '#34D399' },  // green
       { value: v.intense, color: '#F87171' },   // red
     ],
-    label: i % step === 0
+    label: i % step === 0 && i < entries.length - 1
       ? format(new Date(dateIso + 'T12:00:00'), 'M/d')
       : '',
   }));
@@ -102,7 +104,10 @@ export function ExercisePatternChart({ exercises }: Props) {
         noOfSections={noOfSections}
         barWidth={barWidth}
         spacing={spacing}
+        initialSpacing={INIT}
+        disableScroll
         xAxisLabelTextStyle={{ color: Colors.mutedForeground, fontSize: 9 }}
+        xAxisLabelContainerStyle={{ width: 36 }}
         yAxisTextStyle={{ color: Colors.mutedForeground, fontSize: 9 }}
         yAxisLabelWidth={Y_AXIS_W}
         yAxisLabelTexts={yLabels}
