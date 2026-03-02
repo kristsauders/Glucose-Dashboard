@@ -110,6 +110,11 @@ function getApnsSession(): http2.ClientHttp2Session {
   return apnsSession;
 }
 
+export interface GlucoseHistoryPoint {
+  glucose: number;
+  minutesAgo: number;
+}
+
 export interface GlucoseActivityState {
   glucose: number;
   trend: string;
@@ -118,6 +123,7 @@ export interface GlucoseActivityState {
   isHigh: boolean;
   lastInsulinUnits?: number;
   lastInsulinDate?: Date;
+  history?: GlucoseHistoryPoint[];
 }
 
 /**
@@ -161,6 +167,7 @@ export async function sendLiveActivityPush(
           lastInsulinUnits: state.lastInsulinUnits,
           lastInsulinDate: Math.floor(state.lastInsulinDate.getTime() / 1000) - SWIFT_REFERENCE_DATE_OFFSET,
         }),
+        ...(state.history && state.history.length > 0 && { history: state.history }),
       },
       'stale-date': staleDate,
     },

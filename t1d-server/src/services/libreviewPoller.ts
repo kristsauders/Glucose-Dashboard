@@ -162,6 +162,18 @@ class LibreViewPollerService {
         if (latest) {
           const glucose = latest.glucose as number;
 
+          // Build history: last 2 hours of readings, max 25 points, oldest-first.
+          const nowMs = Date.now();
+          const twoHoursAgo = nowMs - 2 * 60 * 60 * 1000;
+          const history = readings
+            .filter(r => new Date(r.timestamp).getTime() >= twoHoursAgo)
+            .map(r => ({
+              glucose: r.glucose as number,
+              minutesAgo: Math.round((nowMs - new Date(r.timestamp).getTime()) / 60000),
+            }))
+            .sort((a, b) => b.minutesAgo - a.minutesAgo)
+            .slice(0, 25);
+
           // Fetch the most recent insulin dose for this user (last 24h to avoid stale data).
           const insulinResult = await query<{ units: number; timestamp: string }>(
             `SELECT units, timestamp FROM insulin_doses
@@ -178,6 +190,7 @@ class LibreViewPollerService {
             readingDate: new Date(latest.timestamp),
             isLow:  glucose < 70,
             isHigh: glucose > 180,
+            history: history.length > 0 ? history : undefined,
             ...(lastDose && {
               lastInsulinUnits: Number(lastDose.units),
               lastInsulinDate: new Date(lastDose.timestamp),

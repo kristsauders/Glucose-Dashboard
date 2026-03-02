@@ -21,9 +21,10 @@ export default function DashboardScreen() {
   const lastSyncedId = useRef<string | null>(null);
   useEffect(() => {
     const reading = (latest.data as any)?.reading;
+    const allReadings = (readings.data as any)?.readings as GlucoseReading[] | undefined;
     if (reading && reading.id !== lastSyncedId.current) {
       lastSyncedId.current = reading.id;
-      syncReading(reading);
+      syncReading(reading, allReadings);
     }
   }, [(latest.data as any)?.reading]);
   // Compute today's summary from the already-fetched 24h readings (type-1 only, same window as chart)

@@ -28,7 +28,7 @@ export function useGlucoseWidgets() {
   const liveActivityStarted = useRef(false);
 
   /** Push a new glucose reading to the widget and Live Activity. */
-  const syncReading = useCallback(async (reading: GlucoseReading) => {
+  const syncReading = useCallback(async (reading: GlucoseReading, recentReadings?: GlucoseReading[]) => {
     if (!isAvailable) return;
 
     const authToken = await getToken();
@@ -39,14 +39,25 @@ export function useGlucoseWidgets() {
     const isLow   = glucose < GLUCOSE_LOW;
     const isHigh  = glucose > GLUCOSE_HIGH;
 
+    // Build a compact history array: last 2 hours, max 25 points, oldest-first.
+    const nowMs = Date.now();
+    const history = (recentReadings ?? [])
+      .map(r => ({
+        glucose: Math.round(Number(r.glucose)),
+        minutesAgo: Math.round((nowMs - new Date(r.timestamp).getTime()) / 60000),
+      }))
+      .filter(p => p.minutesAgo >= 0 && p.minutesAgo <= 120)
+      .sort((a, b) => b.minutesAgo - a.minutesAgo)
+      .slice(0, 25);
+
     // Always update the lock-screen widget UserDefaults + reload timeline.
-    GlucoseWidgetsModule.updateGlucose(glucose, trend, ts, isLow, isHigh);
+    GlucoseWidgetsModule.updateGlucose(glucose, trend, ts, isLow, isHigh, history);
 
     // Start a Live Activity on first reading; subsequent updateGlucose calls
     // keep the content fresh via updateActivity() in Swift.
     if (!liveActivityStarted.current) {
       liveActivityStarted.current = true;
-      GlucoseWidgetsModule.startLiveActivity(glucose, trend, ts, isLow, isHigh)
+      GlucoseWidgetsModule.startLiveActivity(glucose, trend, ts, isLow, isHigh, history)
         .then(async (activityId: string) => {
           console.log('[GlucoseWidgets] Live Activity started:', activityId);
 
