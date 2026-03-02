@@ -150,18 +150,6 @@ struct GlucoseMiniChart: View {
 
         Chart {
             ForEach(sorted.indices, id: \.self) { i in
-                AreaMark(
-                    x: .value("t", -sorted[i].minutesAgo),
-                    y: .value("g", sorted[i].glucose)
-                )
-                .foregroundStyle(
-                    LinearGradient(
-                        colors: [color.opacity(0.20), color.opacity(0.0)],
-                        startPoint: .top, endPoint: .bottom
-                    )
-                )
-                .interpolationMethod(.catmullRom)
-
                 LineMark(
                     x: .value("t", -sorted[i].minutesAgo),
                     y: .value("g", sorted[i].glucose)
@@ -228,8 +216,11 @@ struct GlucoseLiveActivityPhoneView: View {
                     Label("No data", systemImage: "exclamationmark.circle")
                         .font(.caption.bold()).foregroundStyle(Color.orange)
                 } else {
-                    Text(state.readingDate, style: .relative)
-                        .font(.caption).foregroundStyle(.secondary)
+                    HStack(spacing: 3) {
+                        Image(systemName: "clock")
+                        Text(state.readingDate, style: .relative)
+                    }
+                    .font(.caption).foregroundStyle(.secondary)
                 }
                 if let label = insulinLabel(units: state.lastInsulinUnits, date: state.lastInsulinDate) {
                     Text(label).font(.caption).foregroundStyle(.secondary)
@@ -268,8 +259,11 @@ struct GlucoseLiveActivityWatchView: View {
                 if isStale {
                     Image(systemName: "exclamationmark.circle.fill").foregroundStyle(Color.orange)
                 } else {
-                    Text(state.readingDate, style: .relative)
-                        .font(.caption2).foregroundStyle(.secondary)
+                    HStack(spacing: 2) {
+                        Image(systemName: "clock")
+                        Text(state.readingDate, style: .relative)
+                    }
+                    .font(.caption2).foregroundStyle(.secondary)
                 }
                 if let label = insulinLabel(units: state.lastInsulinUnits, date: state.lastInsulinDate, compact: true) {
                     Text(label).font(.caption2).foregroundStyle(.secondary)
