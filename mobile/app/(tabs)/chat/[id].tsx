@@ -70,19 +70,14 @@ export default function ChatDetailScreen() {
     else navigation.setOptions({ title: 'New conversation' });
   }, [conversationTitle, isNew]);
 
-  // Always inject a back button. When deep-linked from a notification the Stack
-  // has no history (no canGoBack), so fall back to the conversations list.
+  // Always inject a back button that goes to the conversation list. Using
+  // navigation.canGoBack()/goBack() resolves through the tab navigator and
+  // lands on the dashboard when deep-linked from a notification.
   useEffect(() => {
     navigation.setOptions({
       headerLeft: () => (
         <TouchableOpacity
-          onPress={() => {
-            if (navigation.canGoBack()) {
-              navigation.goBack();
-            } else {
-              router.navigate('/(tabs)/chat');
-            }
-          }}
+          onPress={() => router.navigate('/(tabs)/chat')}
           hitSlop={{ top: 12, bottom: 12, left: 12, right: 12 }}
           style={{ paddingRight: 8, flexDirection: 'row', alignItems: 'center' }}
         >
@@ -95,7 +90,8 @@ export default function ChatDetailScreen() {
   const chat = useChat(isNew ? null : id);
 
   // Hydrate messages once when the conversation query resolves.
-  // Set shouldScrollToBottomRef so the first onContentSizeChange scrolls to end.
+  // Set shouldScrollToBottomRef so the first onContentSizeChange scrolls to end,
+  // then fire a second scroll at 300 ms to catch reflows from markdown/image rendering.
   const hydratedRef = useRef(false);
   const shouldScrollToBottomRef = useRef(false);
   useEffect(() => {
@@ -103,6 +99,7 @@ export default function ChatDetailScreen() {
       hydratedRef.current = true;
       shouldScrollToBottomRef.current = true;
       chat.resetMessages(existingMessages);
+      setTimeout(() => listRef.current?.scrollToEnd({ animated: false }), 300);
     }
   }, [existingMessages]);
 

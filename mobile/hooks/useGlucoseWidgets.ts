@@ -1,5 +1,5 @@
-import { useCallback, useRef } from 'react';
-import { NativeModules, Platform } from 'react-native';
+import { useCallback, useEffect, useRef } from 'react';
+import { NativeModules, Platform, AppState } from 'react-native';
 import { GLUCOSE_LOW, GLUCOSE_HIGH } from '../constants/config';
 import type { GlucoseReading } from '../types/glucose';
 import { getToken } from '../services/auth';
@@ -26,6 +26,18 @@ if (Platform.OS === 'ios' && !GlucoseWidgetsModule) {
  */
 export function useGlucoseWidgets() {
   const liveActivityStarted = useRef(false);
+
+  // Reset the started flag whenever the app returns to the foreground so that
+  // the next syncReading call will attempt startLiveActivity again. This handles
+  // the case where iOS ended the Live Activity after its ~24-hour lifetime limit.
+  useEffect(() => {
+    const sub = AppState.addEventListener('change', (nextState) => {
+      if (nextState === 'active') {
+        liveActivityStarted.current = false;
+      }
+    });
+    return () => sub.remove();
+  }, []);
 
   /** Push a new glucose reading to the widget and Live Activity. */
   const syncReading = useCallback(async (reading: GlucoseReading, recentReadings?: GlucoseReading[]) => {
