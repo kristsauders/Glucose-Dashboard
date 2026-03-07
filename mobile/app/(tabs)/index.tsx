@@ -17,6 +17,11 @@ export default function DashboardScreen() {
   const readings = useGlucose24h();
   const { syncReading } = useGlucoseWidgets();
 
+  // Fetch last 24h of logs — declared here so insulin is available to the syncReading effect below.
+  const meals = useMealLogs(1);
+  const insulin = useInsulinLogs(1);
+  const exercise = useExerciseLogs(1);
+
   // Sync the latest reading to the lock-screen widget and Live Activity whenever it changes.
   // We track two conditions to avoid redundant syncs but still re-sync when 24h history
   // arrives after the initial reading (history loads slower than the latest-reading query).
@@ -64,11 +69,6 @@ export default function DashboardScreen() {
       },
     };
   }, [(readings.data as any)?.readings]);
-
-  // Fetch last 24h of logs for the chart event overlay
-  const meals = useMealLogs(1);
-  const insulin = useInsulinLogs(1);
-  const exercise = useExerciseLogs(1);
 
   const isRefreshing = latest.isFetching || readings.isFetching;
 
