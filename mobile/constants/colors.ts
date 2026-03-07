@@ -81,11 +81,11 @@ export function getGlucoseColor(glucose: number, colors: ColorScheme = light): s
 export function getTrendArrow(trend?: number | null): string {
   const map: Record<number, string> = {
     0: '→',
-    1: '↓↓',
+    1: '↓',
     2: '↘',
     3: '→',
     4: '↗',
-    5: '↑↑',
+    5: '↑',
   };
   return trend != null ? (map[trend] ?? '→') : '→';
 }

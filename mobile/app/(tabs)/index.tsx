@@ -32,8 +32,12 @@ export default function DashboardScreen() {
     if (!isNewReading && !historyJustArrived) return;
     lastSyncedId.current = reading.id;
     lastSyncedWithHistory.current = hasHistory;
-    syncReading(reading, allReadings);
-  }, [(latest.data as any)?.reading, (readings.data as any)?.readings]);
+    const doses = (insulin.data as any)?.doses;
+    const lastDose = doses?.[0];
+    const lastInsulinUnits = lastDose ? Number(lastDose.units) : null;
+    const lastInsulinDate  = lastDose?.timestamp ? new Date(lastDose.timestamp) : null;
+    syncReading(reading, allReadings, lastInsulinUnits, lastInsulinDate);
+  }, [(latest.data as any)?.reading, (readings.data as any)?.readings, (insulin.data as any)?.doses]);
   // Compute today's summary from the already-fetched 24h readings (type-1 only, same window as chart)
   const todaySummary = useMemo<GlucoseSummary | undefined>(() => {
     const rds = (readings.data as any)?.readings as GlucoseReading[] | undefined;

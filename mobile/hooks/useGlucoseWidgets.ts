@@ -40,7 +40,12 @@ export function useGlucoseWidgets() {
   }, []);
 
   /** Push a new glucose reading to the widget and Live Activity. */
-  const syncReading = useCallback(async (reading: GlucoseReading, recentReadings?: GlucoseReading[]) => {
+  const syncReading = useCallback(async (
+    reading: GlucoseReading,
+    recentReadings?: GlucoseReading[],
+    lastInsulinUnits?: number | null,
+    lastInsulinDate?: Date | null,
+  ) => {
     if (!isAvailable) return;
 
     const authToken = await getToken();
@@ -62,14 +67,17 @@ export function useGlucoseWidgets() {
       .sort((a, b) => b.minutesAgo - a.minutesAgo)
       .slice(0, 25);
 
+    const insulinUnits = lastInsulinUnits ?? null;
+    const insulinTs    = lastInsulinDate ? lastInsulinDate.getTime() / 1000 : null;
+
     // Always update the lock-screen widget UserDefaults + reload timeline.
-    GlucoseWidgetsModule.updateGlucose(glucose, trend, ts, isLow, isHigh, history);
+    GlucoseWidgetsModule.updateGlucose(glucose, trend, ts, isLow, isHigh, history, insulinUnits, insulinTs);
 
     // Start a Live Activity on first reading; subsequent updateGlucose calls
     // keep the content fresh via updateActivity() in Swift.
     if (!liveActivityStarted.current) {
       liveActivityStarted.current = true;
-      GlucoseWidgetsModule.startLiveActivity(glucose, trend, ts, isLow, isHigh, history)
+      GlucoseWidgetsModule.startLiveActivity(glucose, trend, ts, isLow, isHigh, history, insulinUnits, insulinTs)
         .then(async (activityId: string) => {
           console.log('[GlucoseWidgets] Live Activity started:', activityId);
 
@@ -108,9 +116,9 @@ export function useGlucoseWidgets() {
   return { syncReading, endActivity };
 }
 
-// Map stored trend code → glyph (mirrors colors.ts getTrendArrow)
+// Map stored trend code → glyph (mirrors colors.ts getTrendArrow and web UI)
 // 0=NotDetermined, 1=FallingQuickly, 2=Falling, 3=Stable, 4=Rising, 5=RisingQuickly
 function trendArrow(trend?: number | null): string {
-  const map: Record<number, string> = { 0: '→', 1: '↓↓', 2: '↘', 3: '→', 4: '↗', 5: '↑↑' };
+  const map: Record<number, string> = { 0: '→', 1: '↓', 2: '↘', 3: '→', 4: '↗', 5: '↑' };
   return trend != null ? (map[trend] ?? '→') : '→';
 }

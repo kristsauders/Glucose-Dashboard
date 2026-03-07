@@ -7,7 +7,9 @@ RCT_EXTERN_METHOD(updateGlucose:(double)glucose
                   timestamp:(double)timestamp
                   isLow:(BOOL)isLow
                   isHigh:(BOOL)isHigh
-                  history:(NSArray *)history)
+                  history:(NSArray *)history
+                  lastInsulinUnits:(NSNumber *)lastInsulinUnits
+                  lastInsulinDate:(NSNumber *)lastInsulinDate)
 
 RCT_EXTERN_METHOD(startLiveActivity:(double)glucose
                   trend:(NSString *)trend
@@ -15,6 +17,8 @@ RCT_EXTERN_METHOD(startLiveActivity:(double)glucose
                   isLow:(BOOL)isLow
                   isHigh:(BOOL)isHigh
                   history:(NSArray *)history
+                  lastInsulinUnits:(NSNumber *)lastInsulinUnits
+                  lastInsulinDate:(NSNumber *)lastInsulinDate
                   resolve:(RCTPromiseResolveBlock)resolve
                   reject:(RCTPromiseRejectBlock)reject)
 

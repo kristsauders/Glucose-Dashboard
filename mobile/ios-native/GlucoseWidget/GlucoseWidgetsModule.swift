@@ -18,7 +18,9 @@ class GlucoseWidgetsModule: NSObject {
                               timestamp: Double,
                               isLow: Bool,
                               isHigh: Bool,
-                              history: NSArray) {
+                              history: NSArray,
+                              lastInsulinUnits: NSNumber?,
+                              lastInsulinDate: NSNumber?) {
         let defaults = UserDefaults(suiteName: APP_GROUP)
         defaults?.set(Int(glucose), forKey: "currentGlucose")
         defaults?.set(trend,        forKey: "currentTrend")
@@ -28,10 +30,13 @@ class GlucoseWidgetsModule: NSObject {
 
         if #available(iOS 16.2, *) {
             let historyPoints = parseHistory(history)
+            let insulinUnits = lastInsulinUnits?.doubleValue
+            let insulinDate  = lastInsulinDate.map { Date(timeIntervalSince1970: $0.doubleValue) }
             Task {
                 await GlucoseWidgetsModule.updateActivity(
                     glucose: Int(glucose), trend: trend, timestamp: timestamp,
-                    isLow: isLow, isHigh: isHigh, history: historyPoints)
+                    isLow: isLow, isHigh: isHigh, history: historyPoints,
+                    lastInsulinUnits: insulinUnits, lastInsulinDate: insulinDate)
             }
         }
     }
@@ -52,12 +57,16 @@ class GlucoseWidgetsModule: NSObject {
                                   isLow: Bool,
                                   isHigh: Bool,
                                   history: NSArray,
+                                  lastInsulinUnits: NSNumber?,
+                                  lastInsulinDate: NSNumber?,
                                   resolve: @escaping RCTPromiseResolveBlock,
                                   reject: @escaping RCTPromiseRejectBlock) {
         guard #available(iOS 16.2, *) else {
             reject("UNSUPPORTED", "Live Activities require iOS 16.2+", nil); return
         }
         let historyPoints = parseHistory(history)
+        let insulinUnits = lastInsulinUnits?.doubleValue
+        let insulinDate  = lastInsulinDate.map { Date(timeIntervalSince1970: $0.doubleValue) }
         Task {
             do {
                 let readingDate = Date(timeIntervalSince1970: timestamp)
@@ -66,6 +75,8 @@ class GlucoseWidgetsModule: NSObject {
                     glucose: Int(glucose), trend: trend,
                     readingDate: readingDate,
                     isLow: isLow, isHigh: isHigh,
+                    lastInsulinUnits: insulinUnits,
+                    lastInsulinDate: insulinDate,
                     history: historyPoints.isEmpty ? nil : historyPoints)
                 let content = ActivityContent(state: state, staleDate: staleDate)
 
@@ -125,13 +136,17 @@ class GlucoseWidgetsModule: NSObject {
     @available(iOS 16.2, *)
     static func updateActivity(glucose: Int, trend: String, timestamp: Double,
                                 isLow: Bool, isHigh: Bool,
-                                history: [GlucosePoint] = []) async {
+                                history: [GlucosePoint] = [],
+                                lastInsulinUnits: Double? = nil,
+                                lastInsulinDate: Date? = nil) async {
         let readingDate = Date(timeIntervalSince1970: timestamp)
         let staleDate   = readingDate.addingTimeInterval(STALE_INTERVAL)
         let state = GlucoseActivityAttributes.ContentState(
             glucose: glucose, trend: trend,
             readingDate: readingDate,
             isLow: isLow, isHigh: isHigh,
+            lastInsulinUnits: lastInsulinUnits,
+            lastInsulinDate: lastInsulinDate,
             history: history.isEmpty ? nil : history)
         let content = ActivityContent(state: state, staleDate: staleDate)
         for activity in Activity<GlucoseActivityAttributes>.activities {
