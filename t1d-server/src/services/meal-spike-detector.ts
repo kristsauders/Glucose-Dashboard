@@ -40,6 +40,7 @@ const WINDOW_MINUTES        = 120;  // 2-hour detection window
 const DEDUP_HOURS           = 2;    // minimum time between separate meal detections
 const RISE_NOISE_MARGIN     = 5;    // mg/dL above nadir before counting as real rise
 const MAX_DECLINE_PER_MIN   = 0.5;  // mg/dL/min — steeper decline → reject as baseline
+const MIN_RISE_RATE_PER_MIN = 0.5;  // mg/dL/min — slower rise → gradual drift, not a meal
 const NIGHTTIME_START_HOUR  = 0;    // midnight
 const NIGHTTIME_END_HOUR    = 5;    // 5am — no meals detected in this local-hour range
 
@@ -118,7 +119,8 @@ function detectSpikeInWindow(windowReadings: Reading[], timezone: string): Detec
     }
   }
 
-  const peak = Math.max(...newer.map(r => r.glucose));
+  const peakReading = newer.reduce((max, r) => r.glucose > max.glucose ? r : max, newer[0]);
+  const peak = peakReading.glucose;
   const rise = peak - nadir;
 
   if (rise < MEAL_RISE_THRESHOLD) return null;
@@ -137,6 +139,14 @@ function detectSpikeInWindow(windowReadings: Reading[], timezone: string): Detec
   }
 
   const riseStart  = riseStartTs ?? windowReadings[nadirIdx + 1]?.ts ?? nadirReading.ts;
+
+  // ── Rise rate check ───────────────────────────────────────────────────────
+  // A real meal spike rises steeply. Gradual drifts (e.g. 30 mg/dL over 90 min)
+  // are filtered by requiring the average rate from rise start to peak to be
+  // at least MIN_RISE_RATE_PER_MIN mg/dL/min.
+  const riseMinutes = (peakReading.ts.getTime() - riseStart.getTime()) / 60000;
+  if (riseMinutes > 0 && rise / riseMinutes < MIN_RISE_RATE_PER_MIN) return null;
+
   const mealTime   = new Date(riseStart.getTime() - 20 * 60 * 1000);
 
   // ── Nighttime guard ───────────────────────────────────────────────────────
