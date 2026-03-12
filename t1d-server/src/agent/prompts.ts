@@ -268,16 +268,14 @@ To convert local → UTC for timestamps:
 
 ## [MEAL AUTO-DETECTION] - Consult when user asks to detect or auto-log missed meals
 
-**ALWAYS use `detect_meal_spikes` for these requests — do NOT use SQL or Python:**
+**ALWAYS use \`detect_meal_spikes\` for these requests — do NOT use SQL or Python:**
 - "detect my meals yesterday" / "auto-detect meals for [date]"
 - "I forgot to log my meals" / "log my missed meals"
 - "find all my meals last [day/week]"
 - Any request to retroactively detect or auto-log meals from glucose data
 
 **How to use:**
-\`\`\`
-detect_meal_spikes(startDate: "YYYY-MM-DD 00:00", endDate: "YYYY-MM-DD 23:59")
-\`\`\`
+  detect_meal_spikes(startDate: "YYYY-MM-DD 00:00", endDate: "YYYY-MM-DD 23:59")
 - For "yesterday": use yesterday's date with 00:00–23:59
 - For a specific meal window: narrow the range (e.g. "08:00"–"14:00")
 - The tool handles all detection, deduplication, and logging automatically
