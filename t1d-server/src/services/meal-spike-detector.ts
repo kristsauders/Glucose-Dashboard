@@ -43,6 +43,8 @@ const MAX_DECLINE_PER_MIN   = 0.5;  // mg/dL/min — steeper decline → reject 
 const MIN_RISE_RATE_PER_MIN = 0.5;  // mg/dL/min — slower rise → gradual drift, not a meal
 const NIGHTTIME_START_HOUR  = 0;    // midnight
 const NIGHTTIME_END_HOUR    = 5;    // 5am — no meals detected in this local-hour range
+const DEFAULT_CARB_RATIO    = 1.5;  // mg/dL per gram — fallback when no personal history
+const MIN_CARB_RATIO_MEALS  = 5;    // minimum logged meals required to use personal ratio
 
 // ─── Shared types ─────────────────────────────────────────────────────────────
 
@@ -80,6 +82,61 @@ function localHour(utcDate: Date, timezone: string): number {
   }
 }
 
+// ─── Personal carb ratio ──────────────────────────────────────────────────────
+
+/**
+ * Derives the user's personal mg/dL-per-gram ratio from their logged meal history.
+ *
+ * For each manually-logged meal with carbs > 0, we find the glucose nadir in the
+ * 30 min around meal time and the peak in the 15–120 min after, compute
+ * rise / carbs, and return the median. Falls back to DEFAULT_CARB_RATIO if there
+ * are fewer than MIN_CARB_RATIO_MEALS usable data points.
+ */
+async function getPersonalCarbRatio(userId: string): Promise<number> {
+  const result = await query<{ carbs: number; nadir: number; peak: number }>(
+    `WITH meal_windows AS (
+       SELECT
+         m.carbs,
+         (SELECT MIN(g.glucose)
+            FROM glucose_readings g
+           WHERE g.user_id = m.user_id
+             AND g.timestamp BETWEEN m.timestamp - INTERVAL '30 minutes'
+                                 AND m.timestamp + INTERVAL '30 minutes'
+             AND g.glucose > 0) AS nadir,
+         (SELECT MAX(g.glucose)
+            FROM glucose_readings g
+           WHERE g.user_id = m.user_id
+             AND g.timestamp BETWEEN m.timestamp + INTERVAL '15 minutes'
+                                 AND m.timestamp + INTERVAL '120 minutes'
+             AND g.glucose > 0) AS peak
+       FROM meals m
+       WHERE m.user_id   = $1
+         AND m.source   != 'sage_detected'
+         AND m.carbs     > 0
+         AND m.timestamp > NOW() - INTERVAL '90 days'
+     )
+     SELECT carbs, nadir, peak
+     FROM meal_windows
+     WHERE nadir IS NOT NULL AND peak IS NOT NULL AND peak > nadir`,
+    [userId],
+  );
+
+  const ratios = result.rows
+    .map(r => (Number(r.peak) - Number(r.nadir)) / Number(r.carbs))
+    .filter(r => r > 0.1 && r < 10); // discard obvious outliers
+
+  if (ratios.length < MIN_CARB_RATIO_MEALS) return DEFAULT_CARB_RATIO;
+
+  ratios.sort((a, b) => a - b);
+  const mid = Math.floor(ratios.length / 2);
+  const median = ratios.length % 2 === 0
+    ? (ratios[mid - 1] + ratios[mid]) / 2
+    : ratios[mid];
+
+  console.log(`[MealSpike] Personal carb ratio: ${median.toFixed(2)} mg/dL/g (from ${ratios.length} meals)`);
+  return median;
+}
+
 // ─── Core detection logic (stateless) ─────────────────────────────────────────
 
 /**
@@ -88,7 +145,7 @@ function localHour(utcDate: Date, timezone: string): number {
  *
  * @param timezone  IANA timezone string used for the nighttime guard.
  */
-function detectSpikeInWindow(windowReadings: Reading[], timezone: string): DetectedMeal | null {
+function detectSpikeInWindow(windowReadings: Reading[], timezone: string, carbRatio: number): DetectedMeal | null {
   if (windowReadings.length < 4) return null;
 
   const nadirBoundary = Math.max(1, Math.floor(windowReadings.length * 0.6));
@@ -155,7 +212,7 @@ function detectSpikeInWindow(windowReadings: Reading[], timezone: string): Detec
   const hour = localHour(mealTime, timezone);
   if (hour >= NIGHTTIME_START_HOUR && hour < NIGHTTIME_END_HOUR) return null;
 
-  const estCarbs = Math.min(150, Math.round(rise * 3));
+  const estCarbs = Math.min(120, Math.max(5, Math.round(rise / carbRatio)));
   return { nadir, peak, rise, riseStartTs: riseStart, estimatedMealTime: mealTime, estCarbs };
 }
 
@@ -173,18 +230,21 @@ export async function detectMealSpikesInRange(
 ): Promise<DetectedMeal[]> {
   const fetchEnd = new Date(rangeEnd.getTime() + 60 * 60 * 1000);
 
-  const result = await query<{ glucose: number; timestamp: string }>(
-    `SELECT glucose, timestamp
-     FROM glucose_readings
-     WHERE user_id = $1
-       AND timestamp >= $2
-       AND timestamp <= $3
-       AND glucose > 0
-     ORDER BY timestamp ASC`,
-    [userId, rangeStart.toISOString(), fetchEnd.toISOString()],
-  );
+  const [readingResult, carbRatio] = await Promise.all([
+    query<{ glucose: number; timestamp: string }>(
+      `SELECT glucose, timestamp
+       FROM glucose_readings
+       WHERE user_id = $1
+         AND timestamp >= $2
+         AND timestamp <= $3
+         AND glucose > 0
+       ORDER BY timestamp ASC`,
+      [userId, rangeStart.toISOString(), fetchEnd.toISOString()],
+    ),
+    getPersonalCarbRatio(userId),
+  ]);
 
-  const readings: Reading[] = result.rows.map(r => ({
+  const readings: Reading[] = readingResult.rows.map(r => ({
     glucose: Number(r.glucose),
     ts: new Date(r.timestamp),
   }));
@@ -202,7 +262,7 @@ export async function detectMealSpikesInRange(
     }
     const windowReadings = readings.slice(scanIdx, windowEnd2);
 
-    const spike = detectSpikeInWindow(windowReadings, timezone);
+    const spike = detectSpikeInWindow(windowReadings, timezone, carbRatio);
 
     if (spike) {
       detected.push(spike);
