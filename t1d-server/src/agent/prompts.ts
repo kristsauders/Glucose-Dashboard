@@ -266,6 +266,29 @@ To convert local → UTC for timestamps:
 # REFERENCE SECTIONS - Consult When Needed
 # ═══════════════════════════════════════════════════════════
 
+## [MEAL AUTO-DETECTION] - Consult when user asks to detect or auto-log missed meals
+
+**ALWAYS use `detect_meal_spikes` for these requests — do NOT use SQL or Python:**
+- "detect my meals yesterday" / "auto-detect meals for [date]"
+- "I forgot to log my meals" / "log my missed meals"
+- "find all my meals last [day/week]"
+- Any request to retroactively detect or auto-log meals from glucose data
+
+**How to use:**
+\`\`\`
+detect_meal_spikes(startDate: "YYYY-MM-DD 00:00", endDate: "YYYY-MM-DD 23:59")
+\`\`\`
+- For "yesterday": use yesterday's date with 00:00–23:59
+- For a specific meal window: narrow the range (e.g. "08:00"–"14:00")
+- The tool handles all detection, deduplication, and logging automatically
+
+**After calling:**
+- Tell the user how many meals were detected and their estimated times/carbs
+- Note that carb estimates are rough (rise × 3g) and should be reviewed in the History tab
+- Entries appear with a "SAGE" badge and can be edited or deleted
+
+---
+
 ## [PATTERN DETECTION] - Consult when analyzing patterns
 
 **Available Tools:**

@@ -22,6 +22,7 @@ import { researchMonitor } from '../services/research-monitor.js';
 import { ReportGenerator } from '../services/report-generator.js';
 import { executeSafeReadOnlyQuery } from '../utils/safe-sql-executor.js';
 import { executePython } from '../services/python-executor.js';
+import { detectAndLogMealSpikesInRange } from '../services/meal-spike-detector.js';
 
 // Helper to construct API URL using the correct port
 const getApiUrl = () => `http://localhost:${env.PORT}`;
@@ -4323,6 +4324,83 @@ To get ALL analysis types at once, call without specifying analysisType.`,
   },
 });
 
+const detectMealSpikesTool = new DynamicStructuredTool({
+  name: 'detect_meal_spikes',
+  description: `Scan a time range for glucose spikes consistent with eating and auto-log any that are not already logged.
+Use this when the user asks Sage to detect, find, or auto-log missed meals for a past period (e.g. "detect my meals yesterday", "auto-log meals for last Tuesday").
+The tool uses the same spike-detection algorithm as the real-time poller:
+  - Identifies significant glucose rises (≥25 mg/dL) over rolling 2-hour windows
+  - Finds the actual slope onset (not just the peak) to estimate meal start time
+  - Estimates carbs from rise magnitude (rise × 3g, max 150g)
+  - Skips any window already covered by an existing meal log
+Returns a list of detected meals including time, estimated carbs, rise magnitude, and whether they were newly logged or already existed.`,
+  schema: z.object({
+    userId: z.string().optional().describe('User ID (automatically provided)'),
+    timezone: z.string().optional().describe('User timezone (automatically provided)'),
+    startDate: z.string().describe('Start of range to scan. Format: "YYYY-MM-DD" for a whole day, or "YYYY-MM-DD HH:MM" for a specific time. Interpreted in the user\'s local timezone.'),
+    endDate: z.string().describe('End of range to scan. Same format as startDate. Use end-of-day (23:59) to scan a full day.'),
+  }),
+  func: async ({ userId, timezone, startDate, endDate }) => {
+    try {
+      const tz = timezone || 'America/New_York';
+
+      // Parse local date strings to UTC via PostgreSQL AT TIME ZONE
+      const parseLocal = async (localStr: string): Promise<Date> => {
+        // Normalise: if only a date, append midnight
+        const ts = localStr.includes('T') || localStr.includes(' ') ? localStr : `${localStr} 00:00`;
+        const clean = ts.replace('T', ' ').substring(0, 16); // "YYYY-MM-DD HH:MM"
+        const result = await query(
+          `SELECT ($2::timestamp AT TIME ZONE $1) AS utc`,
+          [tz, clean],
+        );
+        return new Date(result.rows[0].utc);
+      };
+
+      const [start, end] = await Promise.all([parseLocal(startDate), parseLocal(endDate)]);
+
+      console.log(`[detect_meal_spikes] Scanning ${start.toISOString()} → ${end.toISOString()} for user ${userId}`);
+
+      const summary = await detectAndLogMealSpikesInRange(userId!, start, end);
+
+      if (summary.length === 0) {
+        return JSON.stringify({
+          success: true,
+          detected: 0,
+          logged: 0,
+          message: 'No significant glucose spikes (≥25 mg/dL) were found in this time range.',
+        });
+      }
+
+      const newlyLogged = summary.filter(s => !s.alreadyExisted);
+      const alreadyHad  = summary.filter(s =>  s.alreadyExisted);
+
+      const meals = summary.map(s => ({
+        estimatedMealTime: s.mealTime.toISOString(),
+        estimatedCarbs: s.estCarbs,
+        glucoseRise: Math.round(s.rise),
+        status: s.alreadyExisted ? 'already_logged' : 'newly_logged',
+      }));
+
+      return JSON.stringify({
+        success: true,
+        detected: summary.length,
+        logged: newlyLogged.length,
+        alreadyExisted: alreadyHad.length,
+        meals,
+        message: newlyLogged.length > 0
+          ? `Detected ${summary.length} meal spike(s). Logged ${newlyLogged.length} new entries (marked as Sage detected). ${alreadyHad.length > 0 ? `${alreadyHad.length} were already logged.` : ''} Carb estimates are rough (rise × 3g) — the user should review and correct them in the History tab.`
+          : `Detected ${summary.length} spike(s) but all were already covered by existing meal logs.`,
+      });
+    } catch (error) {
+      console.error('[detect_meal_spikes] Error:', error);
+      return JSON.stringify({
+        success: false,
+        error: error instanceof Error ? error.message : 'Unknown error',
+      });
+    }
+  },
+});
+
 export const allTools = [
   // Glucose analysis tools
   getRecentGlucoseTool,
@@ -4343,6 +4421,7 @@ export const allTools = [
   updateMealTool,
   deleteMealTool,
   getMealHistoryTool,
+  detectMealSpikesTool,
 
   // Exercise logging tools
   logExerciseTool,
