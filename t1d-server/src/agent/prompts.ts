@@ -275,9 +275,11 @@ To convert local → UTC for timestamps:
 - Any request to retroactively detect or auto-log meals from glucose data
 
 **How to use:**
-  detect_meal_spikes(startDate: "YYYY-MM-DD 00:00", endDate: "YYYY-MM-DD 23:59")
-- For "yesterday": use yesterday's date with 00:00–23:59
-- For a specific meal window: narrow the range (e.g. "08:00"–"14:00")
+  detect_meal_spikes(startDate: "yesterday", endDate: "yesterday")
+- For "yesterday": pass the literal string "yesterday" for both — server computes correct date
+- For "today": pass "today" for both
+- For a specific past date: pass "YYYY-MM-DD" (server fills in 00:00/23:59 automatically)
+- Do NOT compute dates yourself — always use "yesterday", "today", or an explicit YYYY-MM-DD
 - The tool handles all detection, deduplication, and logging automatically
 
 **After calling:**

@@ -4337,18 +4337,41 @@ Returns a list of detected meals including time, estimated carbs, rise magnitude
   schema: z.object({
     userId: z.string().optional().describe('User ID (automatically provided)'),
     timezone: z.string().optional().describe('User timezone (automatically provided)'),
-    startDate: z.string().describe('Start of range to scan. Format: "YYYY-MM-DD" for a whole day, or "YYYY-MM-DD HH:MM" for a specific time. Interpreted in the user\'s local timezone.'),
-    endDate: z.string().describe('End of range to scan. Same format as startDate. Use end-of-day (23:59) to scan a full day.'),
+    startDate: z.string().describe('Start of range to scan. Use "yesterday" to scan all of yesterday (server computes the correct date). Or provide "YYYY-MM-DD" for a whole day, or "YYYY-MM-DD HH:MM" for a specific time. All times interpreted in the user\'s local timezone. PREFER "yesterday" over computing the date yourself.'),
+    endDate: z.string().describe('End of range to scan. Use "yesterday" to scan all of yesterday. Same format as startDate. Use end-of-day (23:59) to scan a full day.'),
   }),
   func: async ({ userId, timezone, startDate, endDate }) => {
     try {
       const tz = timezone || 'America/New_York';
 
-      // Parse local date strings to UTC via PostgreSQL AT TIME ZONE
-      const parseLocal = async (localStr: string): Promise<Date> => {
-        // Normalise: if only a date, append midnight
-        const ts = localStr.includes('T') || localStr.includes(' ') ? localStr : `${localStr} 00:00`;
-        const clean = ts.replace('T', ' ').substring(0, 16); // "YYYY-MM-DD HH:MM"
+      // Resolve relative keywords server-side using the user's timezone,
+      // then parse explicit date strings via PostgreSQL AT TIME ZONE.
+      const resolveDate = async (input: string, isEnd: boolean): Promise<Date> => {
+        const lower = input.trim().toLowerCase();
+        if (lower === 'yesterday') {
+          // Use PostgreSQL to get yesterday's start/end in the user's timezone
+          const result = await query(
+            `SELECT
+               (DATE_TRUNC('day', NOW() AT TIME ZONE $1) - INTERVAL '1 day') AS day_start,
+               (DATE_TRUNC('day', NOW() AT TIME ZONE $1)) AS day_end
+            `,
+            [tz],
+          );
+          return isEnd ? new Date(result.rows[0].day_end) : new Date(result.rows[0].day_start);
+        }
+        if (lower === 'today') {
+          const result = await query(
+            `SELECT
+               DATE_TRUNC('day', NOW() AT TIME ZONE $1) AS day_start,
+               (DATE_TRUNC('day', NOW() AT TIME ZONE $1) + INTERVAL '1 day') AS day_end
+            `,
+            [tz],
+          );
+          return isEnd ? new Date(result.rows[0].day_end) : new Date(result.rows[0].day_start);
+        }
+        // Explicit date string: normalise and convert from user timezone to UTC
+        const ts    = input.includes('T') || input.includes(' ') ? input : `${input} ${isEnd ? '23:59' : '00:00'}`;
+        const clean = ts.replace('T', ' ').substring(0, 16);
         const result = await query(
           `SELECT ($2::timestamp AT TIME ZONE $1) AS utc`,
           [tz, clean],
@@ -4356,7 +4379,7 @@ Returns a list of detected meals including time, estimated carbs, rise magnitude
         return new Date(result.rows[0].utc);
       };
 
-      const [start, end] = await Promise.all([parseLocal(startDate), parseLocal(endDate)]);
+      const [start, end] = await Promise.all([resolveDate(startDate, false), resolveDate(endDate, true)]);
 
       console.log(`[detect_meal_spikes] Scanning ${start.toISOString()} → ${end.toISOString()} for user ${userId}`);
 
