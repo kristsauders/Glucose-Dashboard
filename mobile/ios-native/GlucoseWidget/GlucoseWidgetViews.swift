@@ -145,9 +145,6 @@ struct GlucoseMiniChart: View {
         // Give the line breathing room above and below, clamped to sensor range
         let yMin = max(40, rawMin - 15)
         let yMax = min(400, rawMax + 15)
-        // X domain: oldest point (negative minutesAgo) to 0 (now)
-        let xMin = -(sorted.first?.minutesAgo ?? 120)
-
         Chart {
             ForEach(sorted.indices, id: \.self) { i in
                 LineMark(
@@ -167,7 +164,7 @@ struct GlucoseMiniChart: View {
                 .lineStyle(StrokeStyle(lineWidth: 0.5, dash: [3, 2]))
                 .foregroundStyle(.orange.opacity(0.35))
         }
-        .chartXScale(domain: xMin...0)
+        .chartXScale(domain: -120...0)
         .chartYScale(domain: yMin...yMax)
         .chartXAxis(.hidden)
         .chartYAxis(.hidden)
