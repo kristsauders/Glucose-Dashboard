@@ -5,30 +5,30 @@
  * eating and auto-logs them to the meals table with source='sage_detected'.
  *
  * Detection logic:
- *   - Look at the last 45 min of readings
- *   - Nadir  = minimum glucose in the oldest 70% of that window
- *   - Peak   = maximum glucose in the newest 30%
- *   - Rise   = peak − nadir
- *   - Meal   : rise ≥ 25 mg/dL
+ *   - Look at the last 2 hours of readings (oldest first)
+ *   - Nadir  = the actual minimum reading in the oldest 60% of the window
+ *   - Peak   = maximum glucose in the newest 40%
+ *   - Rise   = peak − nadir (must be ≥ 25 mg/dL to qualify)
+ *   - Rise start = first point after the nadir where glucose is nadir+5 AND
+ *                  the *next* reading also goes up (two consecutive increases —
+ *                  filters noise, finds the actual slope onset)
+ *   - Meal time  = rise start − 20 min (gastric emptying delay)
  *
- * Deduplication: skip if any meal (user- or sage-logged) exists within 3 hours
- * of the estimated meal start time.
+ * Deduplication: skip if any meal (user- or sage-logged) exists within
+ * ±DEDUP_HOURS of the estimated meal time.
  *
- * Carb estimate (rough, personalises over time as user corrects):
- *   - rise × 3g, capped at 150g
- *
- * Meal time estimate: start of the rise minus 20 min (gastric emptying delay).
+ * Carb estimate: rise × 3g, capped at 150g.
  */
 
 import { query } from '../config/database.js';
 
-const MEAL_RISE_THRESHOLD = 25; // mg/dL
-const WINDOW_MINUTES      = 45; // how far back to look
-const DEDUP_HOURS         = 2;  // ignore window around an existing meal log
+const MEAL_RISE_THRESHOLD = 25;  // mg/dL — minimum rise to qualify
+const WINDOW_MINUTES      = 120; // 2-hour window for reliable slope detection
+const DEDUP_HOURS         = 2;   // suppress duplicate detections within this window
+const RISE_NOISE_MARGIN   = 5;   // mg/dL above nadir before counting as a real rise
 
 export async function detectAndLogMealSpike(userId: string): Promise<void> {
   try {
-    // Fetch the last WINDOW_MINUTES of readings, oldest first
     const windowStart = new Date(Date.now() - WINDOW_MINUTES * 60 * 1000);
     const result = await query<{ glucose: number; timestamp: string }>(
       `SELECT glucose, timestamp
@@ -50,27 +50,46 @@ export async function detectAndLogMealSpike(userId: string): Promise<void> {
       return;
     }
 
-    // Split oldest 70% / newest 30%
-    const splitIdx = Math.max(1, Math.floor(readings.length * 0.7));
-    const older    = readings.slice(0, splitIdx);
-    const newer    = readings.slice(splitIdx);
+    // Nadir: minimum in the oldest 60% (pre-meal baseline)
+    const nadirBoundary = Math.max(1, Math.floor(readings.length * 0.6));
+    const olderReadings = readings.slice(0, nadirBoundary);
+    const nadirIdx = olderReadings.reduce(
+      (minIdx, r, i) => r.glucose < olderReadings[minIdx].glucose ? i : minIdx,
+      0,
+    );
+    const nadirReading = olderReadings[nadirIdx];
+    const nadir = nadirReading.glucose;
 
-    const nadir = Math.min(...older.map(r => r.glucose));
-    const peak  = Math.max(...newer.map(r => r.glucose));
-    const rise  = peak - nadir;
+    // Peak: maximum in the newest 40%
+    const newerReadings = readings.slice(nadirBoundary);
+    const peak = Math.max(...newerReadings.map(r => r.glucose));
+    const rise = peak - nadir;
 
     console.log(`[MealSpike] user=${userId}: nadir=${nadir} peak=${peak} rise=${Math.round(rise)} (threshold=${MEAL_RISE_THRESHOLD})`);
 
-    if (rise < MEAL_RISE_THRESHOLD) return; // no notable spike
+    if (rise < MEAL_RISE_THRESHOLD) return;
 
-    // Estimate when glucose started rising: first newer reading that is
-    // noticeably above nadir (≥ nadir + 8). Fall back to first newer reading.
-    const riseStart = newer.find(r => r.glucose >= nadir + 8) ?? newer[0];
+    // Find rise start: scan forward from nadir for the first reading where
+    // glucose is meaningfully above nadir AND the next reading continues upward.
+    // This identifies the actual slope onset rather than mid-spike or noise.
+    const scanFrom = nadirIdx; // absolute index in readings[]
+    let riseStartTs: Date | null = null;
+    for (let i = scanFrom + 1; i <= readings.length - 2; i++) {
+      const curr = readings[i];
+      const next = readings[i + 1];
+      if (curr.glucose >= nadir + RISE_NOISE_MARGIN && next.glucose > curr.glucose) {
+        riseStartTs = curr.ts;
+        break;
+      }
+    }
 
-    // Meal actually started ~20 min before glucose began rising
-    const estimatedMealTime = new Date(riseStart.ts.getTime() - 20 * 60 * 1000);
+    // Fallback: use the first reading after the nadir if slope detection failed
+    const riseStart = riseStartTs ?? readings[scanFrom + 1]?.ts ?? nadirReading.ts;
 
-    // Deduplication: skip if any meal exists within ±DEDUP_HOURS of estimated time
+    // Meal started ~20 min before glucose began rising (gastric emptying delay)
+    const estimatedMealTime = new Date(riseStart.getTime() - 20 * 60 * 1000);
+
+    // Deduplication
     const dedupFrom = new Date(estimatedMealTime.getTime() - DEDUP_HOURS * 60 * 60 * 1000);
     const dedupTo   = new Date(estimatedMealTime.getTime() + DEDUP_HOURS * 60 * 60 * 1000);
 
@@ -86,9 +105,7 @@ export async function detectAndLogMealSpike(userId: string): Promise<void> {
       return;
     }
 
-    // Estimate carbs
-    const estCarbs = Math.min(150, Math.round(rise * 3));
-
+    const estCarbs  = Math.min(150, Math.round(rise * 3));
     const description = `Sage detected meal (~+${Math.round(rise)} mg/dL rise)`;
 
     await query(
@@ -99,10 +116,10 @@ export async function detectAndLogMealSpike(userId: string): Promise<void> {
 
     console.log(
       `[MealSpike] Auto-logged meal for user ${userId}: ` +
-      `rise=${Math.round(rise)} mg/dL, est. carbs=${estCarbs}g, time=${estimatedMealTime.toISOString()}`,
+      `rise=${Math.round(rise)} mg/dL, est. carbs=${estCarbs}g, ` +
+      `riseStart=${riseStart.toISOString()}, mealTime=${estimatedMealTime.toISOString()}`,
     );
   } catch (err) {
-    // Non-fatal — log and continue
     console.error('[MealSpike] Error during spike detection:', err);
   }
 }
