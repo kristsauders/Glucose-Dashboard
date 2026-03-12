@@ -3,37 +3,45 @@
  *
  * Two entry points:
  *
- *   detectAndLogMealSpike(userId)
- *     Called after every LibreView poll. Checks the last 2 hours for a new spike
- *     and auto-logs it if one is found and not already covered by an existing entry.
+ *   detectAndLogMealSpike(userId, timezone?)
+ *     Called after every LibreView poll. Checks the last 2 hours for a new spike.
  *
- *   detectMealSpikesInRange(userId, rangeStart, rangeEnd)
+ *   detectMealSpikesInRange(userId, rangeStart, rangeEnd, timezone?)
  *     Scans an arbitrary time range for ALL meal spikes. Returns detected spikes
  *     without writing anything — callers decide whether to persist them.
  *
- *   detectAndLogMealSpikesInRange(userId, rangeStart, rangeEnd)
- *     Batch version: detects all spikes in a range, cross-checks against existing
- *     meal logs, and inserts any new ones with source='sage_detected'. Returns a
- *     summary for display in the Sage agent.
+ *   detectAndLogMealSpikesInRange(userId, rangeStart, rangeEnd, timezone?)
+ *     Batch version: detects all spikes, cross-checks existing logs, inserts new
+ *     ones as source='sage_detected'. Returns a summary for the Sage agent.
  *
- * Detection logic (shared):
- *   - For each 2-hour window: split oldest 60% / newest 40%
- *   - Nadir = actual minimum reading in the older portion (tracks the timestamp too)
- *   - Peak  = maximum in the newer portion
- *   - Rise  = peak − nadir (must be ≥ 25 mg/dL)
- *   - Rise start = first point after nadir where glucose > nadir + 5 AND the next
- *                  reading also goes up (two-point slope confirmation)
- *   - Meal time  = rise start − 20 min (gastric emptying delay)
+ * Detection logic:
+ *   1. Split window into oldest 60% (nadir zone) / newest 40% (peak zone)
+ *   2. Nadir  = actual minimum reading in the older portion
+ *   3. STABILITY CHECK: if glucose was declining faster than 0.5 mg/dL/min into
+ *      the nadir (i.e. the nadir is at the bottom of a downward trend, not a
+ *      stable pre-meal baseline), the spike is rejected. This filters overnight
+ *      glucose declines and dawn-phenomenon false positives.
+ *   4. Peak   = maximum in the newer portion
+ *   5. Rise   = peak − nadir (must be ≥ 25 mg/dL)
+ *   6. Rise start = first point after nadir where glucose > nadir + 5 AND the next
+ *                   reading also goes up (two-point slope confirmation)
+ *   7. Meal time  = rise start − 20 min (gastric emptying delay)
+ *   8. NIGHTTIME GUARD: estimated meal times between midnight and 5am local time
+ *      are rejected (glucose can naturally rise during these hours; people rarely
+ *      eat then and the false-positive rate is high).
  *
  * Carb estimate: rise × 3g, capped at 150g.
  */
 
 import { query } from '../config/database.js';
 
-const MEAL_RISE_THRESHOLD = 25;  // mg/dL
-const WINDOW_MINUTES      = 120; // 2-hour detection window
-const DEDUP_HOURS         = 2;   // minimum time between separate meal detections
-const RISE_NOISE_MARGIN   = 5;   // mg/dL above nadir before counting as a real rise
+const MEAL_RISE_THRESHOLD   = 25;   // mg/dL minimum qualifying rise
+const WINDOW_MINUTES        = 120;  // 2-hour detection window
+const DEDUP_HOURS           = 2;    // minimum time between separate meal detections
+const RISE_NOISE_MARGIN     = 5;    // mg/dL above nadir before counting as real rise
+const MAX_DECLINE_PER_MIN   = 0.5;  // mg/dL/min — steeper decline → reject as baseline
+const NIGHTTIME_START_HOUR  = 0;    // midnight
+const NIGHTTIME_END_HOUR    = 5;    // 5am — no meals detected in this local-hour range
 
 // ─── Shared types ─────────────────────────────────────────────────────────────
 
@@ -51,13 +59,35 @@ interface Reading {
   ts: Date;
 }
 
+// ─── Helpers ──────────────────────────────────────────────────────────────────
+
+/**
+ * Returns the local hour (0-23) for a UTC Date in the given IANA timezone.
+ * Falls back to UTC if the timezone is unrecognised.
+ */
+function localHour(utcDate: Date, timezone: string): number {
+  try {
+    const parts = new Intl.DateTimeFormat('en-US', {
+      timeZone: timezone,
+      hour: 'numeric',
+      hour12: false,
+    }).formatToParts(utcDate);
+    const h = parts.find(p => p.type === 'hour');
+    return h ? parseInt(h.value, 10) % 24 : utcDate.getUTCHours();
+  } catch {
+    return utcDate.getUTCHours();
+  }
+}
+
 // ─── Core detection logic (stateless) ─────────────────────────────────────────
 
 /**
  * Given a sorted (oldest→newest) array of readings, finds the meal spike if any.
  * Returns null if no qualifying spike is found.
+ *
+ * @param timezone  IANA timezone string used for the nighttime guard.
  */
-function detectSpikeInWindow(windowReadings: Reading[]): DetectedMeal | null {
+function detectSpikeInWindow(windowReadings: Reading[], timezone: string): DetectedMeal | null {
   if (windowReadings.length < 4) return null;
 
   const nadirBoundary = Math.max(1, Math.floor(windowReadings.length * 0.6));
@@ -70,18 +100,34 @@ function detectSpikeInWindow(windowReadings: Reading[]): DetectedMeal | null {
   );
   const nadirReading = older[nadirIdx];
   const nadir = nadirReading.glucose;
+
+  // ── Stability check ────────────────────────────────────────────────────────
+  // Require that glucose was NOT in a steep decline approaching the nadir.
+  // If glucose fell faster than MAX_DECLINE_PER_MIN before the nadir, this is
+  // likely an overnight decline, correction, or recovery — not a pre-meal baseline.
+  if (nadirIdx > 0) {
+    const preNadir = older.slice(0, nadirIdx);
+    if (preNadir.length >= 2) {
+      const firstG    = preNadir[0].glucose;
+      const lastG     = preNadir[preNadir.length - 1].glucose;
+      const spanMin   = (preNadir[preNadir.length - 1].ts.getTime() - preNadir[0].ts.getTime()) / 60000;
+      if (spanMin > 0) {
+        const slopePerMin = (lastG - firstG) / spanMin; // negative = declining
+        if (slopePerMin < -MAX_DECLINE_PER_MIN) return null; // steep decline → reject
+      }
+    }
+  }
+
   const peak = Math.max(...newer.map(r => r.glucose));
   const rise = peak - nadir;
 
   if (rise < MEAL_RISE_THRESHOLD) return null;
 
-  // Find the actual rise start: first reading above nadir+NOISE that is
-  // followed by another increasing reading (two-point slope confirmation).
-  // Scan forward from the nadir's position in the full window array.
-  const nadirAbsoluteIdx = nadirIdx; // index within `older`, same as `windowReadings`
+  // ── Rise-start detection ──────────────────────────────────────────────────
+  // First reading after nadir that is above nadir+NOISE and is followed by
+  // another increase (two-point slope confirmation).
   let riseStartTs: Date | null = null;
-
-  for (let i = nadirAbsoluteIdx + 1; i <= windowReadings.length - 2; i++) {
+  for (let i = nadirIdx + 1; i <= windowReadings.length - 2; i++) {
     const curr = windowReadings[i];
     const next = windowReadings[i + 1];
     if (curr.glucose >= nadir + RISE_NOISE_MARGIN && next.glucose > curr.glucose) {
@@ -90,10 +136,16 @@ function detectSpikeInWindow(windowReadings: Reading[]): DetectedMeal | null {
     }
   }
 
-  const riseStart   = riseStartTs ?? windowReadings[nadirAbsoluteIdx + 1]?.ts ?? nadirReading.ts;
-  const mealTime    = new Date(riseStart.getTime() - 20 * 60 * 1000);
-  const estCarbs    = Math.min(150, Math.round(rise * 3));
+  const riseStart  = riseStartTs ?? windowReadings[nadirIdx + 1]?.ts ?? nadirReading.ts;
+  const mealTime   = new Date(riseStart.getTime() - 20 * 60 * 1000);
 
+  // ── Nighttime guard ───────────────────────────────────────────────────────
+  // Reject detections where the estimated meal time falls between midnight and
+  // 5am in the user's local timezone (high false-positive zone).
+  const hour = localHour(mealTime, timezone);
+  if (hour >= NIGHTTIME_START_HOUR && hour < NIGHTTIME_END_HOUR) return null;
+
+  const estCarbs = Math.min(150, Math.round(rise * 3));
   return { nadir, peak, rise, riseStartTs: riseStart, estimatedMealTime: mealTime, estCarbs };
 }
 
@@ -101,16 +153,14 @@ function detectSpikeInWindow(windowReadings: Reading[]): DetectedMeal | null {
 
 /**
  * Scan [rangeStart, rangeEnd] for all meal spikes.
- * Slides a 2-hour detection window forward; when a spike is found the cursor
- * jumps past DEDUP_HOURS to avoid re-detecting the same spike.
  * Does NOT write to the database.
  */
 export async function detectMealSpikesInRange(
   userId: string,
   rangeStart: Date,
   rangeEnd: Date,
+  timezone = 'America/New_York',
 ): Promise<DetectedMeal[]> {
-  // Fetch +1h past rangeEnd so a spike that starts at the boundary is fully captured
   const fetchEnd = new Date(rangeEnd.getTime() + 60 * 60 * 1000);
 
   const result = await query<{ glucose: number; timestamp: string }>(
@@ -136,18 +186,16 @@ export async function detectMealSpikesInRange(
     const windowStart = readings[scanIdx].ts;
     const windowEnd   = new Date(windowStart.getTime() + WINDOW_MINUTES * 60 * 1000);
 
-    // Build the 2-hour window from scanIdx onward
     let windowEnd2 = scanIdx;
     while (windowEnd2 < readings.length && readings[windowEnd2].ts <= windowEnd) {
       windowEnd2++;
     }
     const windowReadings = readings.slice(scanIdx, windowEnd2);
 
-    const spike = detectSpikeInWindow(windowReadings);
+    const spike = detectSpikeInWindow(windowReadings, timezone);
 
     if (spike) {
       detected.push(spike);
-      // Jump the cursor past DEDUP_HOURS from spike onset to avoid re-detecting
       const skipUntil = new Date(spike.riseStartTs.getTime() + DEDUP_HOURS * 60 * 60 * 1000);
       while (scanIdx < readings.length && readings[scanIdx].ts < skipUntil) {
         scanIdx++;
@@ -161,16 +209,16 @@ export async function detectMealSpikesInRange(
 }
 
 /**
- * Detect all meal spikes in [rangeStart, rangeEnd], cross-check against existing
- * meal logs, and insert new ones as source='sage_detected'.
- * Returns a summary array describing what was logged.
+ * Detect all meal spikes in [rangeStart, rangeEnd], cross-check existing meal
+ * logs, and insert new ones as source='sage_detected'.
  */
 export async function detectAndLogMealSpikesInRange(
   userId: string,
   rangeStart: Date,
   rangeEnd: Date,
+  timezone = 'America/New_York',
 ): Promise<Array<{ mealTime: Date; estCarbs: number; rise: number; alreadyExisted: boolean }>> {
-  const spikes = await detectMealSpikesInRange(userId, rangeStart, rangeEnd);
+  const spikes  = await detectMealSpikesInRange(userId, rangeStart, rangeEnd, timezone);
   const summary: Array<{ mealTime: Date; estCarbs: number; rise: number; alreadyExisted: boolean }> = [];
 
   for (const spike of spikes) {
@@ -209,11 +257,18 @@ export async function detectAndLogMealSpikesInRange(
  * Real-time entry point: check the last 2 hours for a single new spike.
  * Called after every LibreView poll.
  */
-export async function detectAndLogMealSpike(userId: string): Promise<void> {
+export async function detectAndLogMealSpike(userId: string, timezone?: string): Promise<void> {
   try {
+    // Look up user's timezone from DB if not provided
+    let tz = timezone;
+    if (!tz) {
+      const tzResult = await query<{ timezone: string }>(`SELECT timezone FROM users WHERE id = $1`, [userId]);
+      tz = tzResult.rows[0]?.timezone || 'America/New_York';
+    }
+
     const rangeEnd   = new Date();
     const rangeStart = new Date(rangeEnd.getTime() - WINDOW_MINUTES * 60 * 1000);
-    const summary    = await detectAndLogMealSpikesInRange(userId, rangeStart, rangeEnd);
+    const summary    = await detectAndLogMealSpikesInRange(userId, rangeStart, rangeEnd, tz);
 
     for (const s of summary) {
       if (!s.alreadyExisted) {
@@ -221,9 +276,7 @@ export async function detectAndLogMealSpike(userId: string): Promise<void> {
       }
     }
 
-    // Emit the diagnostic line (nadir/peak) only when no spike found, to keep logs useful
     if (summary.length === 0) {
-      // Re-run the window purely for the debug log (no DB write)
       const result = await query<{ glucose: number; timestamp: string }>(
         `SELECT glucose, timestamp FROM glucose_readings
          WHERE user_id = $1 AND timestamp >= $2 AND glucose > 0 ORDER BY timestamp ASC`,
