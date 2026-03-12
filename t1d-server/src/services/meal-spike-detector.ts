@@ -45,7 +45,10 @@ export async function detectAndLogMealSpike(userId: string): Promise<void> {
       ts: new Date(r.timestamp),
     }));
 
-    if (readings.length < 4) return; // not enough data
+    if (readings.length < 4) {
+      console.log(`[MealSpike] user=${userId}: only ${readings.length} readings in last ${WINDOW_MINUTES}min — skipping`);
+      return;
+    }
 
     // Split oldest 70% / newest 30%
     const splitIdx = Math.max(1, Math.floor(readings.length * 0.7));
@@ -55,6 +58,8 @@ export async function detectAndLogMealSpike(userId: string): Promise<void> {
     const nadir = Math.min(...older.map(r => r.glucose));
     const peak  = Math.max(...newer.map(r => r.glucose));
     const rise  = peak - nadir;
+
+    console.log(`[MealSpike] user=${userId}: nadir=${nadir} peak=${peak} rise=${Math.round(rise)} (threshold=${MEAL_RISE_THRESHOLD})`);
 
     if (rise < MEAL_RISE_THRESHOLD) return; // no notable spike
 
@@ -76,7 +81,10 @@ export async function detectAndLogMealSpike(userId: string): Promise<void> {
       [userId, dedupFrom.toISOString(), dedupTo.toISOString()],
     );
 
-    if (existing.rows.length > 0) return; // already logged in this window
+    if (existing.rows.length > 0) {
+      console.log(`[MealSpike] user=${userId}: spike detected but meal already logged within ${DEDUP_HOURS}h — skipping`);
+      return;
+    }
 
     // Estimate carbs
     const estCarbs = Math.min(150, Math.round(rise * 3));
