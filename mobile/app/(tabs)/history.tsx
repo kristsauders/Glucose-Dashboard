@@ -95,19 +95,32 @@ function DeleteButton({ onPress }: { onPress: () => void }) {
 
 function MealItem({ item, onDelete }: { item: MealLog; onDelete: () => void }) {
   const Colors = useColors();
+  const isSage = item.source === 'sage_detected';
   return (
     <View style={{
       backgroundColor: Colors.card,
       borderRadius: 12,
       borderWidth: 1,
-      borderColor: Colors.cardBorder,
+      borderColor: isSage ? Colors.warning + '66' : Colors.cardBorder,
       padding: 14,
       gap: 6,
     }}>
       <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' }}>
-        <Text style={{ flex: 1, fontSize: 15, fontWeight: '600', color: Colors.foreground }} numberOfLines={1}>
-          {item.description || 'Meal'}
-        </Text>
+        <View style={{ flex: 1, flexDirection: 'row', alignItems: 'center', gap: 6, minWidth: 0 }}>
+          <Text style={{ fontSize: 15, fontWeight: '600', color: Colors.foreground, flexShrink: 1 }} numberOfLines={1}>
+            {item.description || 'Meal'}
+          </Text>
+          {isSage && (
+            <View style={{
+              backgroundColor: Colors.warning + '22',
+              borderRadius: 6,
+              paddingHorizontal: 6,
+              paddingVertical: 2,
+            }}>
+              <Text style={{ fontSize: 10, fontWeight: '700', color: Colors.warning }}>SAGE</Text>
+            </View>
+          )}
+        </View>
         <Text style={{ fontSize: 15, fontWeight: '700', color: Colors.primary, marginLeft: 8 }}>{item.carbs}g</Text>
       </View>
       <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' }}>
