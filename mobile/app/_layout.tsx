@@ -8,6 +8,7 @@ import { useFonts } from 'expo-font';
 import { useAuthProvider, AuthContext } from '../hooks/useAuth';
 import { registerForPushNotifications, registerNotificationCategories } from '../services/notifications';
 import { confirmMeal, dismissMeal, logInsulinForMeal } from '../services/api';
+import LoadingScreen from '../components/LoadingScreen';
 
 SplashScreen.preventAutoHideAsync();
 
@@ -117,6 +118,8 @@ function AuthGuard({ children }: { children: React.ReactNode }) {
     return () => sub.remove();
   }, [auth.isReady, auth.isAuthenticated]);
 
+  if (!auth.isReady) return <LoadingScreen />;
+
   return <AuthContext.Provider value={auth}>{children}</AuthContext.Provider>;
 }
 
@@ -125,8 +128,7 @@ export default function RootLayout() {
     TiemposText: require('../assets/fonts/TestTiemposText-Regular.otf'),
   });
 
-  // Keep splash visible until both auth and fonts are ready (AuthGuard handles hiding)
-  if (!fontsLoaded) return null;
+  if (!fontsLoaded) return <LoadingScreen />;
 
   return (
     <SafeAreaProvider>
