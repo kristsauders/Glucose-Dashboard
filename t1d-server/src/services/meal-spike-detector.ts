@@ -311,8 +311,8 @@ async function sendMealDetectionNotification(
   const timeStr = formatLocalTime(spike.estimatedMealTime, tz);
 
   await pushNotificationService.sendToUser(userId, {
-    title: 'Meal detected',
-    body: `~${timeStr} · ~${spike.estCarbs}g carbs · +${Math.round(spike.rise)} mg/dL rise`,
+    title: 'Looks like you just ate 🍽️',
+    body: `I caught a meal around ${timeStr} — estimating ~${spike.estCarbs}g carbs. Tap to confirm or adjust.`,
     categoryIdentifier: 'MEAL_DETECTED',
     data: {
       type: 'meal_detected',
@@ -356,11 +356,28 @@ export async function checkAndSendInsulinFollowUps(userId: string): Promise<void
   );
 
   for (const meal of due.rows) {
+    // Skip the follow-up if insulin was already logged near this meal time
+    const alreadyDosed = await query(
+      `SELECT id FROM insulin_doses
+       WHERE user_id = $1
+         AND insulin_type IN ('bolus', 'correction')
+         AND timestamp BETWEEN $2::timestamptz - INTERVAL '45 minutes'
+                            AND $2::timestamptz + INTERVAL '90 minutes'
+       LIMIT 1`,
+      [userId, meal.timestamp],
+    );
+
+    if (alreadyDosed.rows.length > 0) {
+      await query(`UPDATE meals SET insulin_followup_sent_at = NOW() WHERE id = $1`, [meal.id]);
+      console.log(`[MealSpike] Insulin already logged for meal ${meal.id}, skipping follow-up`);
+      continue;
+    }
+
     const timeStr = formatLocalTime(new Date(meal.timestamp), tz);
 
     await pushNotificationService.sendToUser(userId, {
-      title: 'Did you take insulin?',
-      body: `For your ~${timeStr} meal (~${meal.carbs}g carbs)`,
+      title: 'Don\'t forget your insulin 💉',
+      body: `Did you dose for the ~${timeStr} meal? Tap to log it quickly.`,
       categoryIdentifier: 'INSULIN_FOLLOWUP',
       data: {
         type: 'insulin_followup',
@@ -370,11 +387,7 @@ export async function checkAndSendInsulinFollowUps(userId: string): Promise<void
       },
     });
 
-    await query(
-      `UPDATE meals SET insulin_followup_sent_at = NOW() WHERE id = $1`,
-      [meal.id],
-    );
-
+    await query(`UPDATE meals SET insulin_followup_sent_at = NOW() WHERE id = $1`, [meal.id]);
     console.log(`[MealSpike] Insulin follow-up notification sent for meal ${meal.id}`);
   }
 }

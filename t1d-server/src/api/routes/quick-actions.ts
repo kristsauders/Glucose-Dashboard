@@ -63,15 +63,32 @@ router.post('/log', authMiddleware, async (req: AuthRequest, res) => {
     let message;
 
     switch (type) {
-      case 'insulin':
+      case 'insulin': {
+        // Dedup: skip if a bolus/correction already exists within ±45 min of this timestamp
+        const insulinType = data.insulinType as string;
+        if (insulinType === 'bolus' || insulinType === 'correction') {
+          const existing = await query(
+            `SELECT id FROM insulin_doses
+             WHERE user_id = $1
+               AND insulin_type IN ('bolus', 'correction')
+               AND timestamp BETWEEN $2::timestamptz - INTERVAL '45 minutes'
+                                 AND $2::timestamptz + INTERVAL '45 minutes'
+             LIMIT 1`,
+            [userId, logTimestamp],
+          );
+          if (existing.rows.length > 0) {
+            return res.json({ success: true, skipped: true, reason: 'already_logged', id: existing.rows[0].id, message: 'Insulin already logged for this time window' });
+          }
+        }
         result = await query(
           `INSERT INTO insulin_doses (user_id, insulin_type, units, purpose, timestamp)
            VALUES ($1, $2, $3, $4, $5)
            RETURNING id`,
-          [userId, data.insulinType, data.units, data.purpose || 'meal', logTimestamp]
+          [userId, insulinType, data.units, data.purpose || 'meal', logTimestamp]
         );
-        message = `Logged ${data.units}u ${data.insulinType}`;
+        message = `Logged ${data.units}u ${insulinType}`;
         break;
+      }
 
       case 'meal':
         // Determine meal type from timestamp if not provided

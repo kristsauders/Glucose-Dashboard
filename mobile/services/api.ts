@@ -105,6 +105,13 @@ export function getRecentInsulinDoses() {
   return request<{ doses: number[] }>('/logs/recent-insulin-doses');
 }
 
+export function logInsulinForMeal(mealId: string, units: number) {
+  return request<{ success: boolean; skipped: boolean; reason?: string }>(`/logs/meals/${mealId}/log-insulin`, {
+    method: 'POST',
+    body: JSON.stringify({ units }),
+  });
+}
+
 export function deleteMeal(id: string) {
   return request<{ success: boolean }>(`/logs/meals/${id}`, { method: 'DELETE' });
 }

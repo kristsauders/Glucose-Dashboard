@@ -12,7 +12,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { useQueryClient } from '@tanstack/react-query';
 import { format } from 'date-fns';
-import { getMeal, confirmMeal, dismissMeal, quickLog, getRecentInsulinDoses } from '../../services/api';
+import { getMeal, confirmMeal, dismissMeal, logInsulinForMeal, getRecentInsulinDoses } from '../../services/api';
 import { useColors } from '../../constants/colors';
 
 export default function MealConfirmScreen() {
@@ -63,7 +63,7 @@ export default function MealConfirmScreen() {
 
       const units = parseFloat(insulinUnits);
       if (!isNaN(units) && units > 0) {
-        await quickLog('insulin', { units, type: 'bolus', purpose: 'meal' }, timestamp);
+        await logInsulinForMeal(mealId, units);
       }
 
       queryClient.invalidateQueries({ queryKey: ['logs'] });

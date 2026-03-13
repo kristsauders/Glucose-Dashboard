@@ -253,6 +253,57 @@ router.get('/recent-insulin-doses', async (req, res, next) => {
   }
 });
 
+// POST /api/logs/meals/:id/log-insulin
+// Logs a bolus dose for a detected meal with dedup: if a bolus/correction already
+// exists within 45 min before to 90 min after the meal timestamp, it is NOT
+// double-logged. Returns { success, skipped, reason? }.
+router.post('/meals/:id/log-insulin', async (req, res, next) => {
+  try {
+    const authReq = req as AuthRequest;
+    const { id } = req.params;
+    const { units } = req.body;
+
+    if (!units || isNaN(Number(units)) || Number(units) <= 0) {
+      return res.status(400).json({ error: 'Invalid units' });
+    }
+
+    // Fetch the meal to get its timestamp (and verify ownership)
+    const mealResult = await query<{ timestamp: string }>(
+      `SELECT timestamp FROM meals WHERE id = $1 AND user_id = $2`,
+      [id, authReq.user!.id],
+    );
+    if (mealResult.rows.length === 0) {
+      return res.status(404).json({ error: 'Meal not found' });
+    }
+    const mealTime = mealResult.rows[0].timestamp;
+
+    // Dedup: any bolus/correction within the window already logged?
+    const existing = await query(
+      `SELECT id FROM insulin_doses
+       WHERE user_id = $1
+         AND insulin_type IN ('bolus', 'correction')
+         AND timestamp BETWEEN $2::timestamptz - INTERVAL '45 minutes'
+                            AND $2::timestamptz + INTERVAL '90 minutes'
+       LIMIT 1`,
+      [authReq.user!.id, mealTime],
+    );
+
+    if (existing.rows.length > 0) {
+      return res.json({ success: true, skipped: true, reason: 'already_logged' });
+    }
+
+    await query(
+      `INSERT INTO insulin_doses (user_id, timestamp, insulin_type, units, purpose, source)
+       VALUES ($1, $2, 'bolus', $3, 'meal', 'sage_detected')`,
+      [authReq.user!.id, mealTime, Number(units)],
+    );
+
+    res.json({ success: true, skipped: false });
+  } catch (error) {
+    next(error);
+  }
+});
+
 // PUT /api/logs/meals/:id - Update a meal
 router.put('/meals/:id', async (req, res, next) => {
   try {

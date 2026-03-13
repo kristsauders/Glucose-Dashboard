@@ -7,7 +7,7 @@ import * as Notifications from 'expo-notifications';
 import { useFonts } from 'expo-font';
 import { useAuthProvider, AuthContext } from '../hooks/useAuth';
 import { registerForPushNotifications, registerNotificationCategories } from '../services/notifications';
-import { confirmMeal, dismissMeal, quickLog } from '../services/api';
+import { confirmMeal, dismissMeal, logInsulinForMeal } from '../services/api';
 
 SplashScreen.preventAutoHideAsync();
 
@@ -84,9 +84,8 @@ function AuthGuard({ children }: { children: React.ReactNode }) {
         if (actionId === 'LOG_UNITS') {
           const unitsStr = (response as any).userText as string | undefined;
           const units = parseFloat(unitsStr ?? '');
-          if (!isNaN(units) && units > 0) {
-            const ts = data?.mealTime as string | undefined;
-            quickLog('insulin', { units, type: 'bolus', purpose: 'meal' }, ts).catch(console.warn);
+          if (!isNaN(units) && units > 0 && data?.mealId) {
+            logInsulinForMeal(data.mealId as string, units).catch(console.warn);
           }
           return;
         }
