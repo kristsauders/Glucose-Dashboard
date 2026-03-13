@@ -95,13 +95,15 @@ function DeleteButton({ onPress }: { onPress: () => void }) {
 
 function MealItem({ item, onDelete }: { item: MealLog; onDelete: () => void }) {
   const Colors = useColors();
-  const isSage = item.source === 'sage_detected';
+  const isSageUnconfirmed = item.source === 'sage_detected';
+  const isSageConfirmed = item.source === 'sage_confirmed';
+  const isSage = isSageUnconfirmed || isSageConfirmed;
   return (
     <View style={{
       backgroundColor: Colors.card,
       borderRadius: 12,
       borderWidth: 1,
-      borderColor: isSage ? Colors.warning + '66' : Colors.cardBorder,
+      borderColor: isSageUnconfirmed ? Colors.warning + '66' : Colors.cardBorder,
       padding: 14,
       gap: 6,
     }}>
@@ -110,7 +112,7 @@ function MealItem({ item, onDelete }: { item: MealLog; onDelete: () => void }) {
           <Text style={{ fontSize: 15, fontWeight: '600', color: Colors.foreground, flexShrink: 1 }} numberOfLines={1}>
             {item.description || 'Meal'}
           </Text>
-          {isSage && (
+          {isSageUnconfirmed && (
             <View style={{
               backgroundColor: Colors.warning + '22',
               borderRadius: 6,
@@ -118,6 +120,16 @@ function MealItem({ item, onDelete }: { item: MealLog; onDelete: () => void }) {
               paddingVertical: 2,
             }}>
               <Text style={{ fontSize: 10, fontWeight: '700', color: Colors.warning }}>SAGE</Text>
+            </View>
+          )}
+          {isSageConfirmed && (
+            <View style={{
+              backgroundColor: Colors.success + '22',
+              borderRadius: 6,
+              paddingHorizontal: 6,
+              paddingVertical: 2,
+            }}>
+              <Text style={{ fontSize: 10, fontWeight: '700', color: Colors.success }}>✓ SAGE</Text>
             </View>
           )}
         </View>

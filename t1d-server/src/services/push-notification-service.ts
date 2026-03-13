@@ -37,17 +37,13 @@ interface NotificationPayload {
   body: string;
   icon?: string;
   badge?: string;
+  categoryIdentifier?: string;  // iOS notification category (action buttons)
   actions?: Array<{
     action: string;      // Action ID
     title: string;       // Button label (max 20 chars)
     icon?: string;       // Optional icon URL
   }>;
-  data?: {
-    conversationId: string;
-    messageId?: string;   // For action tracking
-    url: string;
-    actions?: ActionButton[];  // Full action definitions for service worker
-  };
+  data?: Record<string, unknown>;
 }
 
 export class PushNotificationService {
@@ -78,7 +74,8 @@ export class PushNotificationService {
               to: subscription.expo_push_token,
               title: payload.title,
               body: payload.body,
-              data: payload.data as Record<string, unknown>,
+              data: payload.data,
+              ...(payload.categoryIdentifier ? { categoryId: payload.categoryIdentifier } : {}),
             }];
             const chunks = expo.chunkPushNotifications(messages);
             const ticketIds: string[] = [];

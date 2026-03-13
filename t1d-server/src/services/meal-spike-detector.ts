@@ -34,6 +34,7 @@
  */
 
 import { query } from '../config/database.js';
+import { pushNotificationService } from './push-notification-service.js';
 
 const MEAL_RISE_THRESHOLD   = 25;   // mg/dL minimum qualifying rise
 const WINDOW_MINUTES        = 120;  // 2-hour detection window
@@ -278,6 +279,106 @@ export async function detectMealSpikesInRange(
   return detected;
 }
 
+// ─── Notification helpers ──────────────────────────────────────────────────────
+
+/**
+ * Format a UTC Date as a short local time string like "7:32 AM".
+ */
+function formatLocalTime(utcDate: Date, timezone: string): string {
+  try {
+    return new Intl.DateTimeFormat('en-US', {
+      timeZone: timezone,
+      hour: 'numeric',
+      minute: '2-digit',
+      hour12: true,
+    }).format(utcDate);
+  } catch {
+    return utcDate.toLocaleTimeString();
+  }
+}
+
+/**
+ * Send the initial meal-detection push notification.
+ * Marks detection_notification_sent_at so the follow-up job can find it later.
+ */
+async function sendMealDetectionNotification(
+  userId: string,
+  mealId: string,
+  spike: DetectedMeal,
+): Promise<void> {
+  const tzResult = await query<{ timezone: string }>(`SELECT timezone FROM users WHERE id = $1`, [userId]);
+  const tz = tzResult.rows[0]?.timezone || 'America/New_York';
+  const timeStr = formatLocalTime(spike.estimatedMealTime, tz);
+
+  await pushNotificationService.sendToUser(userId, {
+    title: 'Meal detected',
+    body: `~${timeStr} · ~${spike.estCarbs}g carbs · +${Math.round(spike.rise)} mg/dL rise`,
+    categoryIdentifier: 'MEAL_DETECTED',
+    data: {
+      type: 'meal_detected',
+      mealId,
+      estCarbs: spike.estCarbs,
+      rise: Math.round(spike.rise),
+      mealTime: spike.estimatedMealTime.toISOString(),
+    },
+  });
+
+  await query(
+    `UPDATE meals SET detection_notification_sent_at = NOW() WHERE id = $1`,
+    [mealId],
+  );
+
+  console.log(`[MealSpike] Detection notification sent for meal ${mealId}`);
+}
+
+/**
+ * Send insulin follow-up notifications for any sage_detected meals that:
+ *   - Had a detection notification sent 25–40 min ago
+ *   - Have not yet had a follow-up sent
+ *   - Have not been dismissed
+ *
+ * Called from the LibreView poller after each successful poll.
+ */
+export async function checkAndSendInsulinFollowUps(userId: string): Promise<void> {
+  const tzResult = await query<{ timezone: string }>(`SELECT timezone FROM users WHERE id = $1`, [userId]);
+  const tz = tzResult.rows[0]?.timezone || 'America/New_York';
+
+  const due = await query<{ id: string; timestamp: string; carbs: number }>(
+    `SELECT id, timestamp, carbs FROM meals
+     WHERE user_id = $1
+       AND source = 'sage_detected'
+       AND dismissed = FALSE
+       AND insulin_followup_sent_at IS NULL
+       AND detection_notification_sent_at IS NOT NULL
+       AND detection_notification_sent_at < NOW() - INTERVAL '25 minutes'
+       AND detection_notification_sent_at > NOW() - INTERVAL '40 minutes'`,
+    [userId],
+  );
+
+  for (const meal of due.rows) {
+    const timeStr = formatLocalTime(new Date(meal.timestamp), tz);
+
+    await pushNotificationService.sendToUser(userId, {
+      title: 'Did you take insulin?',
+      body: `For your ~${timeStr} meal (~${meal.carbs}g carbs)`,
+      categoryIdentifier: 'INSULIN_FOLLOWUP',
+      data: {
+        type: 'insulin_followup',
+        mealId: meal.id,
+        mealTime: meal.timestamp,
+        estCarbs: meal.carbs,
+      },
+    });
+
+    await query(
+      `UPDATE meals SET insulin_followup_sent_at = NOW() WHERE id = $1`,
+      [meal.id],
+    );
+
+    console.log(`[MealSpike] Insulin follow-up notification sent for meal ${meal.id}`);
+  }
+}
+
 /**
  * Detect all meal spikes in [rangeStart, rangeEnd], cross-check existing meal
  * logs, and insert new ones as source='sage_detected'.
@@ -306,15 +407,22 @@ export async function detectAndLogMealSpikesInRange(
     }
 
     const description = `Sage detected meal (~+${Math.round(spike.rise)} mg/dL rise)`;
-    await query(
+    const inserted = await query<{ id: string }>(
       `INSERT INTO meals (user_id, timestamp, description, carbs, source)
-       VALUES ($1, $2, $3, $4, 'sage_detected')`,
+       VALUES ($1, $2, $3, $4, 'sage_detected')
+       RETURNING id`,
       [userId, spike.estimatedMealTime.toISOString(), description, spike.estCarbs],
     );
+    const mealId = inserted.rows[0].id;
 
     console.log(
       `[MealSpike] Batch-logged meal for user ${userId}: ` +
       `rise=${Math.round(spike.rise)} mg/dL, carbs=${spike.estCarbs}g, time=${spike.estimatedMealTime.toISOString()}`,
+    );
+
+    // Send detection notification (best-effort — don't let a push failure block the log)
+    sendMealDetectionNotification(userId, mealId, spike).catch(err =>
+      console.error('[MealSpike] Failed to send detection notification:', err),
     );
 
     summary.push({ mealTime: spike.estimatedMealTime, estCarbs: spike.estCarbs, rise: spike.rise, alreadyExisted: false });

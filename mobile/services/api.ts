@@ -86,6 +86,25 @@ export function getExerciseLogs(start?: string, end?: string, limit = 50) {
   return request<{ exercises: ExerciseLog[]; count: number; hasMore: boolean }>(`/logs/exercise?${p}`);
 }
 
+export function getMeal(id: string) {
+  return request<{ meal: any }>(`/logs/meals/${id}`);
+}
+
+export function confirmMeal(id: string, updates?: { carbs?: number; description?: string; timestamp?: string }) {
+  return request<{ success: boolean; meal: any }>(`/logs/meals/${id}/confirm`, {
+    method: 'POST',
+    body: JSON.stringify(updates ?? {}),
+  });
+}
+
+export function dismissMeal(id: string) {
+  return request<{ success: boolean }>(`/logs/meals/${id}/dismiss`, { method: 'POST' });
+}
+
+export function getRecentInsulinDoses() {
+  return request<{ doses: number[] }>('/logs/recent-insulin-doses');
+}
+
 export function deleteMeal(id: string) {
   return request<{ success: boolean }>(`/logs/meals/${id}`, { method: 'DELETE' });
 }

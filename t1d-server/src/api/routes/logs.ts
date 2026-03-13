@@ -17,6 +17,7 @@ router.get('/meals', async (req, res, next) => {
       SELECT id, timestamp, description, carbs, notes, source
       FROM meals
       WHERE user_id = $1
+        AND dismissed = FALSE
     `;
     const params: any[] = [authReq.user!.id];
     let paramIndex = 2;
@@ -134,6 +135,119 @@ router.get('/insulin', async (req, res, next) => {
       count: result.rows.length,
       hasMore: result.rows.length === parseInt(limit as string),
     });
+  } catch (error) {
+    next(error);
+  }
+});
+
+// GET /api/logs/meals/:id - Fetch a single meal by ID
+router.get('/meals/:id', async (req, res, next) => {
+  try {
+    const authReq = req as AuthRequest;
+    const { id } = req.params;
+
+    const result = await query(
+      `SELECT id, timestamp, description, carbs, notes, source, confirmed_at, dismissed
+       FROM meals WHERE id = $1 AND user_id = $2`,
+      [id, authReq.user!.id],
+    );
+
+    if (result.rows.length === 0) {
+      return res.status(404).json({ error: 'Meal not found' });
+    }
+
+    res.json({ meal: result.rows[0] });
+  } catch (error) {
+    next(error);
+  }
+});
+
+// POST /api/logs/meals/:id/confirm - Mark a sage_detected meal as confirmed
+router.post('/meals/:id/confirm', async (req, res, next) => {
+  try {
+    const authReq = req as AuthRequest;
+    const { id } = req.params;
+    const { carbs, description, timestamp } = req.body;
+
+    const updates: string[] = ['confirmed_at = NOW()', "source = 'sage_confirmed'"];
+    const params: any[] = [];
+    let paramIndex = 1;
+
+    if (carbs !== undefined) {
+      updates.push(`carbs = $${paramIndex}`);
+      params.push(carbs);
+      paramIndex++;
+    }
+    if (description !== undefined) {
+      updates.push(`description = $${paramIndex}`);
+      params.push(description);
+      paramIndex++;
+    }
+    if (timestamp !== undefined) {
+      updates.push(`timestamp = $${paramIndex}`);
+      params.push(timestamp);
+      paramIndex++;
+    }
+
+    const result = await query(
+      `UPDATE meals SET ${updates.join(', ')}
+       WHERE id = $${paramIndex} AND user_id = $${paramIndex + 1}
+       RETURNING id, timestamp, description, carbs, source, confirmed_at`,
+      [...params, id, authReq.user!.id],
+    );
+
+    if (result.rows.length === 0) {
+      return res.status(404).json({ error: 'Meal not found' });
+    }
+
+    res.json({ success: true, meal: result.rows[0] });
+  } catch (error) {
+    next(error);
+  }
+});
+
+// POST /api/logs/meals/:id/dismiss - Mark a sage_detected meal as not a real meal
+router.post('/meals/:id/dismiss', async (req, res, next) => {
+  try {
+    const authReq = req as AuthRequest;
+    const { id } = req.params;
+
+    const result = await query(
+      `UPDATE meals SET dismissed = TRUE
+       WHERE id = $1 AND user_id = $2 AND source IN ('sage_detected', 'sage_confirmed')
+       RETURNING id`,
+      [id, authReq.user!.id],
+    );
+
+    if (result.rows.length === 0) {
+      return res.status(404).json({ error: 'Meal not found or not dismissible' });
+    }
+
+    res.json({ success: true });
+  } catch (error) {
+    next(error);
+  }
+});
+
+// GET /api/logs/recent-insulin-doses - Get recent distinct bolus doses for quick-pick buttons
+router.get('/recent-insulin-doses', async (req, res, next) => {
+  try {
+    const authReq = req as AuthRequest;
+
+    // Return the 5 most common bolus units from the last 30 days
+    const result = await query(
+      `SELECT units, COUNT(*) as frequency
+       FROM insulin_doses
+       WHERE user_id = $1
+         AND insulin_type IN ('bolus', 'correction')
+         AND timestamp > NOW() - INTERVAL '30 days'
+       GROUP BY units
+       ORDER BY frequency DESC, units ASC
+       LIMIT 5`,
+      [authReq.user!.id],
+    );
+
+    res.json({ doses: result.rows.map(r => Number(r.units)) });
   } catch (error) {
     next(error);
   }

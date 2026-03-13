@@ -6,7 +6,8 @@ import * as SplashScreen from 'expo-splash-screen';
 import * as Notifications from 'expo-notifications';
 import { useFonts } from 'expo-font';
 import { useAuthProvider, AuthContext } from '../hooks/useAuth';
-import { registerForPushNotifications } from '../services/notifications';
+import { registerForPushNotifications, registerNotificationCategories } from '../services/notifications';
+import { confirmMeal, dismissMeal, quickLog } from '../services/api';
 
 SplashScreen.preventAutoHideAsync();
 
@@ -36,38 +37,83 @@ function AuthGuard({ children }: { children: React.ReactNode }) {
     }
   }, [auth.isReady, auth.isAuthenticated, segments]);
 
-  // Push notification registration: runs once when auth is ready, whether the user
-  // just logged in or was already authenticated from a previous session.
+  // Push notification registration + category setup: runs once when auth is ready.
   useEffect(() => {
     if (auth.isReady && auth.isAuthenticated) {
+      registerNotificationCategories().catch(console.warn);
       registerForPushNotifications().catch(console.warn);
     }
   }, [auth.isReady, auth.isAuthenticated]);
 
-  // Notification tap handler — navigate to the conversation referenced in the payload.
-  // Handles both: tap while app is open/backgrounded, and cold-start via notification.
+  // Notification response handler — handles button actions and taps for all notification types.
   useEffect(() => {
     if (!auth.isReady || !auth.isAuthenticated) return;
 
-    function handleResponse(response: Notifications.NotificationResponse) {
+    async function handleResponse(response: Notifications.NotificationResponse) {
       const data = response.notification.request.content.data as Record<string, any>;
+      const actionId = response.actionIdentifier;
+
+      // ── Meal detection actions ──────────────────────────────────────────────
+      if (data?.type === 'meal_detected' && data?.mealId) {
+        const mealId = data.mealId as string;
+
+        if (actionId === 'CONFIRM' || actionId === Notifications.DEFAULT_ACTION_IDENTIFIER) {
+          // Background confirm (or plain tap with no action buttons)
+          if (actionId === 'CONFIRM') {
+            confirmMeal(mealId).catch(console.warn);
+            return;
+          }
+          // Plain tap → open edit screen
+          router.push(`/meal-confirm/${mealId}`);
+          return;
+        }
+
+        if (actionId === 'EDIT') {
+          router.push(`/meal-confirm/${mealId}`);
+          return;
+        }
+
+        if (actionId === 'NOT_A_MEAL') {
+          dismissMeal(mealId).catch(console.warn);
+          return;
+        }
+      }
+
+      // ── Insulin follow-up actions ───────────────────────────────────────────
+      if (data?.type === 'insulin_followup') {
+        if (actionId === 'LOG_UNITS') {
+          const unitsStr = (response as any).userText as string | undefined;
+          const units = parseFloat(unitsStr ?? '');
+          if (!isNaN(units) && units > 0) {
+            const ts = data?.mealTime as string | undefined;
+            quickLog('insulin', { units, type: 'bolus', purpose: 'meal' }, ts).catch(console.warn);
+          }
+          return;
+        }
+        // ALREADY_LOGGED and SKIP: no action needed
+        if (actionId === 'ALREADY_LOGGED' || actionId === 'SKIP') return;
+
+        // Plain tap → open meal confirm screen so user can add insulin there
+        if (data?.mealId) {
+          router.push(`/meal-confirm/${data.mealId}`);
+        }
+        return;
+      }
+
+      // ── Proactive chat notification (existing behaviour) ───────────────────
       const conversationId = data?.conversationId;
       if (conversationId) {
-        // Seed the conversation list into the chat Stack before pushing the
-        // specific conversation. Without this, [id] is the only screen in
-        // the Stack — Back escapes past the list to the dashboard, and the
-        // Chat tab stays stuck on that conversation until the app restarts.
         router.navigate('/(tabs)/chat');
         router.push(`/(tabs)/chat/${conversationId}`);
       }
     }
 
-    // Cold start: app was opened by tapping the notification
+    // Cold start: app was opened by tapping a notification
     Notifications.getLastNotificationResponseAsync().then((response) => {
       if (response) handleResponse(response);
     });
 
-    // Foreground / background tap
+    // Foreground / background tap or action button press
     const sub = Notifications.addNotificationResponseReceivedListener(handleResponse);
     return () => sub.remove();
   }, [auth.isReady, auth.isAuthenticated]);
@@ -90,6 +136,7 @@ export default function RootLayout() {
           <Stack screenOptions={{ headerShown: false }}>
             <Stack.Screen name="(auth)" />
             <Stack.Screen name="(tabs)" />
+            <Stack.Screen name="meal-confirm/[mealId]" options={{ presentation: 'modal', headerShown: false }} />
           </Stack>
         </AuthGuard>
       </QueryClientProvider>

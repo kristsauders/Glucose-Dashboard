@@ -14,6 +14,59 @@ Notifications.setNotificationHandler({
   }),
 });
 
+/**
+ * Register iOS notification categories for meal detection actions.
+ * Must be called once on app launch before any notifications arrive.
+ *
+ * MEAL_DETECTED — shown when Sage auto-logs a meal:
+ *   ✓ Looks right  (background, confirms as-is)
+ *   Edit           (foreground, opens confirm screen)
+ *   Not a meal     (background, destructive, dismisses the entry)
+ *
+ * INSULIN_FOLLOWUP — sent ~30 min later asking about insulin:
+ *   Log insulin    (text input, background — user types units directly)
+ *   Already logged (background, silent ack)
+ *   Skip           (background, destructive)
+ */
+export async function registerNotificationCategories(): Promise<void> {
+  await Notifications.setNotificationCategoryAsync('MEAL_DETECTED', [
+    {
+      identifier: 'CONFIRM',
+      buttonTitle: '✓ Looks right',
+      options: { isDestructive: false, isAuthenticationRequired: false, opensAppToForeground: false },
+    },
+    {
+      identifier: 'EDIT',
+      buttonTitle: 'Edit',
+      options: { isDestructive: false, isAuthenticationRequired: false, opensAppToForeground: true },
+    },
+    {
+      identifier: 'NOT_A_MEAL',
+      buttonTitle: 'Not a meal',
+      options: { isDestructive: true, isAuthenticationRequired: false, opensAppToForeground: false },
+    },
+  ]);
+
+  await Notifications.setNotificationCategoryAsync('INSULIN_FOLLOWUP', [
+    {
+      identifier: 'LOG_UNITS',
+      buttonTitle: 'Log insulin',
+      textInput: { submitButtonTitle: 'Log', placeholder: 'Units (e.g. 5)' },
+      options: { isDestructive: false, isAuthenticationRequired: false, opensAppToForeground: false },
+    },
+    {
+      identifier: 'ALREADY_LOGGED',
+      buttonTitle: 'Already logged',
+      options: { isDestructive: false, isAuthenticationRequired: false, opensAppToForeground: false },
+    },
+    {
+      identifier: 'SKIP',
+      buttonTitle: 'Skip',
+      options: { isDestructive: true, isAuthenticationRequired: false, opensAppToForeground: false },
+    },
+  ]);
+}
+
 export async function registerForPushNotifications(): Promise<string | null> {
   const { status: existingStatus } = await Notifications.getPermissionsAsync();
   let finalStatus = existingStatus;
