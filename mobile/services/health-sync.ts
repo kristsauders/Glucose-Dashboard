@@ -103,17 +103,9 @@ export async function runHealthKitSync(
       workoutDue ? hk.readWorkouts(workoutSince) : Promise.resolve<HKWorkoutReading[]>([]),
     ]);
 
-    // Nothing to sync — still update last-sync times so we don't re-run early.
-    if (glucose.length === 0 && workouts.length === 0) {
-      const syncTime = new Date();
-      await Promise.all([
-        glucoseDue ? setLastSync(GLUCOSE_LAST_SYNC_KEY, syncTime) : Promise.resolve(),
-        workoutDue ? setLastSync(WORKOUT_LAST_SYNC_KEY, syncTime) : Promise.resolve(),
-      ]);
-      return { glucoseInserted: 0, workoutsInserted: 0 };
-    }
-
-    // POST to server.
+    // Always POST to server — even with empty arrays — so that server logs can
+    // confirm this code path ran (useful for debugging release builds where
+    // console output isn't visible).
     const result = await syncHealthKit({ glucose, workouts });
 
     // Persist last-sync timestamps only on success.

@@ -10,9 +10,12 @@ import { useGlucoseWidgets } from '../../hooks/useGlucoseWidgets';
 import type { ChartEvent } from '../../components/glucose/GlucoseChart';
 import type { GlucoseReading, GlucoseSummary } from '../../types/glucose';
 import { useColors } from '../../constants/colors';
+import { useHealthKit } from '../../hooks/useHealthKit';
+import { runHealthKitSync } from '../../services/health-sync';
 
 export default function DashboardScreen() {
   const Colors = useColors();
+  const hk = useHealthKit();
   const latest = useLatestGlucose();
   const readings = useGlucose24h();
   const { syncReading } = useGlucoseWidgets();
@@ -78,6 +81,10 @@ export default function DashboardScreen() {
     meals.refetch();
     insulin.refetch();
     exercise.refetch();
+    // Force HealthKit sync on pull-to-refresh (bypasses the 15-min rate limit).
+    runHealthKitSync(hk, true)
+      .then(r => console.log('[HealthSync pull-to-refresh]', JSON.stringify(r)))
+      .catch(console.warn);
   };
 
   const chartEvents: ChartEvent[] = [

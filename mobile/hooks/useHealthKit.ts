@@ -28,16 +28,32 @@ let initPromise: Promise<boolean> | null = null;
 function initHealthKit(): Promise<boolean> {
   if (initialized) return Promise.resolve(true);
   if (initPromise) return initPromise;
+
+  // Guard: if the native module isn't registered (simulator, missing entitlement,
+  // new-arch interop not yet ready), fail fast with a clear log rather than
+  // leaving initPromise as a stuck rejected promise.
+  if (typeof AppleHealthKit?.initHealthKit !== 'function') {
+    console.warn('[HealthKit] Native module not available – AppleHealthKit.initHealthKit is not a function');
+    return Promise.resolve(false);   // don't cache this; allow retry later
+  }
+
   initPromise = new Promise(resolve => {
-    AppleHealthKit.initHealthKit(PERMISSIONS, err => {
-      if (err) {
-        console.warn('[HealthKit] Init failed:', err);
-        resolve(false);
-      } else {
-        initialized = true;
-        resolve(true);
-      }
-    });
+    try {
+      AppleHealthKit.initHealthKit(PERMISSIONS, (err: any) => {
+        if (err) {
+          console.warn('[HealthKit] Init failed:', err);
+          initPromise = null;  // allow retry on next call
+          resolve(false);
+        } else {
+          initialized = true;
+          resolve(true);
+        }
+      });
+    } catch (e) {
+      console.warn('[HealthKit] initHealthKit threw:', e);
+      initPromise = null;  // allow retry
+      resolve(false);
+    }
   });
   return initPromise;
 }

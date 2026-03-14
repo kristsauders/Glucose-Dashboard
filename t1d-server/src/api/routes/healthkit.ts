@@ -56,10 +56,14 @@ router.post('/sync', async (req, res, next) => {
       workouts = [],
     }: { glucose: HKGlucoseReading[]; workouts: HKWorkout[] } = req.body;
 
+    console.log(`[HealthKit sync] user=${userId} glucose=${glucose.length} workouts=${workouts.length}`);
+
     const [glucoseResult, workoutResult] = await Promise.all([
       syncGlucose(userId, glucose),
       syncWorkouts(userId, workouts),
     ]);
+
+    console.log(`[HealthKit sync] done: glucose +${glucoseResult.inserted} skipped=${glucoseResult.skipped}, workouts +${workoutResult.inserted} skipped=${workoutResult.skipped}`);
 
     res.json({
       glucose: glucoseResult,
