@@ -211,5 +211,34 @@ export function sendTestNotification() {
   return request<{ success: boolean }>('/notifications/test', { method: 'POST' });
 }
 
+// ── HealthKit sync ─────────────────────────────────────────────────────────────
+
+export interface HKSyncPayload {
+  glucose: Array<{ timestamp: string; glucose: number; sourceName: string }>;
+  workouts: Array<{
+    healthkitUUID: string;
+    timestamp: string;
+    endTimestamp: string;
+    durationMinutes: number;
+    activityType: string;
+    activityName: string;
+    calories?: number;
+    avgHeartRate?: number;
+    maxHeartRate?: number;
+  }>;
+}
+
+export interface HKSyncResult {
+  glucose: { inserted: number; skipped: number };
+  workouts: { inserted: number; skipped: number };
+}
+
+export function syncHealthKit(payload: HKSyncPayload) {
+  return request<HKSyncResult>('/healthkit/sync', {
+    method: 'POST',
+    body: JSON.stringify(payload),
+  });
+}
+
 // expose raw request for SSE (caller handles stream)
 export { request, getToken };

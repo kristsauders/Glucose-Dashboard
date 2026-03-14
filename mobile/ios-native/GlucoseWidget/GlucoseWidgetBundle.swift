@@ -6,6 +6,7 @@ import ActivityKit
 struct GlucoseWidgetBundle: WidgetBundle {
     var body: some Widget {
         GlucoseWidget()
+        QuickLogWidget()
         if #available(iOS 16.2, *) {
             GlucoseLiveActivityWidget()
         }

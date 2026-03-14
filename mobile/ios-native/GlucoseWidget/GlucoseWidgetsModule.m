@@ -28,4 +28,6 @@ RCT_EXTERN_METHOD(getPushToken:(NSString *)activityId
 
 RCT_EXTERN_METHOD(endLiveActivity)
 
+RCT_EXTERN_METHOD(setAuthToken:(NSString *)token serverUrl:(NSString *)serverUrl)
+
 @end

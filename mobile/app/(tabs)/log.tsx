@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import {
   View,
   Text,
@@ -8,6 +8,7 @@ import {
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useQueryClient } from '@tanstack/react-query';
+import { useLocalSearchParams } from 'expo-router';
 import { MealForm } from '../../components/logging/MealForm';
 import { InsulinForm } from '../../components/logging/InsulinForm';
 import { ExerciseForm } from '../../components/logging/ExerciseForm';
@@ -25,9 +26,20 @@ const TABS: { key: LogType; label: string; emoji: string }[] = [
 
 export default function LogScreen() {
   const Colors = useColors();
-  const [activeTab, setActiveTab] = useState<LogType>('meal');
+  const { type } = useLocalSearchParams<{ type?: string }>();
+  const [activeTab, setActiveTab] = useState<LogType>(() => {
+    if (type === 'insulin' || type === 'exercise') return type;
+    return 'meal';
+  });
   const queryClient = useQueryClient();
   const healthKit = useHealthKit();
+
+  // Re-select tab when the screen is re-opened via a deep link (widget tap)
+  useEffect(() => {
+    if (type === 'insulin' || type === 'meal' || type === 'exercise') {
+      setActiveTab(type);
+    }
+  }, [type]);
 
   const handleMealSubmit = async (data: { carbs: number; description: string; timestamp: string }) => {
     const { timestamp, ...rest } = data;

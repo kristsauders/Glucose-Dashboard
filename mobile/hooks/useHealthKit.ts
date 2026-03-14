@@ -1,15 +1,16 @@
-import { useCallback, useRef } from 'react';
+import { useCallback } from 'react';
 import AppleHealthKit, {
   HealthKitPermissions,
-  HealthValue,
 } from 'react-native-health';
+
+// ── Permissions ───────────────────────────────────────────────────────────────
 
 const PERMISSIONS: HealthKitPermissions = {
   permissions: {
     read: [
       AppleHealthKit.Constants.Permissions.BloodGlucose,
-      AppleHealthKit.Constants.Permissions.DietaryCarbohydrates,
-      AppleHealthKit.Constants.Permissions.InsulinDelivery,
+      AppleHealthKit.Constants.Permissions.HeartRate,
+      AppleHealthKit.Constants.Permissions.Workout,
     ],
     write: [
       AppleHealthKit.Constants.Permissions.DietaryCarbohydrates,
@@ -18,6 +19,8 @@ const PERMISSIONS: HealthKitPermissions = {
     ],
   },
 };
+
+// ── Init singleton ────────────────────────────────────────────────────────────
 
 let initialized = false;
 let initPromise: Promise<boolean> | null = null;
@@ -39,21 +42,81 @@ function initHealthKit(): Promise<boolean> {
   return initPromise;
 }
 
+// ── Activity name → Sage activity_type mapping ────────────────────────────────
+// react-native-health returns activityName as a HealthKit activity string.
+
+const HK_ACTIVITY_MAP: Record<string, string> = {
+  Walking: 'walking',
+  Hiking: 'walking',
+  StairClimbing: 'walking',
+  Stairs: 'walking',
+  Elliptical: 'walking',
+  Golf: 'walking',
+  WheelchairWalkPace: 'walking',
+  Running: 'running',
+  TrackAndField: 'running',
+  WheelchairRunPace: 'running',
+  Cycling: 'cycling',
+  HandCycling: 'cycling',
+  Swimming: 'swimming',
+  WaterFitness: 'swimming',
+  WaterPolo: 'swimming',
+  TraditionalStrengthTraining: 'gym',
+  FunctionalStrengthTraining: 'gym',
+  CrossTraining: 'gym',
+  CoreTraining: 'gym',
+  HighIntensityIntervalTraining: 'gym',
+  JumpRope: 'gym',
+  Kickboxing: 'gym',
+  StepTraining: 'gym',
+  Boxing: 'gym',
+  Gymnastics: 'gym',
+  MixedCardio: 'gym',
+  MixedMetabolicCardioTraining: 'gym',
+  Yoga: 'yoga',
+  Pilates: 'yoga',
+  MindAndBody: 'yoga',
+  Barre: 'yoga',
+  Flexibility: 'yoga',
+  TaiChi: 'yoga',
+};
+
+function hkActivityToSage(activityName: string): string {
+  return HK_ACTIVITY_MAP[activityName] ?? 'other';
+}
+
+// ── Public hook ───────────────────────────────────────────────────────────────
+
+export interface HKGlucoseReading {
+  timestamp: string;  // ISO UTC
+  glucose: number;    // mg/dL
+  sourceName: string;
+}
+
+export interface HKWorkoutReading {
+  healthkitUUID: string;
+  timestamp: string;        // start ISO
+  endTimestamp: string;     // end ISO
+  durationMinutes: number;
+  activityType: string;     // Sage type
+  activityName: string;     // raw HK name
+  calories?: number;
+  avgHeartRate?: number;
+  maxHeartRate?: number;
+}
+
 export function useHealthKit() {
   const ensureInit = useCallback(() => initHealthKit(), []);
+
+  // ── WRITE: meal carbs ────────────────────────────────────────────────────────
 
   const writeMeal = useCallback(async (carbs: number, timestamp: string) => {
     try {
       const ok = await ensureInit();
       if (!ok) return;
       await new Promise<void>((resolve, reject) => {
-        const options = {
-          value: carbs,
-          startDate: timestamp,
-        };
-        AppleHealthKit.saveFood(options as any, (err: any) => {
-          if (err) reject(err);
-          else resolve();
+        AppleHealthKit.saveFood({ value: carbs, startDate: timestamp } as any, (err: any) => {
+          if (err) reject(err); else resolve();
         });
       });
     } catch (err) {
@@ -61,23 +124,18 @@ export function useHealthKit() {
     }
   }, [ensureInit]);
 
+  // ── WRITE: insulin ────────────────────────────────────────────────────────────
+
   const writeInsulin = useCallback(
     async (units: number, type: 'bolus' | 'correction' | 'basal', timestamp: string) => {
       try {
         const ok = await ensureInit();
         if (!ok) return;
-        // InsulinDelivery reason: 0 = basal, 1 = bolus
-        const insulinType = type === 'basal' ? 0 : 1;
         await new Promise<void>((resolve, reject) => {
-          const options = {
-            value: units,
-            startDate: timestamp,
-            insulinDeliveryReason: insulinType,
-          };
-          (AppleHealthKit as any).saveInsulinDelivery(options, (err: any) => {
-            if (err) reject(err);
-            else resolve();
-          });
+          (AppleHealthKit as any).saveInsulinDelivery(
+            { value: units, startDate: timestamp, insulinDeliveryReason: type === 'basal' ? 0 : 1 },
+            (err: any) => { if (err) reject(err); else resolve(); },
+          );
         });
       } catch (err) {
         console.warn('[HealthKit] writeInsulin failed:', err);
@@ -86,18 +144,13 @@ export function useHealthKit() {
     [ensureInit],
   );
 
+  // ── WRITE: workout ────────────────────────────────────────────────────────────
+
   const writeExercise = useCallback(
-    async (
-      activity: string,
-      durationMinutes: number,
-      intensity: 'low' | 'moderate' | 'high',
-      timestamp: string,
-    ) => {
+    async (activity: string, durationMinutes: number, intensity: 'low' | 'moderate' | 'high', timestamp: string) => {
       try {
         const ok = await ensureInit();
         if (!ok) return;
-
-        // Map activity string to HealthKit workout type
         const activityMap: Record<string, string> = {
           walking: AppleHealthKit.Constants.Activities.Walking,
           running: AppleHealthKit.Constants.Activities.Running,
@@ -107,21 +160,13 @@ export function useHealthKit() {
           yoga: AppleHealthKit.Constants.Activities.Yoga,
           other: AppleHealthKit.Constants.Activities.Other,
         };
-
-        const activityType = activityMap[activity] ?? AppleHealthKit.Constants.Activities.Other;
         const start = new Date(timestamp);
         const end = new Date(start.getTime() + durationMinutes * 60 * 1000);
-
         await new Promise<void>((resolve, reject) => {
-          const options = {
-            type: activityType,
-            startDate: start.toISOString(),
-            endDate: end.toISOString(),
-          };
-          AppleHealthKit.saveWorkout(options as any, (err: any) => {
-            if (err) reject(err);
-            else resolve();
-          });
+          AppleHealthKit.saveWorkout(
+            { type: activityMap[activity] ?? AppleHealthKit.Constants.Activities.Other, startDate: start.toISOString(), endDate: end.toISOString() } as any,
+            (err: any) => { if (err) reject(err); else resolve(); },
+          );
         });
       } catch (err) {
         console.warn('[HealthKit] writeExercise failed:', err);
@@ -130,5 +175,124 @@ export function useHealthKit() {
     [ensureInit],
   );
 
-  return { writeMeal, writeInsulin, writeExercise };
+  // ── READ: blood glucose ───────────────────────────────────────────────────────
+  //
+  // IMPORTANT: always request unit 'mg/dL'.
+  // Without this, react-native-health returns whatever unit HealthKit stores
+  // on the device (mmol/L in non-US locales), which would appear as values
+  // like 7.2 on a chart expecting 70–180 and corrupt all stats.
+
+  const readBloodGlucose = useCallback(
+    async (since: Date): Promise<HKGlucoseReading[]> => {
+      try {
+        const ok = await ensureInit();
+        if (!ok) return [];
+
+        return await new Promise<HKGlucoseReading[]>((resolve, reject) => {
+          const options = {
+            unit: 'mg/dL',   // explicit — never rely on device locale default
+            startDate: since.toISOString(),
+            endDate: new Date().toISOString(),
+            ascending: true,
+            limit: 2000,
+          };
+          (AppleHealthKit as any).getBloodGlucoseSamples(options, (err: any, results: any[]) => {
+            if (err) { reject(err); return; }
+            const readings: HKGlucoseReading[] = (results ?? [])
+              .filter(r => r.value > 18 && r.value < 700)  // sanity: must be in mg/dL range
+              .map(r => ({
+                timestamp: r.startDate,
+                glucose: r.value,
+                sourceName: r.sourceName ?? 'Apple Health',
+              }));
+            resolve(readings);
+          });
+        });
+      } catch (err) {
+        console.warn('[HealthKit] readBloodGlucose failed:', err);
+        return [];
+      }
+    },
+    [ensureInit],
+  );
+
+  // ── READ: workouts + heart rate ───────────────────────────────────────────────
+  //
+  // Fetches workouts since `since`, then batch-fetches heart rate samples over
+  // the combined time range and assigns them per workout. One HR API call total.
+
+  const readWorkouts = useCallback(
+    async (since: Date): Promise<HKWorkoutReading[]> => {
+      try {
+        const ok = await ensureInit();
+        if (!ok) return [];
+
+        const now = new Date();
+
+        const rawWorkouts: any[] = await new Promise((resolve, reject) => {
+          (AppleHealthKit as any).getWorkoutSamples(
+            { startDate: since.toISOString(), endDate: now.toISOString(), ascending: true, limit: 200 },
+            (err: any, results: any[]) => {
+              if (err) { reject(err); return; }
+              resolve(results ?? []);
+            },
+          );
+        });
+
+        if (rawWorkouts.length === 0) return [];
+
+        // Batch-fetch heart rate for the entire window covered by all workouts.
+        const windowStart = rawWorkouts[0].start;
+        const windowEnd = rawWorkouts[rawWorkouts.length - 1].end;
+
+        const heartRateSamples: { startDate: string; value: number }[] = await new Promise(
+          (resolve) => {
+            (AppleHealthKit as any).getHeartRateSamples(
+              { startDate: windowStart, endDate: windowEnd, ascending: true, limit: 10000 },
+              (err: any, results: any[]) => resolve(err ? [] : (results ?? [])),
+            );
+          },
+        );
+
+        return rawWorkouts.map(w => {
+          const startMs = new Date(w.start).getTime();
+          const endMs = new Date(w.end).getTime();
+          const durationMin = Math.round((endMs - startMs) / 60000);
+
+          // Heart rate samples that fall within this workout's time window
+          const workoutHR = heartRateSamples
+            .filter(s => {
+              const t = new Date(s.startDate).getTime();
+              return t >= startMs && t <= endMs;
+            })
+            .map(s => s.value);
+
+          const avgHR = workoutHR.length > 0
+            ? Math.round(workoutHR.reduce((a, b) => a + b, 0) / workoutHR.length)
+            : undefined;
+          const maxHR = workoutHR.length > 0 ? Math.max(...workoutHR) : undefined;
+
+          const activityName: string = w.activityName ?? 'Other';
+
+          return {
+            healthkitUUID: w.id,
+            timestamp: w.start,
+            endTimestamp: w.end,
+            durationMinutes: Math.max(1, durationMin),
+            activityType: hkActivityToSage(activityName),
+            activityName,
+            calories: w.totalEnergyBurned ?? undefined,
+            avgHeartRate: avgHR,
+            maxHeartRate: maxHR,
+          };
+        });
+      } catch (err) {
+        console.warn('[HealthKit] readWorkouts failed:', err);
+        return [];
+      }
+    },
+    [ensureInit],
+  );
+
+  return { writeMeal, writeInsulin, writeExercise, readBloodGlucose, readWorkouts };
 }

@@ -188,5 +188,22 @@ class GlucoseWidgetsModule: NSObject {
         }
     }
 
+    // MARK: - Auth token bridge
+    //
+    // Called from JS after login/logout so the widget extension and AppIntents
+    // can make authenticated API calls without accessing the main app's Keychain.
+
+    @objc func setAuthToken(_ token: String, serverUrl: String) {
+        let defaults = UserDefaults(suiteName: APP_GROUP)
+        if token.isEmpty {
+            defaults?.removeObject(forKey: "authToken")
+            defaults?.removeObject(forKey: "serverBaseUrl")
+        } else {
+            defaults?.set(token, forKey: "authToken")
+            defaults?.set(serverUrl, forKey: "serverBaseUrl")
+        }
+        defaults?.synchronize()
+    }
+
     @objc static func requiresMainQueueSetup() -> Bool { false }
 }

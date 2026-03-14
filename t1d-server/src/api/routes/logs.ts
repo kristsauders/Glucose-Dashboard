@@ -59,7 +59,8 @@ router.get('/exercise', async (req, res, next) => {
     const { start, end, limit = '100', offset = '0' } = req.query;
 
     let queryText = `
-      SELECT id, timestamp, description, duration_minutes, activity_type, intensity, notes, source
+      SELECT id, timestamp, description, duration_minutes, activity_type, intensity,
+             avg_heart_rate, max_heart_rate, calories, notes, source
       FROM exercise_logs
       WHERE user_id = $1
     `;

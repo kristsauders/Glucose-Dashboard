@@ -22,6 +22,7 @@ import notificationRoutes from './routes/notifications.js';
 import voiceRoutes from './routes/voice.js';
 import reportsRoutes from './routes/reports.js';
 import quickActionsRoutes from './routes/quick-actions.js';
+import healthKitRoutes from './routes/healthkit.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -88,6 +89,7 @@ app.use('/api/notifications', notificationRoutes);
 app.use('/api/voice', voiceRoutes);
 app.use('/api/reports', reportsRoutes);
 app.use('/api/quick-actions', quickActionsRoutes);
+app.use('/api/healthkit', healthKitRoutes);
 
 // Admin endpoint to manually trigger proactive check (for testing)
 // Development only - no auth required for easier testing

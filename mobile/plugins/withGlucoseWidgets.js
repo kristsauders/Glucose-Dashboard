@@ -28,6 +28,8 @@ const EXTENSION_SWIFT = [
   'GlucoseActivityAttributes.swift',
   'GlucoseWidgetViews.swift',
   'GlucoseWidgetBundle.swift',
+  'QuickLogIntents.swift',
+  'QuickLogWidgetViews.swift',
 ];
 
 // Files that go into the MAIN app target (the native module bridge)

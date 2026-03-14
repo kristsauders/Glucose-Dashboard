@@ -9,6 +9,8 @@ import { useAuthProvider, AuthContext } from '../hooks/useAuth';
 import { registerForPushNotifications, registerNotificationCategories } from '../services/notifications';
 import { confirmMeal, dismissMeal, logInsulinForMeal } from '../services/api';
 import LoadingScreen from '../components/LoadingScreen';
+import { useHealthKit } from '../hooks/useHealthKit';
+import { runHealthKitSync } from '../services/health-sync';
 
 SplashScreen.preventAutoHideAsync();
 
@@ -22,6 +24,7 @@ function AuthGuard({ children }: { children: React.ReactNode }) {
   const auth = useAuthProvider();
   const router = useRouter();
   const segments = useSegments();
+  const hk = useHealthKit();
 
   // Auth guard: redirect to correct screen when auth state changes
   useEffect(() => {
@@ -43,6 +46,14 @@ function AuthGuard({ children }: { children: React.ReactNode }) {
     if (auth.isReady && auth.isAuthenticated) {
       registerNotificationCategories().catch(console.warn);
       registerForPushNotifications().catch(console.warn);
+    }
+  }, [auth.isReady, auth.isAuthenticated]);
+
+  // HealthKit sync: runs once on auth ready, then is rate-limited to every 15 min
+  // (enforced inside runHealthKitSync). Runs in background — never blocks UI.
+  useEffect(() => {
+    if (auth.isReady && auth.isAuthenticated) {
+      runHealthKitSync(hk).catch(console.warn);
     }
   }, [auth.isReady, auth.isAuthenticated]);
 

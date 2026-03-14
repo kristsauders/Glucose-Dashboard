@@ -26,6 +26,9 @@ export interface ExerciseLog {
   duration_minutes: number;
   activity_type: string;
   intensity?: string;
+  avg_heart_rate?: number;
+  max_heart_rate?: number;
+  calories?: number;
   notes?: string;
   source?: string;
 }
