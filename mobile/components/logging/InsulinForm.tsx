@@ -34,8 +34,6 @@ export function InsulinForm({ onSubmit, onCancel }: InsulinFormProps) {
 
   return (
     <View style={{ gap: 16 }}>
-      <Text style={{ fontSize: 18, fontWeight: '600', color: Colors.foreground }}>Log Insulin</Text>
-
       <View style={{ gap: 8 }}>
         <Text style={{ fontSize: 14, fontWeight: '500', color: Colors.foreground }}>Units</Text>
         <TextInput

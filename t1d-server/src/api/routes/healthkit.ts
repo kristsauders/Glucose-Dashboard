@@ -12,8 +12,9 @@
  *
  * Workout dedup strategy:
  *   1. Primary: healthkit_uuid UNIQUE partial index — perfect dedup by HealthKit UUID.
- *   2. Fallback (no UUID): skip if an exercise_log exists within ±5 minutes with
- *      the same activity_type.
+ *   2. Fallback: find any exercise_log within ±15 minutes with duration within ±10 min.
+ *      - Manual entry found → delete it and insert the HealthKit record (richer data).
+ *      - HealthKit entry found → skip (already have a good copy).
  */
 
 import { Router } from 'express';
@@ -143,21 +144,31 @@ async function syncWorkouts(userId: string, workouts: HKWorkout[]) {
       continue;
     }
 
-    // Secondary dedup: same activity within ±5 minutes (catches manually-logged
-    // exercises that were then synced to HealthKit or vice-versa).
+    // Secondary dedup: any workout within ±15 minutes with similar duration (±10 min).
+    // Activity type is intentionally ignored — manual entries and HealthKit often
+    // use different labels for the same session (e.g. "gym" vs "Traditional Strength").
+    // If the nearby match is a manual entry, replace it with the HealthKit record
+    // (which carries more data: HR, calories, UUID). If it's already from HealthKit,
+    // just skip.
     const nearbyExercise = await query(
-      `SELECT 1 FROM exercise_logs
+      `SELECT id, source FROM exercise_logs
        WHERE user_id = $1
-         AND activity_type = $2
-         AND timestamp BETWEEN $3::timestamptz - INTERVAL '5 minutes'
-                            AND $3::timestamptz + INTERVAL '5 minutes'
+         AND timestamp BETWEEN $2::timestamptz - INTERVAL '15 minutes'
+                            AND $2::timestamptz + INTERVAL '15 minutes'
+         AND ABS(duration_minutes - $3) <= 10
        LIMIT 1`,
-      [userId, w.activityType, w.timestamp],
+      [userId, w.timestamp, w.durationMinutes],
     );
 
     if (nearbyExercise.rows.length > 0) {
-      skipped++;
-      continue;
+      const nearby = nearbyExercise.rows[0];
+      if (nearby.source !== 'healthkit') {
+        // Delete the manual entry so we can insert the richer HealthKit record below.
+        await query(`DELETE FROM exercise_logs WHERE id = $1`, [nearby.id]);
+      } else {
+        skipped++;
+        continue;
+      }
     }
 
     // Derive intensity from heart rate if available.

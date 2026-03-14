@@ -4,15 +4,13 @@ import { useColors } from '../../constants/colors';
 import { TimePickerField } from './TimePickerField';
 
 const ACTIVITY_TYPES = ['walking', 'running', 'cycling', 'swimming', 'gym', 'yoga', 'other'] as const;
-const INTENSITY_LEVELS = ['low', 'moderate', 'high'] as const;
 type ActivityType = typeof ACTIVITY_TYPES[number];
-type Intensity = typeof INTENSITY_LEVELS[number];
 
 interface ExerciseFormProps {
   onSubmit: (data: {
     activity: ActivityType;
     duration: number;
-    intensity: Intensity;
+    intensity: string;
     timestamp: string;
   }) => Promise<void>;
   onCancel?: () => void;
@@ -22,7 +20,6 @@ export function ExerciseForm({ onSubmit, onCancel }: ExerciseFormProps) {
   const Colors = useColors();
   const [activity, setActivity] = useState<ActivityType>('walking');
   const [duration, setDuration] = useState('');
-  const [intensity, setIntensity] = useState<Intensity>('moderate');
   const [timestamp, setTimestamp] = useState(new Date());
   const [loading, setLoading] = useState(false);
 
@@ -37,7 +34,7 @@ export function ExerciseForm({ onSubmit, onCancel }: ExerciseFormProps) {
       await onSubmit({
         activity,
         duration: durationNum,
-        intensity,
+        intensity: 'moderate',
         timestamp: timestamp.toISOString(),
       });
     } finally {
@@ -47,10 +44,6 @@ export function ExerciseForm({ onSubmit, onCancel }: ExerciseFormProps) {
 
   return (
     <View style={{ gap: 16 }}>
-      <Text style={{ fontSize: 18, fontWeight: '600', color: Colors.foreground }}>
-        Log Exercise
-      </Text>
-
       <View style={{ gap: 8 }}>
         <Text style={{ fontSize: 14, fontWeight: '500', color: Colors.foreground }}>Activity</Text>
         <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 8 }}>
@@ -99,46 +92,6 @@ export function ExerciseForm({ onSubmit, onCancel }: ExerciseFormProps) {
             color: Colors.foreground,
           }}
         />
-      </View>
-
-      <View style={{ gap: 8 }}>
-        <Text style={{ fontSize: 14, fontWeight: '500', color: Colors.foreground }}>Intensity</Text>
-        <View style={{ flexDirection: 'row', gap: 8 }}>
-          {INTENSITY_LEVELS.map(lvl => {
-            const bg =
-              intensity === lvl
-                ? lvl === 'low'
-                  ? Colors.glucoseInRange
-                  : lvl === 'moderate'
-                  ? Colors.warning
-                  : Colors.destructive
-                : Colors.muted;
-            return (
-              <TouchableOpacity
-                key={lvl}
-                onPress={() => setIntensity(lvl)}
-                style={{
-                  flex: 1,
-                  paddingVertical: 10,
-                  borderRadius: 10,
-                  backgroundColor: bg,
-                  alignItems: 'center',
-                }}
-              >
-                <Text
-                  style={{
-                    fontSize: 13,
-                    fontWeight: '600',
-                    color: intensity === lvl ? '#fff' : Colors.foreground,
-                    textTransform: 'capitalize',
-                  }}
-                >
-                  {lvl}
-                </Text>
-              </TouchableOpacity>
-            );
-          })}
-        </View>
       </View>
 
       <TimePickerField value={timestamp} onChange={setTimestamp} />

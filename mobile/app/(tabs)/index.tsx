@@ -4,6 +4,9 @@ import { useEffect, useRef, useMemo } from 'react';
 import { GlucoseCard } from '../../components/glucose/GlucoseCard';
 import { GlucoseChart } from '../../components/glucose/GlucoseChart';
 import { StatsRow } from '../../components/glucose/StatsRow';
+import { MealImpactChart } from '../../components/logs/MealImpactChart';
+import { WorkoutImpactChart } from '../../components/logs/WorkoutImpactChart';
+import type { MealLog, ExerciseLog } from '../../types/logs';
 import { useLatestGlucose, useGlucose24h } from '../../hooks/useGlucose';
 import { useMealLogs, useInsulinLogs, useExerciseLogs } from '../../hooks/useLogs';
 import { useGlucoseWidgets } from '../../hooks/useGlucoseWidgets';
@@ -141,6 +144,18 @@ export default function DashboardScreen() {
             events={chartEvents}
           />
         </View>
+
+        {/* Today's meal impact */}
+        <MealImpactChart
+          meals={(meals.data as any)?.meals as MealLog[] ?? []}
+          glucoseReadings={(readings.data as any)?.readings as GlucoseReading[] ?? []}
+        />
+
+        {/* Today's workout impact */}
+        <WorkoutImpactChart
+          exercises={(exercise.data as any)?.exercises as ExerciseLog[] ?? []}
+          glucoseReadings={(readings.data as any)?.readings as GlucoseReading[] ?? []}
+        />
 
       </ScrollView>
     </SafeAreaView>

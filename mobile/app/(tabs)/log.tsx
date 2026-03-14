@@ -4,6 +4,8 @@ import {
   Text,
   TouchableOpacity,
   ScrollView,
+  KeyboardAvoidingView,
+  Platform,
   Alert,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
@@ -72,59 +74,71 @@ export default function LogScreen() {
 
   return (
     <SafeAreaView style={{ flex: 1, backgroundColor: Colors.background }} edges={['top']}>
-      <ScrollView contentContainerStyle={{ padding: 20 }} keyboardShouldPersistTaps="handled">
-        <Text style={{ fontSize: 24, fontWeight: '700', color: Colors.foreground, marginBottom: 20 }}>
+      {/* Header: title + tabs on one line */}
+      <View style={{
+        flexDirection: 'row',
+        alignItems: 'center',
+        paddingHorizontal: 16,
+        paddingTop: 14,
+        paddingBottom: 10,
+        gap: 12,
+      }}>
+        <Text style={{ fontSize: 22, fontWeight: '700', color: Colors.foreground }}>
           Log
         </Text>
-
-        {/* Tab selector */}
-        <View
-          style={{
-            flexDirection: 'row',
-            backgroundColor: Colors.muted,
-            borderRadius: 12,
-            padding: 4,
-            marginBottom: 24,
-          }}
-        >
+        <View style={{
+          flex: 1,
+          flexDirection: 'row',
+          backgroundColor: Colors.muted,
+          borderRadius: 12,
+          padding: 4,
+        }}>
           {TABS.map(tab => (
             <TouchableOpacity
               key={tab.key}
               onPress={() => setActiveTab(tab.key)}
               style={{
                 flex: 1,
-                paddingVertical: 10,
+                paddingVertical: 8,
                 borderRadius: 10,
                 backgroundColor: activeTab === tab.key ? Colors.card : 'transparent',
                 alignItems: 'center',
                 flexDirection: 'row',
                 justifyContent: 'center',
-                gap: 6,
+                gap: 5,
                 shadowColor: activeTab === tab.key ? '#000' : 'transparent',
                 shadowOpacity: 0.06,
                 shadowRadius: 4,
                 shadowOffset: { width: 0, height: 1 },
               }}
             >
-              <Text style={{ fontSize: 16 }}>{tab.emoji}</Text>
-              <Text
-                style={{
-                  fontSize: 14,
-                  fontWeight: '600',
-                  color: activeTab === tab.key ? Colors.foreground : Colors.mutedForeground,
-                }}
-              >
+              <Text style={{ fontSize: 15 }}>{tab.emoji}</Text>
+              <Text style={{
+                fontSize: 13,
+                fontWeight: '600',
+                color: activeTab === tab.key ? Colors.foreground : Colors.mutedForeground,
+              }}>
                 {tab.label}
               </Text>
             </TouchableOpacity>
           ))}
         </View>
+      </View>
 
-        {/* Form */}
-        {activeTab === 'meal' && <MealForm onSubmit={handleMealSubmit} />}
-        {activeTab === 'insulin' && <InsulinForm onSubmit={handleInsulinSubmit} />}
-        {activeTab === 'exercise' && <ExerciseForm onSubmit={handleExerciseSubmit} />}
-      </ScrollView>
+      {/* Form — keyboard-aware so the Log button stays visible */}
+      <KeyboardAvoidingView
+        style={{ flex: 1 }}
+        behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+      >
+        <ScrollView
+          contentContainerStyle={{ padding: 16, paddingBottom: 24 }}
+          keyboardShouldPersistTaps="handled"
+        >
+          {activeTab === 'meal' && <MealForm onSubmit={handleMealSubmit} />}
+          {activeTab === 'insulin' && <InsulinForm onSubmit={handleInsulinSubmit} />}
+          {activeTab === 'exercise' && <ExerciseForm onSubmit={handleExerciseSubmit} />}
+        </ScrollView>
+      </KeyboardAvoidingView>
     </SafeAreaView>
   );
 }
