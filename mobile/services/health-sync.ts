@@ -19,7 +19,7 @@
  */
 
 import * as SecureStore from 'expo-secure-store';
-import { Platform } from 'react-native';
+import { Platform, NativeModules } from 'react-native';
 import { syncHealthKit } from './api';
 import type { HKGlucoseReading, HKWorkoutReading } from '../hooks/useHealthKit';
 
@@ -105,8 +105,10 @@ export async function runHealthKitSync(
 
     // Always POST to server — even with empty arrays — so that server logs can
     // confirm this code path ran (useful for debugging release builds where
-    // console output isn't visible).
-    const result = await syncHealthKit({ glucose, workouts });
+    // console output isn't visible). Include native module availability for
+    // server-side diagnostics.
+    const hkModuleAvailable = !!NativeModules.AppleHealthKit;
+    const result = await syncHealthKit({ glucose, workouts, _debug: { hkModuleAvailable } });
 
     // Persist last-sync timestamps only on success.
     const syncTime = new Date();

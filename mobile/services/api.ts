@@ -226,6 +226,7 @@ export interface HKSyncPayload {
     avgHeartRate?: number;
     maxHeartRate?: number;
   }>;
+  _debug?: Record<string, unknown>;
 }
 
 export interface HKSyncResult {

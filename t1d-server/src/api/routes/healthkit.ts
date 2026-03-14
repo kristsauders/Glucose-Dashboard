@@ -54,9 +54,10 @@ router.post('/sync', async (req, res, next) => {
     const {
       glucose = [],
       workouts = [],
-    }: { glucose: HKGlucoseReading[]; workouts: HKWorkout[] } = req.body;
+      _debug,
+    }: { glucose: HKGlucoseReading[]; workouts: HKWorkout[]; _debug?: Record<string, unknown> } = req.body;
 
-    console.log(`[HealthKit sync] user=${userId} glucose=${glucose.length} workouts=${workouts.length}`);
+    console.log(`[HealthKit sync] user=${userId} glucose=${glucose.length} workouts=${workouts.length}${_debug ? ` debug=${JSON.stringify(_debug)}` : ''}`);
 
     const [glucoseResult, workoutResult] = await Promise.all([
       syncGlucose(userId, glucose),
