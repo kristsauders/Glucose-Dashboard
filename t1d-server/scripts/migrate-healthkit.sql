@@ -15,8 +15,8 @@ CREATE UNIQUE INDEX IF NOT EXISTS idx_exercise_healthkit_uuid
   WHERE healthkit_uuid IS NOT NULL;
 
 -- Add activity_type and description columns to exercise_logs if they don't
--- already exist (schema.sql only has 'type'; later migrations may have added
--- activity_type/description — this is safe either way).
+-- already exist (schema.sql only has the legacy 'type' column; later
+-- migrations may have added these already - safe to re-run either way).
 ALTER TABLE exercise_logs
   ADD COLUMN IF NOT EXISTS activity_type TEXT,
   ADD COLUMN IF NOT EXISTS description   TEXT;

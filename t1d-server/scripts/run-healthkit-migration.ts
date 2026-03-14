@@ -7,10 +7,17 @@ const __dirname = dirname(fileURLToPath(import.meta.url));
 
 const sql = readFileSync(join(__dirname, 'migrate-healthkit.sql'), 'utf8');
 
-const statements = sql
+// Strip comment lines BEFORE splitting so that semicolons inside comments
+// (e.g. "-- uses 'type'; see schema.sql") never produce phantom statements.
+const stripped = sql
+  .split('\n')
+  .filter(line => !line.trimStart().startsWith('--'))
+  .join('\n');
+
+const statements = stripped
   .split(';')
   .map(s => s.trim())
-  .filter(s => s.length > 0 && !s.startsWith('--'));
+  .filter(s => s.length > 0);
 
 console.log(`Running HealthKit migration (${statements.length} statements)...`);
 
