@@ -1,7 +1,14 @@
 import { useCallback } from 'react';
+import { NativeModules } from 'react-native';
 import AppleHealthKit, {
   HealthKitPermissions,
 } from 'react-native-health';
+
+// In RN 0.74+ new architecture, NativeModules.XXX returns a JS Proxy.
+// react-native-health does Object.assign({}, NativeModules.AppleHealthKit, {Constants})
+// which reads own enumerable properties — Proxy traps are NOT own properties, so the
+// native methods are lost in the spread. We bypass this by calling NativeModules directly.
+const HKNative: Record<string, any> = NativeModules.AppleHealthKit ?? {};
 
 // ── Permissions ───────────────────────────────────────────────────────────────
 
@@ -32,14 +39,14 @@ function initHealthKit(): Promise<boolean> {
   // Guard: if the native module isn't registered (simulator, missing entitlement,
   // new-arch interop not yet ready), fail fast with a clear log rather than
   // leaving initPromise as a stuck rejected promise.
-  if (typeof AppleHealthKit?.initHealthKit !== 'function') {
-    console.warn('[HealthKit] Native module not available – AppleHealthKit.initHealthKit is not a function');
+  if (typeof HKNative.initHealthKit !== 'function') {
+    console.warn('[HealthKit] Native module not available – HKNative.initHealthKit is not a function');
     return Promise.resolve(false);   // don't cache this; allow retry later
   }
 
   initPromise = new Promise(resolve => {
     try {
-      AppleHealthKit.initHealthKit(PERMISSIONS, (err: any) => {
+      HKNative.initHealthKit(PERMISSIONS, (err: any) => {
         if (err) {
           console.warn('[HealthKit] Init failed:', err);
           initPromise = null;  // allow retry on next call
@@ -109,6 +116,7 @@ export interface HKGlucoseReading {
   sourceName: string;
 }
 
+
 export interface HKWorkoutReading {
   healthkitUUID: string;
   timestamp: string;        // start ISO
@@ -131,7 +139,7 @@ export function useHealthKit() {
       const ok = await ensureInit();
       if (!ok) return;
       await new Promise<void>((resolve, reject) => {
-        AppleHealthKit.saveFood({ value: carbs, startDate: timestamp } as any, (err: any) => {
+        HKNative.saveFood({ value: carbs, startDate: timestamp }, (err: any) => {
           if (err) reject(err); else resolve();
         });
       });
@@ -148,7 +156,7 @@ export function useHealthKit() {
         const ok = await ensureInit();
         if (!ok) return;
         await new Promise<void>((resolve, reject) => {
-          (AppleHealthKit as any).saveInsulinDelivery(
+          HKNative.saveInsulinDelivery(
             { value: units, startDate: timestamp, insulinDeliveryReason: type === 'basal' ? 0 : 1 },
             (err: any) => { if (err) reject(err); else resolve(); },
           );
@@ -179,8 +187,8 @@ export function useHealthKit() {
         const start = new Date(timestamp);
         const end = new Date(start.getTime() + durationMinutes * 60 * 1000);
         await new Promise<void>((resolve, reject) => {
-          AppleHealthKit.saveWorkout(
-            { type: activityMap[activity] ?? AppleHealthKit.Constants.Activities.Other, startDate: start.toISOString(), endDate: end.toISOString() } as any,
+          HKNative.saveWorkout(
+            { type: activityMap[activity] ?? AppleHealthKit.Constants.Activities.Other, startDate: start.toISOString(), endDate: end.toISOString() },
             (err: any) => { if (err) reject(err); else resolve(); },
           );
         });
@@ -206,13 +214,13 @@ export function useHealthKit() {
 
         return await new Promise<HKGlucoseReading[]>((resolve, reject) => {
           const options = {
-            unit: 'mg/dL',   // explicit — never rely on device locale default
+            unit: 'mgPerdL', // native Utils.m only recognizes 'mgPerdL', not 'mg/dL'
             startDate: since.toISOString(),
             endDate: new Date().toISOString(),
             ascending: true,
             limit: 2000,
           };
-          (AppleHealthKit as any).getBloodGlucoseSamples(options, (err: any, results: any[]) => {
+          HKNative.getBloodGlucoseSamples(options, (err: any, results: any[]) => {
             if (err) { reject(err); return; }
             const readings: HKGlucoseReading[] = (results ?? [])
               .filter(r => r.value > 18 && r.value < 700)  // sanity: must be in mg/dL range
@@ -245,12 +253,13 @@ export function useHealthKit() {
 
         const now = new Date();
 
+        // getAnchoredWorkouts returns { anchor, data: HKWorkout[] }
         const rawWorkouts: any[] = await new Promise((resolve, reject) => {
-          (AppleHealthKit as any).getWorkoutSamples(
-            { startDate: since.toISOString(), endDate: now.toISOString(), ascending: true, limit: 200 },
-            (err: any, results: any[]) => {
+          HKNative.getAnchoredWorkouts(
+            { startDate: since.toISOString(), endDate: now.toISOString(), limit: 200 },
+            (err: any, result: any) => {
               if (err) { reject(err); return; }
-              resolve(results ?? []);
+              resolve(result?.data ?? []);
             },
           );
         });
@@ -263,7 +272,7 @@ export function useHealthKit() {
 
         const heartRateSamples: { startDate: string; value: number }[] = await new Promise(
           (resolve) => {
-            (AppleHealthKit as any).getHeartRateSamples(
+            HKNative.getHeartRateSamples(
               { startDate: windowStart, endDate: windowEnd, ascending: true, limit: 10000 },
               (err: any, results: any[]) => resolve(err ? [] : (results ?? [])),
             );
@@ -297,7 +306,7 @@ export function useHealthKit() {
             durationMinutes: Math.max(1, durationMin),
             activityType: hkActivityToSage(activityName),
             activityName,
-            calories: w.totalEnergyBurned ?? undefined,
+            calories: w.calories ?? undefined,
             avgHeartRate: avgHR,
             maxHeartRate: maxHR,
           };

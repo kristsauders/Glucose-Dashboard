@@ -33,6 +33,7 @@ import { InsulinUsageChart } from '../../components/logs/InsulinUsageChart';
 import { ExercisePatternChart } from '../../components/logs/ExercisePatternChart';
 import { MealImpactChart } from '../../components/logs/MealImpactChart';
 import { CarbRatioChart } from '../../components/logs/CarbRatioChart';
+import { WorkoutImpactChart } from '../../components/logs/WorkoutImpactChart';
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
@@ -174,6 +175,8 @@ function InsulinItem({ item, onDelete }: { item: InsulinLog; onDelete: () => voi
 
 function ExerciseItem({ item, onDelete }: { item: ExerciseLog; onDelete: () => void }) {
   const Colors = useColors();
+  const hasHR = item.avg_heart_rate != null;
+  const hasCal = item.calories != null;
   return (
     <View style={{
       backgroundColor: Colors.card,
@@ -189,6 +192,21 @@ function ExerciseItem({ item, onDelete }: { item: ExerciseLog; onDelete: () => v
         </Text>
         <Text style={{ fontSize: 15, fontWeight: '700', color: Colors.primary, marginLeft: 8 }}>{item.duration_minutes}m</Text>
       </View>
+      {(hasHR || hasCal) && (
+        <View style={{ flexDirection: 'row', gap: 12 }}>
+          {hasHR && (
+            <Text style={{ fontSize: 12, color: Colors.mutedForeground }}>
+              ♥ {Math.round(item.avg_heart_rate!)}
+              {item.max_heart_rate != null ? ` / ${Math.round(item.max_heart_rate)} bpm` : ' avg bpm'}
+            </Text>
+          )}
+          {hasCal && (
+            <Text style={{ fontSize: 12, color: Colors.mutedForeground }}>
+              {Math.round(item.calories!)} cal
+            </Text>
+          )}
+        </View>
+      )}
       <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' }}>
         <Text style={{ fontSize: 12, color: Colors.mutedForeground }}>
           {format(new Date(item.timestamp), 'MMM d, h:mm a')}
@@ -401,7 +419,9 @@ function ExerciseTab({ range }: { range: DateRange }) {
   const logsStart = new Date(Date.now() - range * 24 * 60 * 60 * 1000).toISOString();
 
   const exercise = useQuery({ queryKey: ['logs', 'exercise', range], queryFn: () => getExerciseLogs(logsStart, undefined, 500) });
+  const glucoseHistory = useGlucoseHistory(range);
   const exerciseItems: ExerciseLog[] = (exercise.data as any)?.exercises ?? [];
+  const rawReadings: GlucoseReading[] = glucoseHistory.data?.readings ?? [];
 
   const deleteExerciseMutation = useMutation({
     mutationFn: deleteExercise,
@@ -424,7 +444,12 @@ function ExerciseTab({ range }: { range: DateRange }) {
       data={exerciseItems}
       keyExtractor={item => item.id}
       contentContainerStyle={{ padding: 16, gap: 10 }}
-      ListHeaderComponent={<ExercisePatternChart exercises={exerciseItems} />}
+      ListHeaderComponent={
+        <View style={{ gap: 0 }}>
+          <ExercisePatternChart exercises={exerciseItems} />
+          <WorkoutImpactChart exercises={exerciseItems} glucoseReadings={rawReadings} />
+        </View>
+      }
       refreshControl={
         <RefreshControl refreshing={exercise.isFetching} onRefresh={() => exercise.refetch()} tintColor={Colors.primary} />
       }

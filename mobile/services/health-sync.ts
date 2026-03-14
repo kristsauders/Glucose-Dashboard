@@ -11,27 +11,35 @@
  *  - Rate-limit: don't re-sync if the last sync was < SYNC_INTERVAL_MS ago.
  *
  * Safety guarantees:
- *  - Glucose is always requested in mg/dL (explicit unit in useHealthKit).
+ *  - Glucose is always requested in mgPerdL (explicit unit in useHealthKit).
  *  - Server rejects batches containing values outside 18–700 mg/dL, which
  *    catches accidental mmol/L values before they reach the DB.
  *  - Cross-source dedup on the server prevents importing LibreView readings
  *    that were written to HealthKit by the LibreLink app.
+ *
+ * Lookback behaviour:
+ *  - Background sync (force=false): uses stored last-sync timestamp so only
+ *    new data is fetched.
+ *  - Pull-to-refresh (force=true): always uses the full initial lookback
+ *    window (30d glucose / 90d workouts). Safe because the server deduplicates;
+ *    ensures backfilled HealthKit data (e.g. LibreLink writing historical
+ *    readings) is never missed due to a stale timestamp.
+ *  - Timestamps are only advanced when data was actually received, so a
+ *    zero-result sync never locks out future syncs.
  */
 
 import * as SecureStore from 'expo-secure-store';
-import { Platform, NativeModules } from 'react-native';
+import { Platform } from 'react-native';
 import { syncHealthKit } from './api';
 import type { HKGlucoseReading, HKWorkoutReading } from '../hooks/useHealthKit';
 
 const GLUCOSE_LAST_SYNC_KEY = 'hk_glucose_last_sync';
 const WORKOUT_LAST_SYNC_KEY = 'hk_workout_last_sync';
 
-// Minimum interval between syncs (15 minutes). Prevents hammering on rapid
-// app re-opens. A full sync on every app open would be wasted work.
+// Minimum interval between background syncs (15 minutes).
 const SYNC_INTERVAL_MS = 15 * 60 * 1000;
 
-// How far back to look on first-ever sync. 30 days for glucose (may be large
-// but catches history), 90 days for workouts (captures training history).
+// How far back to look on first-ever sync or force refresh.
 const GLUCOSE_INITIAL_LOOKBACK_DAYS = 30;
 const WORKOUT_INITIAL_LOOKBACK_DAYS = 90;
 
@@ -63,7 +71,7 @@ export interface HealthSyncResult {
  * Run a full HealthKit → Sage sync.
  *
  * @param hk - the HealthKit hook instance (from useHealthKit())
- * @param force - bypass the rate-limit check (e.g. on pull-to-refresh)
+ * @param force - bypass rate-limit and use full lookback window (pull-to-refresh)
  */
 export async function runHealthKitSync(
   hk: { readBloodGlucose: (since: Date) => Promise<HKGlucoseReading[]>; readWorkouts: (since: Date) => Promise<HKWorkoutReading[]> },
@@ -88,14 +96,14 @@ export async function runHealthKitSync(
 
   syncInProgress = true;
   try {
-    // Determine lookback windows.
-    const glucoseSince = glucoseLastSync.getTime() === 0
-      ? new Date(Date.now() - GLUCOSE_INITIAL_LOOKBACK_DAYS * 86400_000)
-      : glucoseLastSync;
+    // force=true always uses full lookback; background uses stored timestamp.
+    const glucoseSince = (!force && glucoseLastSync.getTime() !== 0)
+      ? glucoseLastSync
+      : new Date(Date.now() - GLUCOSE_INITIAL_LOOKBACK_DAYS * 86400_000);
 
-    const workoutSince = workoutLastSync.getTime() === 0
-      ? new Date(Date.now() - WORKOUT_INITIAL_LOOKBACK_DAYS * 86400_000)
-      : workoutLastSync;
+    const workoutSince = (!force && workoutLastSync.getTime() !== 0)
+      ? workoutLastSync
+      : new Date(Date.now() - WORKOUT_INITIAL_LOOKBACK_DAYS * 86400_000);
 
     // Read from HealthKit in parallel.
     const [glucose, workouts] = await Promise.all([
@@ -103,18 +111,19 @@ export async function runHealthKitSync(
       workoutDue ? hk.readWorkouts(workoutSince) : Promise.resolve<HKWorkoutReading[]>([]),
     ]);
 
-    // Always POST to server — even with empty arrays — so that server logs can
-    // confirm this code path ran (useful for debugging release builds where
-    // console output isn't visible). Include native module availability for
-    // server-side diagnostics.
-    const hkModuleAvailable = !!NativeModules.AppleHealthKit;
-    const result = await syncHealthKit({ glucose, workouts, _debug: { hkModuleAvailable } });
+    // Skip the server call if there's nothing to sync.
+    if (glucose.length === 0 && workouts.length === 0) {
+      return { glucoseInserted: 0, workoutsInserted: 0 };
+    }
 
-    // Persist last-sync timestamps only on success.
+    const result = await syncHealthKit({ glucose, workouts });
+
+    // Only advance timestamps when data was actually received, so a zero-result
+    // sync never locks future syncs into a narrow window.
     const syncTime = new Date();
     await Promise.all([
-      glucoseDue ? setLastSync(GLUCOSE_LAST_SYNC_KEY, syncTime) : Promise.resolve(),
-      workoutDue ? setLastSync(WORKOUT_LAST_SYNC_KEY, syncTime) : Promise.resolve(),
+      (glucoseDue && glucose.length > 0) ? setLastSync(GLUCOSE_LAST_SYNC_KEY, syncTime) : Promise.resolve(),
+      (workoutDue && workouts.length > 0) ? setLastSync(WORKOUT_LAST_SYNC_KEY, syncTime) : Promise.resolve(),
     ]);
 
     if (result.glucose.inserted > 0 || result.workouts.inserted > 0) {
