@@ -7,6 +7,7 @@ import {
   KeyboardAvoidingView,
   Platform,
   Animated,
+  Alert,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useQueryClient } from '@tanstack/react-query';
@@ -58,31 +59,41 @@ export default function LogScreen() {
   };
 
   const handleMealSubmit = async (data: { carbs: number; description: string; timestamp: string }) => {
-    const { timestamp, ...rest } = data;
-    await quickLog('meal', rest, timestamp);
-    healthKit.writeMeal(data.carbs, data.timestamp).catch(console.warn);
-    queryClient.invalidateQueries({ queryKey: ['logs'] });
-    showToastAndNavigate(`${data.carbs}g carbs logged`);
+    try {
+      const { timestamp, ...rest } = data;
+      await quickLog('meal', rest, timestamp);
+      healthKit.writeMeal(data.carbs, data.timestamp).catch(console.warn);
+      queryClient.invalidateQueries({ queryKey: ['logs'] });
+      showToastAndNavigate(`${data.carbs}g carbs logged`);
+    } catch (err) {
+      console.error('Failed to log meal:', err);
+      Alert.alert('Error', 'Failed to log meal. Please try again.');
+    }
   };
 
   const handleInsulinSubmit = async (data: { units: number; type: string; timestamp: string }) => {
-    const { timestamp, type, ...rest } = data;
+    try {
+      const { timestamp, type, ...rest } = data;
 
-    // Pre-meal bolus should precede the meal. If there's a meal logged within ±10 min
-    // of the insulin timestamp, place the insulin 2 min before that meal instead.
-    const cachedMeals = (queryClient.getQueryData(['logs', 'meals', 1]) as any)?.meals as any[] ?? [];
-    const insulinMs = new Date(timestamp).getTime();
-    const nearbyMeal = cachedMeals.find(
-      (m: any) => Math.abs(new Date(m.timestamp).getTime() - insulinMs) < 10 * 60_000
-    );
-    const adjustedTimestamp = nearbyMeal
-      ? new Date(new Date(nearbyMeal.timestamp).getTime() - 15 * 60_000).toISOString()
-      : timestamp;
+      // Pre-meal bolus should precede the meal. If there's a meal logged within ±10 min
+      // of the insulin timestamp, place the insulin 2 min before that meal instead.
+      const cachedMeals = (queryClient.getQueryData(['logs', 'meals', 1]) as any)?.meals as any[] ?? [];
+      const insulinMs = new Date(timestamp).getTime();
+      const nearbyMeal = cachedMeals.find(
+        (m: any) => Math.abs(new Date(m.timestamp).getTime() - insulinMs) < 10 * 60_000
+      );
+      const adjustedTimestamp = nearbyMeal
+        ? new Date(new Date(nearbyMeal.timestamp).getTime() - 15 * 60_000).toISOString()
+        : timestamp;
 
-    await quickLog('insulin', { ...rest, type }, adjustedTimestamp);
-    healthKit.writeInsulin(data.units, data.type as any, adjustedTimestamp).catch(console.warn);
-    queryClient.invalidateQueries({ queryKey: ['logs'] });
-    showToastAndNavigate(`${data.units}u ${data.type} insulin logged`);
+      await quickLog('insulin', { ...rest, type }, adjustedTimestamp);
+      healthKit.writeInsulin(data.units, data.type as any, adjustedTimestamp).catch(console.warn);
+      queryClient.invalidateQueries({ queryKey: ['logs'] });
+      showToastAndNavigate(`${data.units}u ${data.type} insulin logged`);
+    } catch (err) {
+      console.error('Failed to log insulin:', err);
+      Alert.alert('Error', 'Failed to log insulin. Please try again.');
+    }
   };
 
   const handleExerciseSubmit = async (data: {
@@ -91,11 +102,16 @@ export default function LogScreen() {
     intensity: string;
     timestamp: string;
   }) => {
-    const { timestamp, ...rest } = data;
-    await quickLog('exercise', rest, timestamp);
-    healthKit.writeExercise(data.activity, data.duration, data.intensity as any, data.timestamp).catch(console.warn);
-    queryClient.invalidateQueries({ queryKey: ['logs'] });
-    showToastAndNavigate(`${data.duration} min ${data.activity} logged`);
+    try {
+      const { timestamp, ...rest } = data;
+      await quickLog('exercise', rest, timestamp);
+      healthKit.writeExercise(data.activity, data.duration, data.intensity as any, data.timestamp).catch(console.warn);
+      queryClient.invalidateQueries({ queryKey: ['logs'] });
+      showToastAndNavigate(`${data.duration} min ${data.activity} logged`);
+    } catch (err) {
+      console.error('Failed to log exercise:', err);
+      Alert.alert('Error', 'Failed to log exercise. Please try again.');
+    }
   };
 
   return (

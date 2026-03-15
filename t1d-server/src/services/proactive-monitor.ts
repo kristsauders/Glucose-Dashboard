@@ -630,6 +630,15 @@ CRITICAL INSTRUCTION: The data above is the ONLY data you have access to.
 
 **Time Context:** ${timeContext}
 
+## CRITICAL: MESSAGE LENGTH FOR PROACTIVE CHECK-INS
+This is a proactive check-in, NOT a response to a user question. Keep it SHORT:
+- **Maximum 2 short paragraphs** (1 is ideal if there's only one notable thing)
+- **First paragraph**: The most important/recent observation (a specific data point, trend, or event — meal, workout, spike, low, etc.)
+- **Second paragraph (optional)**: Only if there's a second genuinely noteworthy finding, or a brief actionable tip
+- Do NOT write introductions, summaries, multi-section breakdowns, or educational essays
+- If things look stable/normal, one sentence acknowledging that is enough
+- Save comprehensive explanations for when the user asks a question
+
 ## CRITICAL: DATA ACCURACY REQUIREMENTS
 **YOU MUST USE ONLY DATA FROM THE TOOL RESULTS PROVIDED BELOW. ANY DEVIATION IS UNACCEPTABLE.**
 
@@ -817,7 +826,7 @@ This user has LADA (Latent Autoimmune Diabetes in Adults):
 
         // Add synthesis task prompt
         messagesToSend.push(new HumanMessage(
-          'Based on the analysis data provided above, create a comprehensive proactive message that shares significant findings and actionable insights with the user. Follow the message structure guidelines in the system prompt. If conversation history was provided, make sure to avoid repeating recently covered topics and build on previous discussions where relevant.'
+          'Based on the analysis data provided above, write a brief proactive check-in (1-2 short paragraphs maximum). Focus on the single most noteworthy recent event — a meal, workout, spike, low, or trend. Only add a second paragraph if there is a second genuinely significant finding. Do not repeat topics from conversation history.'
         ));
 
         // Log context size for Phase 3
