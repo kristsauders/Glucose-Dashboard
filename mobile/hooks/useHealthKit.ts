@@ -138,8 +138,12 @@ export function useHealthKit() {
     try {
       const ok = await ensureInit();
       if (!ok) return;
+      if (typeof HKNative.saveFood !== 'function') {
+        console.warn('[HealthKit] saveFood not available on this device');
+        return;
+      }
       await new Promise<void>((resolve, reject) => {
-        HKNative.saveFood({ value: carbs, startDate: timestamp }, (err: any) => {
+        HKNative.saveFood({ value: carbs, unit: 'gram', startDate: timestamp, endDate: timestamp }, (err: any) => {
           if (err) reject(err); else resolve();
         });
       });

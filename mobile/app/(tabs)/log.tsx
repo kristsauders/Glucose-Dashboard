@@ -55,14 +55,13 @@ export default function LogScreen() {
   const showToastAndNavigate = (msg: string) => {
     setToastMsg(msg);
     Animated.timing(toastOpacity, { toValue: 1, duration: 150, useNativeDriver: true }).start();
-    navTimeout.current = setTimeout(() => router.navigate('/(tabs)/'), 1000);
+    navTimeout.current = setTimeout(() => router.replace('/(tabs)'), 1000);
   };
 
   const handleMealSubmit = async (data: { carbs: number; description: string; timestamp: string }) => {
     try {
       const { timestamp, ...rest } = data;
       await quickLog('meal', rest, timestamp);
-      healthKit.writeMeal(data.carbs, data.timestamp).catch(console.warn);
       queryClient.invalidateQueries({ queryKey: ['logs'] });
       showToastAndNavigate(`${data.carbs}g carbs logged`);
     } catch (err) {
@@ -87,9 +86,10 @@ export default function LogScreen() {
         : timestamp;
 
       await quickLog('insulin', { ...rest, type }, adjustedTimestamp);
-      healthKit.writeInsulin(data.units, data.type as any, adjustedTimestamp).catch(console.warn);
       queryClient.invalidateQueries({ queryKey: ['logs'] });
       showToastAndNavigate(`${data.units}u ${data.type} insulin logged`);
+      // HealthKit write after UI feedback — fire-and-forget, must not block success path
+      healthKit.writeInsulin(data.units, data.type as any, adjustedTimestamp).catch(console.warn);
     } catch (err) {
       console.error('Failed to log insulin:', err);
       Alert.alert('Error', 'Failed to log insulin. Please try again.');
@@ -105,9 +105,10 @@ export default function LogScreen() {
     try {
       const { timestamp, ...rest } = data;
       await quickLog('exercise', rest, timestamp);
-      healthKit.writeExercise(data.activity, data.duration, data.intensity as any, data.timestamp).catch(console.warn);
       queryClient.invalidateQueries({ queryKey: ['logs'] });
       showToastAndNavigate(`${data.duration} min ${data.activity} logged`);
+      // HealthKit write after UI feedback — fire-and-forget, must not block success path
+      healthKit.writeExercise(data.activity, data.duration, data.intensity as any, data.timestamp).catch(console.warn);
     } catch (err) {
       console.error('Failed to log exercise:', err);
       Alert.alert('Error', 'Failed to log exercise. Please try again.');
