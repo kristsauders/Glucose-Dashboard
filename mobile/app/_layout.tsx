@@ -30,8 +30,6 @@ function AuthGuard({ children }: { children: React.ReactNode }) {
   useEffect(() => {
     if (!auth.isReady) return;
 
-    SplashScreen.hideAsync();
-
     const inAuthGroup = segments[0] === '(auth)';
 
     if (!auth.isAuthenticated && !inAuthGroup) {
@@ -139,7 +137,14 @@ export default function RootLayout() {
     TiemposText: require('../assets/fonts/TestTiemposText-Regular.otf'),
   });
 
-  if (!fontsLoaded) return <LoadingScreen />;
+  // Hide native splash as soon as fonts are ready so LoadingScreen is visible
+  // during the auth check (previously hideAsync was called after auth resolved,
+  // meaning the native splash covered LoadingScreen the entire time).
+  useEffect(() => {
+    if (fontsLoaded) SplashScreen.hideAsync();
+  }, [fontsLoaded]);
+
+  if (!fontsLoaded) return null;
 
   return (
     <SafeAreaProvider>
