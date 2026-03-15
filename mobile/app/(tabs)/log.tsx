@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import {
   View,
   Text,
@@ -6,11 +6,11 @@ import {
   ScrollView,
   KeyboardAvoidingView,
   Platform,
-  Alert,
+  Animated,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useQueryClient } from '@tanstack/react-query';
-import { useLocalSearchParams } from 'expo-router';
+import { useLocalSearchParams, router } from 'expo-router';
 import { MealForm } from '../../components/logging/MealForm';
 import { InsulinForm } from '../../components/logging/InsulinForm';
 import { ExerciseForm } from '../../components/logging/ExerciseForm';
@@ -21,8 +21,8 @@ import { useHealthKit } from '../../hooks/useHealthKit';
 type LogType = 'meal' | 'insulin' | 'exercise';
 
 const TABS: { key: LogType; label: string; emoji: string }[] = [
-  { key: 'meal', label: 'Meal', emoji: '🍽️' },
   { key: 'insulin', label: 'Insulin', emoji: '💉' },
+  { key: 'meal', label: 'Meal', emoji: '🍽️' },
   { key: 'exercise', label: 'Exercise', emoji: '🏃' },
 ];
 
@@ -30,11 +30,19 @@ export default function LogScreen() {
   const Colors = useColors();
   const { type } = useLocalSearchParams<{ type?: string }>();
   const [activeTab, setActiveTab] = useState<LogType>(() => {
-    if (type === 'insulin' || type === 'exercise') return type;
-    return 'meal';
+    if (type === 'meal' || type === 'exercise') return type;
+    return 'insulin';
   });
   const queryClient = useQueryClient();
   const healthKit = useHealthKit();
+
+  const toastOpacity = useRef(new Animated.Value(0)).current;
+  const [toastMsg, setToastMsg] = useState('');
+  const navTimeout = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  useEffect(() => {
+    return () => { if (navTimeout.current) clearTimeout(navTimeout.current); };
+  }, []);
 
   // Re-select tab when the screen is re-opened via a deep link (widget tap)
   useEffect(() => {
@@ -43,20 +51,38 @@ export default function LogScreen() {
     }
   }, [type]);
 
+  const showToastAndNavigate = (msg: string) => {
+    setToastMsg(msg);
+    Animated.timing(toastOpacity, { toValue: 1, duration: 150, useNativeDriver: true }).start();
+    navTimeout.current = setTimeout(() => router.navigate('/(tabs)/'), 1000);
+  };
+
   const handleMealSubmit = async (data: { carbs: number; description: string; timestamp: string }) => {
     const { timestamp, ...rest } = data;
     await quickLog('meal', rest, timestamp);
     healthKit.writeMeal(data.carbs, data.timestamp).catch(console.warn);
     queryClient.invalidateQueries({ queryKey: ['logs'] });
-    Alert.alert('Logged!', `Meal logged: ${data.carbs}g carbs`);
+    showToastAndNavigate(`${data.carbs}g carbs logged`);
   };
 
   const handleInsulinSubmit = async (data: { units: number; type: string; timestamp: string }) => {
     const { timestamp, type, ...rest } = data;
-    await quickLog('insulin', { ...rest, type }, timestamp);
-    healthKit.writeInsulin(data.units, data.type as any, data.timestamp).catch(console.warn);
+
+    // Pre-meal bolus should precede the meal. If there's a meal logged within ±10 min
+    // of the insulin timestamp, place the insulin 2 min before that meal instead.
+    const cachedMeals = (queryClient.getQueryData(['logs', 'meals', 1]) as any)?.meals as any[] ?? [];
+    const insulinMs = new Date(timestamp).getTime();
+    const nearbyMeal = cachedMeals.find(
+      (m: any) => Math.abs(new Date(m.timestamp).getTime() - insulinMs) < 10 * 60_000
+    );
+    const adjustedTimestamp = nearbyMeal
+      ? new Date(new Date(nearbyMeal.timestamp).getTime() - 15 * 60_000).toISOString()
+      : timestamp;
+
+    await quickLog('insulin', { ...rest, type }, adjustedTimestamp);
+    healthKit.writeInsulin(data.units, data.type as any, adjustedTimestamp).catch(console.warn);
     queryClient.invalidateQueries({ queryKey: ['logs'] });
-    Alert.alert('Logged!', `${data.units}u ${data.type} insulin logged`);
+    showToastAndNavigate(`${data.units}u ${data.type} insulin logged`);
   };
 
   const handleExerciseSubmit = async (data: {
@@ -69,7 +95,7 @@ export default function LogScreen() {
     await quickLog('exercise', rest, timestamp);
     healthKit.writeExercise(data.activity, data.duration, data.intensity as any, data.timestamp).catch(console.warn);
     queryClient.invalidateQueries({ queryKey: ['logs'] });
-    Alert.alert('Logged!', `${data.duration} min ${data.activity} logged`);
+    showToastAndNavigate(`${data.duration} min ${data.activity} logged`);
   };
 
   return (
@@ -139,6 +165,26 @@ export default function LogScreen() {
           {activeTab === 'exercise' && <ExerciseForm onSubmit={handleExerciseSubmit} />}
         </ScrollView>
       </KeyboardAvoidingView>
+
+      {/* Success toast — fades in, then screen navigates away */}
+      <Animated.View
+        pointerEvents="none"
+        style={{
+          position: 'absolute',
+          bottom: 36,
+          left: 16,
+          right: 16,
+          backgroundColor: Colors.success,
+          borderRadius: 14,
+          paddingVertical: 14,
+          paddingHorizontal: 20,
+          alignItems: 'center',
+          opacity: toastOpacity,
+          zIndex: 100,
+        }}
+      >
+        <Text style={{ color: '#fff', fontWeight: '700', fontSize: 15 }}>{toastMsg}</Text>
+      </Animated.View>
     </SafeAreaView>
   );
 }

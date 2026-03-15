@@ -43,6 +43,7 @@ export function MealForm({ onSubmit, onCancel }: MealFormProps) {
           value={carbs}
           onChangeText={setCarbs}
           keyboardType="decimal-pad"
+          autoFocus
           placeholder="e.g. 45"
           placeholderTextColor={Colors.mutedForeground}
           style={{

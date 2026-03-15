@@ -65,7 +65,8 @@ router.post('/log', authMiddleware, async (req: AuthRequest, res) => {
     switch (type) {
       case 'insulin': {
         // Dedup: skip if a bolus/correction already exists within ±45 min of this timestamp
-        const insulinType = data.insulinType as string;
+        // Accept both 'insulinType' (agent/Shortcuts) and 'type' (mobile app form).
+        const insulinType = (data.insulinType ?? data.type) as string;
         if (insulinType === 'bolus' || insulinType === 'correction') {
           const existing = await query(
             `SELECT id FROM insulin_doses
@@ -84,7 +85,7 @@ router.post('/log', authMiddleware, async (req: AuthRequest, res) => {
           `INSERT INTO insulin_doses (user_id, insulin_type, units, purpose, timestamp)
            VALUES ($1, $2, $3, $4, $5)
            RETURNING id`,
-          [userId, insulinType, data.units, data.purpose || 'meal', logTimestamp]
+          [userId, insulinType, data.units, data.purpose ?? (insulinType === 'basal' ? 'basal' : insulinType === 'correction' ? 'correction' : 'meal'), logTimestamp]
         );
         message = `Logged ${data.units}u ${insulinType}`;
         break;

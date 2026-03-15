@@ -40,6 +40,7 @@ export function InsulinForm({ onSubmit, onCancel }: InsulinFormProps) {
           value={units}
           onChangeText={setUnits}
           keyboardType="decimal-pad"
+          autoFocus
           placeholder="e.g. 4"
           placeholderTextColor={Colors.mutedForeground}
           style={{

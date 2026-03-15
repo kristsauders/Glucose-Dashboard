@@ -323,12 +323,33 @@ async function sendMealDetectionNotification(
     },
   });
 
+  // If bolus insulin was already logged within 30 minutes of the meal, suppress the
+  // follow-up question entirely — the user already dosed, no need to ask.
+  const alreadyDosed = await query(
+    `SELECT 1 FROM insulin_doses
+     WHERE user_id = $1
+       AND insulin_type IN ('bolus', 'correction')
+       AND timestamp BETWEEN $2::timestamptz - INTERVAL '30 minutes'
+                         AND $2::timestamptz + INTERVAL '30 minutes'
+     LIMIT 1`,
+    [userId, spike.estimatedMealTime.toISOString()],
+  );
+
+  const followupSuppressed = alreadyDosed.rows.length > 0;
+
   await query(
-    `UPDATE meals SET detection_notification_sent_at = NOW() WHERE id = $1`,
+    `UPDATE meals
+     SET detection_notification_sent_at = NOW()
+       ${followupSuppressed ? ', insulin_followup_sent_at = NOW()' : ''}
+     WHERE id = $1`,
     [mealId],
   );
 
-  console.log(`[MealSpike] Detection notification sent for meal ${mealId}`);
+  if (followupSuppressed) {
+    console.log(`[MealSpike] Detection notification sent for meal ${mealId} — insulin follow-up suppressed (already dosed)`);
+  } else {
+    console.log(`[MealSpike] Detection notification sent for meal ${mealId}`);
+  }
 }
 
 /**

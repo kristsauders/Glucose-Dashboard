@@ -34,14 +34,14 @@ struct QuickLogAccessoryView: View {
     var body: some View {
         HStack(spacing: 0) {
             Link(destination: insulinURL) {
-                VStack(spacing: 2) {
+                VStack(spacing: 4) {
                     Image(systemName: "syringe.fill")
-                        .font(.system(size: 13, weight: .semibold))
+                        .font(.system(size: 20, weight: .semibold))
                     Text("Insulin")
-                        .font(.system(size: 8, weight: .medium))
-                        .minimumScaleFactor(0.7)
+                        .font(.system(size: 11, weight: .semibold))
+                        .minimumScaleFactor(0.8)
                 }
-                .frame(maxWidth: .infinity)
+                .frame(maxWidth: .infinity, maxHeight: .infinity)
             }
 
             Rectangle()
@@ -49,14 +49,14 @@ struct QuickLogAccessoryView: View {
                 .foregroundStyle(.secondary.opacity(0.4))
 
             Link(destination: mealURL) {
-                VStack(spacing: 2) {
+                VStack(spacing: 4) {
                     Image(systemName: "fork.knife")
-                        .font(.system(size: 13, weight: .semibold))
+                        .font(.system(size: 20, weight: .semibold))
                     Text("Meal")
-                        .font(.system(size: 8, weight: .medium))
-                        .minimumScaleFactor(0.7)
+                        .font(.system(size: 11, weight: .semibold))
+                        .minimumScaleFactor(0.8)
                 }
-                .frame(maxWidth: .infinity)
+                .frame(maxWidth: .infinity, maxHeight: .infinity)
             }
 
             Rectangle()
@@ -64,14 +64,14 @@ struct QuickLogAccessoryView: View {
                 .foregroundStyle(.secondary.opacity(0.4))
 
             Link(destination: exerciseURL) {
-                VStack(spacing: 2) {
+                VStack(spacing: 4) {
                     Image(systemName: "figure.run")
-                        .font(.system(size: 13, weight: .semibold))
+                        .font(.system(size: 20, weight: .semibold))
                     Text("Exercise")
-                        .font(.system(size: 8, weight: .medium))
-                        .minimumScaleFactor(0.7)
+                        .font(.system(size: 11, weight: .semibold))
+                        .minimumScaleFactor(0.8)
                 }
-                .frame(maxWidth: .infinity)
+                .frame(maxWidth: .infinity, maxHeight: .infinity)
             }
         }
         .widgetAccentable()

@@ -81,6 +81,7 @@ export function ExerciseForm({ onSubmit, onCancel }: ExerciseFormProps) {
           value={duration}
           onChangeText={setDuration}
           keyboardType="number-pad"
+          autoFocus
           placeholder="e.g. 30"
           placeholderTextColor={Colors.mutedForeground}
           style={{
