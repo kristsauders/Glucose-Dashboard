@@ -103,121 +103,136 @@ class LibreViewPollerService {
       return;
     }
 
-    state.isPollInProgress = true; // Mark poll as in progress
+    state.isPollInProgress = true;
     const pollStartTime = Date.now();
+    // Timeout at 80% of the interval (max 60s) so a hung network request never
+    // blocks the next poll cycle.
+    const timeoutMs = Math.min(Math.floor(this.pollInterval * 0.8), 60_000);
 
     try {
-      // Re-authenticate if token expired
-      if (!state.client.isAuthenticated()) {
-        console.log(`Re-authenticating for user ${state.userId}...`);
-        await state.client.login(state.credentials);
-      }
-
-      // Fetch glucose data
-      const data = await state.client.getGlucoseData();
-
-      // Convert and save to database
-      const readings = data.graphData
-        .filter((reading) => reading.ValueInMgPerDl > 0)
-        .map((reading) => ({
-          user_id: state.userId,
-          timestamp: new Date(reading.Timestamp).toISOString(),
-          glucose: reading.ValueInMgPerDl,
-          device: 'LibreView',
-          record_type: reading.type,
-          trend: reading.MeasurementColor,
-          source: 'libreview_api',
-        }));
-
-      // Bulk insert with ON CONFLICT DO NOTHING (deduplication)
-      if (readings.length > 0) {
-        const values = readings.map((r, i) =>
-          `($${i * 7 + 1}, $${i * 7 + 2}, $${i * 7 + 3}, $${i * 7 + 4}, $${i * 7 + 5}, $${i * 7 + 6}, $${i * 7 + 7})`
-        ).join(', ');
-
-        const params = readings.flatMap(r => [
-          r.user_id,
-          r.timestamp,
-          r.glucose,
-          r.device,
-          r.record_type,
-          r.trend,
-          r.source,
-        ]);
-
-        await query(
-          `INSERT INTO glucose_readings (user_id, timestamp, glucose, device, record_type, trend, source)
-           VALUES ${values}
-           ON CONFLICT (user_id, timestamp, source) DO NOTHING`,
-          params
-        );
-
-        const pollDuration = Date.now() - pollStartTime;
-        console.log(`✓ Synced ${readings.length} glucose readings for user ${state.userId} (took ${pollDuration}ms)`);
-
-        // Detect meal spikes and auto-log (fire-and-forget)
-        detectAndLogMealSpike(state.userId).catch(() => {});
-
-        // Send insulin follow-up notifications for meals detected ~30 min ago
-        checkAndSendInsulinFollowUps(state.userId).catch(() => {});
-
-        // Push the latest reading to any registered Live Activities so the
-        // Dynamic Island / lock screen stays current even when the app is frozen.
-        // Use max timestamp — graphData order varies (LibreView may put current reading at index 0 or last).
-        const latest = readings.reduce((a, b) => a.timestamp > b.timestamp ? a : b);
-        console.log(`[LiveActivityPush] POLLER_DEBUG selected reading: ts=${latest.timestamp} glucose=${latest.glucose} (array size=${readings.length}, first_ts=${readings[0].timestamp}, last_ts=${readings[readings.length-1].timestamp})`);
-        if (latest) {
-          const glucose = latest.glucose as number;
-
-          // Build history: last 2 hours of readings, max 25 points, oldest-first.
-          const nowMs = Date.now();
-          const twoHoursAgo = nowMs - 2 * 60 * 60 * 1000;
-          const history = readings
-            .filter(r => new Date(r.timestamp).getTime() >= twoHoursAgo)
-            .map(r => ({
-              glucose: r.glucose as number,
-              minutesAgo: Math.round((nowMs - new Date(r.timestamp).getTime()) / 60000),
-            }))
-            .sort((a, b) => b.minutesAgo - a.minutesAgo)
-            .slice(0, 25);
-
-          // Fetch the most recent insulin dose for this user (last 24h to avoid stale data).
-          const insulinResult = await query<{ units: number; timestamp: string }>(
-            `SELECT units, timestamp FROM insulin_doses
-             WHERE user_id = $1 AND timestamp > NOW() - INTERVAL '24 hours'
-             ORDER BY timestamp DESC LIMIT 1`,
-            [state.userId],
-          );
-          const lastDose = insulinResult.rows[0];
-          console.log(`[LiveActivityPush] INSULIN_DEBUG: found=${!!lastDose}${lastDose ? ` units=${lastDose.units} ts=${lastDose.timestamp}` : ' (no dose in last 24h — check insulin_doses table exists and has data for this user)'}`);
-
-          pushLiveActivityForUser(state.userId, {
-            glucose,
-            trend: trendArrow(latest.trend as number | undefined),
-            readingDate: new Date(latest.timestamp),
-            isLow:  glucose < 70,
-            isHigh: glucose > 180,
-            history: history.length > 0 ? history : undefined,
-            ...(lastDose && {
-              lastInsulinUnits: Number(lastDose.units),
-              lastInsulinDate: new Date(lastDose.timestamp),
-            }),
-          }).catch(err => console.warn('[LiveActivityPush] Error during poll push:', err));
-        }
-      } else {
-        const pollDuration = Date.now() - pollStartTime;
-        console.log(`✓ Poll completed for user ${state.userId} - no new readings (took ${pollDuration}ms)`);
-      }
-
-      state.lastPoll = new Date();
+      await Promise.race([
+        this.runPoll(state, pollStartTime),
+        new Promise<never>((_, reject) =>
+          setTimeout(
+            () => reject(new Error(`Poll timed out after ${timeoutMs / 1000}s`)),
+            timeoutMs
+          )
+        ),
+      ]);
     } catch (error) {
       const pollDuration = Date.now() - pollStartTime;
       console.error(`Polling failed for user ${state.userId} after ${pollDuration}ms:`, error);
       throw error;
     } finally {
-      // Always reset the flag, even if there was an error
+      // Always reset the flag — including when the timeout fires.
       state.isPollInProgress = false;
     }
+  }
+
+  private async runPoll(state: PollerState, pollStartTime: number): Promise<void> {
+    // Re-authenticate if token expired
+    if (!state.client.isAuthenticated()) {
+      console.log(`Re-authenticating for user ${state.userId}...`);
+      await state.client.login(state.credentials);
+    }
+
+    // Fetch glucose data
+    const data = await state.client.getGlucoseData();
+
+    // Convert and save to database
+    const readings = data.graphData
+      .filter((reading) => reading.ValueInMgPerDl > 0)
+      .map((reading) => ({
+        user_id: state.userId,
+        timestamp: new Date(reading.Timestamp).toISOString(),
+        glucose: reading.ValueInMgPerDl,
+        device: 'LibreView',
+        record_type: reading.type,
+        trend: reading.MeasurementColor,
+        source: 'libreview_api',
+      }));
+
+    // Bulk insert with ON CONFLICT DO NOTHING (deduplication)
+    if (readings.length > 0) {
+      const values = readings.map((r, i) =>
+        `($${i * 7 + 1}, $${i * 7 + 2}, $${i * 7 + 3}, $${i * 7 + 4}, $${i * 7 + 5}, $${i * 7 + 6}, $${i * 7 + 7})`
+      ).join(', ');
+
+      const params = readings.flatMap(r => [
+        r.user_id,
+        r.timestamp,
+        r.glucose,
+        r.device,
+        r.record_type,
+        r.trend,
+        r.source,
+      ]);
+
+      await query(
+        `INSERT INTO glucose_readings (user_id, timestamp, glucose, device, record_type, trend, source)
+         VALUES ${values}
+         ON CONFLICT (user_id, timestamp, source) DO NOTHING`,
+        params
+      );
+
+      const pollDuration = Date.now() - pollStartTime;
+      console.log(`✓ Synced ${readings.length} glucose readings for user ${state.userId} (took ${pollDuration}ms)`);
+
+      // Detect meal spikes and auto-log (fire-and-forget)
+      detectAndLogMealSpike(state.userId).catch(() => {});
+
+      // Send insulin follow-up notifications for meals detected ~30 min ago
+      checkAndSendInsulinFollowUps(state.userId).catch(() => {});
+
+      // Push the latest reading to any registered Live Activities so the
+      // Dynamic Island / lock screen stays current even when the app is frozen.
+      // Use max timestamp — graphData order varies (LibreView may put current reading at index 0 or last).
+      const latest = readings.reduce((a, b) => a.timestamp > b.timestamp ? a : b);
+      console.log(`[LiveActivityPush] POLLER_DEBUG selected reading: ts=${latest.timestamp} glucose=${latest.glucose} (array size=${readings.length}, first_ts=${readings[0].timestamp}, last_ts=${readings[readings.length-1].timestamp})`);
+      if (latest) {
+        const glucose = latest.glucose as number;
+
+        // Build history: last 2 hours of readings, max 25 points, oldest-first.
+        const nowMs = Date.now();
+        const twoHoursAgo = nowMs - 2 * 60 * 60 * 1000;
+        const history = readings
+          .filter(r => new Date(r.timestamp).getTime() >= twoHoursAgo)
+          .map(r => ({
+            glucose: r.glucose as number,
+            minutesAgo: Math.round((nowMs - new Date(r.timestamp).getTime()) / 60000),
+          }))
+          .sort((a, b) => b.minutesAgo - a.minutesAgo)
+          .slice(0, 25);
+
+        // Fetch the most recent insulin dose for this user (last 24h to avoid stale data).
+        const insulinResult = await query<{ units: number; timestamp: string }>(
+          `SELECT units, timestamp FROM insulin_doses
+           WHERE user_id = $1 AND timestamp > NOW() - INTERVAL '24 hours'
+           ORDER BY timestamp DESC LIMIT 1`,
+          [state.userId],
+        );
+        const lastDose = insulinResult.rows[0];
+        console.log(`[LiveActivityPush] INSULIN_DEBUG: found=${!!lastDose}${lastDose ? ` units=${lastDose.units} ts=${lastDose.timestamp}` : ' (no dose in last 24h — check insulin_doses table exists and has data for this user)'}`);
+
+        pushLiveActivityForUser(state.userId, {
+          glucose,
+          trend: trendArrow(latest.trend as number | undefined),
+          readingDate: new Date(latest.timestamp),
+          isLow:  glucose < 70,
+          isHigh: glucose > 180,
+          history: history.length > 0 ? history : undefined,
+          ...(lastDose && {
+            lastInsulinUnits: Number(lastDose.units),
+            lastInsulinDate: new Date(lastDose.timestamp),
+          }),
+        }).catch(err => console.warn('[LiveActivityPush] Error during poll push:', err));
+      }
+    } else {
+      const pollDuration = Date.now() - pollStartTime;
+      console.log(`✓ Poll completed for user ${state.userId} - no new readings (took ${pollDuration}ms)`);
+    }
+
+    state.lastPoll = new Date();
   }
 
   public async resumeAllPolling(): Promise<void> {
