@@ -1,6 +1,7 @@
 import { useEffect } from 'react';
+import { AppState, AppStateStatus, Platform } from 'react-native';
 import { Stack, useRouter, useSegments } from 'expo-router';
-import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
+import { QueryClient, QueryClientProvider, focusManager } from '@tanstack/react-query';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 import * as SplashScreen from 'expo-splash-screen';
 import * as Notifications from 'expo-notifications';
@@ -13,6 +14,18 @@ import { useHealthKit } from '../hooks/useHealthKit';
 import { runHealthKitSync } from '../services/health-sync';
 
 SplashScreen.preventAutoHideAsync();
+
+// React Native doesn't fire browser visibility events, so react-query's
+// refetchOnWindowFocus is a no-op by default. Wire it to AppState so all
+// queries refetch when the app comes back to the foreground.
+if (Platform.OS !== 'web') {
+  focusManager.setEventListener((handleFocus) => {
+    const sub = AppState.addEventListener('change', (state: AppStateStatus) => {
+      handleFocus(state === 'active');
+    });
+    return () => sub.remove();
+  });
+}
 
 const queryClient = new QueryClient({
   defaultOptions: {
