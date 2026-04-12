@@ -61,10 +61,18 @@ function AuthGuard({ children }: { children: React.ReactNode }) {
   }, [auth.isReady, auth.isAuthenticated]);
 
   // HealthKit sync: runs once on auth ready, then is rate-limited to every 15 min
-  // (enforced inside runHealthKitSync). Runs in background — never blocks UI.
+  // (enforced inside runHealthKitSync). If new glucose readings are inserted,
+  // invalidate the glucose cache so the chart picks them up immediately instead
+  // of waiting for the next 5-minute refetch interval.
   useEffect(() => {
     if (auth.isReady && auth.isAuthenticated) {
-      runHealthKitSync(hk).catch(console.warn);
+      runHealthKitSync(hk)
+        .then(result => {
+          if (result.glucoseInserted > 0) {
+            queryClient.invalidateQueries({ queryKey: ['glucose'] });
+          }
+        })
+        .catch(console.warn);
     }
   }, [auth.isReady, auth.isAuthenticated]);
 

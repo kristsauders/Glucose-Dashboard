@@ -49,11 +49,15 @@ export default function DashboardScreen() {
     const lastInsulinDate  = lastDose?.timestamp ? new Date(lastDose.timestamp) : null;
     syncReading(reading, allReadings, lastInsulinUnits, lastInsulinDate);
   }, [(latest.data as any)?.reading, (readings.data as any)?.readings, (insulin.data as any)?.doses]);
-  // Compute today's summary from the already-fetched 24h readings (type-1 only, same window as chart)
+  // Compute today's summary using only scheduled CGM readings (record_type 1 or null),
+  // matching the server's /glucose/summary filter. Scan readings (type 0) are excluded
+  // so they don't skew counts or averages, but they still appear on the chart above.
   const todaySummary = useMemo<GlucoseSummary | undefined>(() => {
     const rds = (readings.data as any)?.readings as GlucoseReading[] | undefined;
     if (!rds || rds.length === 0) return undefined;
-    const vals = rds.map(r => Number(r.glucose));
+    const statsReadings = rds.filter(r => r.record_type == null || Number(r.record_type) !== 0);
+    if (statsReadings.length === 0) return undefined;
+    const vals = statsReadings.map(r => Number(r.glucose));
     const n = vals.length;
     const avg = vals.reduce((s, v) => s + v, 0) / n;
     const variance = vals.reduce((s, v) => s + (v - avg) ** 2, 0) / n;
@@ -85,8 +89,15 @@ export default function DashboardScreen() {
     insulin.refetch();
     exercise.refetch();
     // Force HealthKit sync on pull-to-refresh (bypasses the 15-min rate limit).
+    // If it inserts new glucose data, refetch again so the chart shows it.
     runHealthKitSync(hk, true)
-      .then(r => console.log('[HealthSync pull-to-refresh]', JSON.stringify(r)))
+      .then(r => {
+        console.log('[HealthSync pull-to-refresh]', JSON.stringify(r));
+        if (r.glucoseInserted > 0) {
+          latest.refetch();
+          readings.refetch();
+        }
+      })
       .catch(console.warn);
   };
 

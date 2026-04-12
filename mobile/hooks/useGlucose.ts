@@ -198,9 +198,7 @@ export function useGlucose24h() {
         : start7am.toISOString();
       const { readings } = await getReadingsForRange(start, now.toISOString());
       const chron = [...readings].reverse();
-      // record_type comes from the server as a number (0 or 1); use loose comparison
-      const trend = chron.filter(r => r.record_type == null || Number(r.record_type) === 1);
-      return { readings: trend.length > 0 ? trend : chron };
+      return { readings: chron };
     },
     refetchInterval: GLUCOSE_POLL_INTERVAL_MS,
     staleTime: 60_000,
