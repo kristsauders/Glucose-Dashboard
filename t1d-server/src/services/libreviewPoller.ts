@@ -4,6 +4,7 @@ import { env } from '../config/env.js';
 import { decrypt } from '../utils/crypto.js';
 import { pushLiveActivityForUser } from './live-activity-push.js';
 import { detectAndLogMealSpike, checkAndSendInsulinFollowUps } from './meal-spike-detector.js';
+import { detectAndFlagCompressionLows } from './compression-low-detector.js';
 import type { GlucoseReading } from '../types/index.js';
 
 interface PollerState {
@@ -154,6 +155,12 @@ class LibreViewPollerService {
 
         const pollDuration = Date.now() - pollStartTime;
         console.log(`✓ Synced ${readings.length} glucose readings for user ${state.userId} (took ${pollDuration}ms)`);
+
+        // Detect compression lows in recent window (fire-and-forget)
+        detectAndFlagCompressionLows(
+          state.userId,
+          new Date(Date.now() - 2 * 60 * 60_000), // 2h look-back covers any ongoing episode
+        ).catch(() => {});
 
         // Detect meal spikes and auto-log (fire-and-forget)
         detectAndLogMealSpike(state.userId).catch(() => {});

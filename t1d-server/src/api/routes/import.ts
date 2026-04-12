@@ -2,6 +2,7 @@ import { Router } from 'express';
 import { authMiddleware } from '../middleware/auth.js';
 import { parseLibreCSV } from '../../services/csvParser.js';
 import { query } from '../../config/database.js';
+import { detectAndFlagCompressionLows } from '../../services/compression-low-detector.js';
 import type { AuthRequest } from '../../types/index.js';
 
 const router = Router();
@@ -143,6 +144,9 @@ router.post('/csv', async (req, res, next) => {
     }
 
     console.log(`✓ CSV import complete: ${insertedGlucose} glucose, ${insertedMeals} meals, ${insertedInsulin} insulin`);
+
+    // Re-run compression low detection on the full history after a CSV import
+    detectAndFlagCompressionLows(authReq.user!.id).catch(console.warn);
 
     res.json({
       success: true,

@@ -23,6 +23,9 @@ export interface GlucoseReading {
   trend?: number;
   source?: string;
   created_at: string;
+  is_compression_suspect?: boolean;
+  /** Interpolated value when is_compression_suspect is true; equals glucose otherwise. */
+  smoothed_glucose?: number;
 }
 
 export interface AuthRequest extends Express.Request {

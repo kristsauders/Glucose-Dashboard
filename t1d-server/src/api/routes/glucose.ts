@@ -2,6 +2,7 @@ import { Router } from 'express';
 import { z } from 'zod';
 import { query } from '../../config/database.js';
 import { authMiddleware } from '../middleware/auth.js';
+import { smoothCompressionLows } from '../../services/compression-low-detector.js';
 import type { AuthRequest, GlucoseReading } from '../../types/index.js';
 
 const router = Router();
@@ -36,9 +37,22 @@ router.get('/readings', async (req, res, next) => {
 
     const result = await query<GlucoseReading>(sql, params);
 
+    // Apply smoothing: replace suspect readings with interpolated values.
+    // Readings come back DESC from DB; smooth expects chronological order.
+    const chron = [...result.rows].reverse().map(r => ({
+      ...r,
+      timestamp: new Date(r.timestamp),
+      glucose: Number(r.glucose),
+      is_compression_suspect: Boolean(r.is_compression_suspect),
+    }));
+    const smoothed = smoothCompressionLows(chron).reverse(); // back to DESC
+
     res.json({
-      readings: result.rows,
-      count: result.rows.length,
+      readings: smoothed.map(r => ({
+        ...r,
+        timestamp: r.timestamp.toISOString(),
+      })),
+      count: smoothed.length,
     });
   } catch (error) {
     next(error);
@@ -75,7 +89,7 @@ router.get('/summary', async (req, res, next) => {
     if (period === '30d') daysAgo = 30;
     else if (period === '90d') daysAgo = 90;
 
-    // Exclude type-0 (LibreView one-time scan readings) — only count continuous CGM (type 1) and manual entries (record_type IS NULL)
+    // Exclude type-0 (LibreView one-time scan readings) and compression artifacts
     const result = await query(
       `SELECT
         COUNT(*) as count,
@@ -86,13 +100,14 @@ router.get('/summary', async (req, res, next) => {
        FROM glucose_readings
        WHERE user_id = $1
          AND timestamp >= NOW() - INTERVAL '${daysAgo} days'
-         AND (record_type IS NULL OR record_type = 1)`,
+         AND (record_type IS NULL OR record_type = 1)
+         AND is_compression_suspect = FALSE`,
       [authReq.user!.id]
     );
 
     const stats = result.rows[0];
 
-    // Calculate additional metrics
+    // Calculate additional metrics (also exclude compression artifacts)
     const timeInRangeResult = await query(
       `SELECT
         COUNT(*) FILTER (WHERE glucose >= 70 AND glucose <= 180) as in_range_70_180,
@@ -102,7 +117,8 @@ router.get('/summary', async (req, res, next) => {
        FROM glucose_readings
        WHERE user_id = $1
          AND timestamp >= NOW() - INTERVAL '${daysAgo} days'
-         AND (record_type IS NULL OR record_type = 1)`,
+         AND (record_type IS NULL OR record_type = 1)
+         AND is_compression_suspect = FALSE`,
       [authReq.user!.id]
     );
 

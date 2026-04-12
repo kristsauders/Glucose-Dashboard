@@ -20,6 +20,7 @@
 import { Router } from 'express';
 import { authMiddleware } from '../middleware/auth.js';
 import { query } from '../../config/database.js';
+import { detectAndFlagCompressionLows } from '../../services/compression-low-detector.js';
 import type { AuthRequest } from '../../types/index.js';
 
 const router = Router();
@@ -61,6 +62,12 @@ router.post('/sync', async (req, res, next) => {
       syncGlucose(userId, glucose),
       syncWorkouts(userId, workouts),
     ]);
+
+    // Re-scan recent readings for compression lows after new glucose arrives
+    if (glucoseResult.inserted > 0) {
+      const since = new Date(Date.now() - 7 * 24 * 60 * 60_000); // last 7 days
+      detectAndFlagCompressionLows(userId, since).catch(console.warn);
+    }
 
     res.json({
       glucose: glucoseResult,

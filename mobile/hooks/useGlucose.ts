@@ -52,6 +52,11 @@ function computeStdDev(vals: number[]): number {
   return Math.sqrt(variance);
 }
 
+/** Use smoothed_glucose (server-interpolated) when available to exclude compression artifacts. */
+function effectiveGlucose(r: GlucoseReading): number {
+  return r.smoothed_glucose !== undefined ? r.smoothed_glucose : Number(r.glucose);
+}
+
 function computeDailyMetrics(readings: GlucoseReading[]): DayMetrics[] {
   const byDay = new Map<string, GlucoseReading[]>();
   for (const r of readings) {
@@ -63,7 +68,7 @@ function computeDailyMetrics(readings: GlucoseReading[]): DayMetrics[] {
   return Array.from(byDay.entries())
     .sort(([a], [b]) => a.localeCompare(b))
     .map(([dateIso, rds]) => {
-      const vals = rds.map(r => Number(r.glucose));
+      const vals = rds.map(effectiveGlucose);
       const n = vals.length;
       const avg = vals.reduce((s, v) => s + v, 0) / n;
       const sd = computeStdDev(vals);
@@ -72,7 +77,7 @@ function computeDailyMetrics(readings: GlucoseReading[]): DayMetrics[] {
       // Overnight: 3am–7am
       const overnightVals = rds
         .filter(r => { const h = new Date(r.timestamp).getHours(); return h >= 3 && h < 7; })
-        .map(r => Number(r.glucose));
+        .map(effectiveGlucose);
       const overnightAvg = overnightVals.length >= 2
         ? Math.round(overnightVals.reduce((s, v) => s + v, 0) / overnightVals.length)
         : null;
@@ -80,7 +85,7 @@ function computeDailyMetrics(readings: GlucoseReading[]): DayMetrics[] {
       // Bedtime: 10pm–midnight
       const bedtimeVals = rds
         .filter(r => { const h = new Date(r.timestamp).getHours(); return h >= 22; })
-        .map(r => Number(r.glucose));
+        .map(effectiveGlucose);
       const bedtimeAvg = bedtimeVals.length >= 2
         ? Math.round(bedtimeVals.reduce((s, v) => s + v, 0) / bedtimeVals.length)
         : null;
@@ -109,7 +114,7 @@ function computeWeeklyMetrics(readings: GlucoseReading[]): WeekMetrics[] {
     const weekStart = startOfWeek(new Date(r.timestamp), { weekStartsOn: 1 });
     const key = format(weekStart, 'yyyy-MM-dd');
     const arr = byWeek.get(key) ?? [];
-    arr.push(Number(r.glucose));
+    arr.push(effectiveGlucose(r));
     byWeek.set(key, arr);
   }
   return Array.from(byWeek.entries())
@@ -139,7 +144,7 @@ function computeDistribution(readings: GlucoseReading[]): BucketData[] {
   const buckets: number[] = new Array((HI - LO) / STEP).fill(0);
   let total = 0;
   for (const r of readings) {
-    const v = Number(r.glucose);
+    const v = effectiveGlucose(r);
     const i = Math.floor((v - LO) / STEP);
     if (i >= 0 && i < buckets.length) { buckets[i]++; total++; }
   }

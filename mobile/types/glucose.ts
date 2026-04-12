@@ -7,6 +7,9 @@ export interface GlucoseReading {
   source?: string;
   trend?: number;
   record_type?: string;
+  is_compression_suspect?: boolean;
+  /** Interpolated value when is_compression_suspect is true; equals glucose otherwise. */
+  smoothed_glucose?: number;
 }
 
 export interface GlucoseSummary {

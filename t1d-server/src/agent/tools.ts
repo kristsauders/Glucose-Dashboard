@@ -145,7 +145,7 @@ export const getGlucoseStatsTool = new DynamicStructuredTool({
     days: z.number().default(7).describe('Number of days to analyze (default 7)'),
   }),
   func: async ({ userId, days }) => {
-    // Get statistics
+    // Get statistics — exclude compression artifacts (sensor pressure false lows)
     const statsResult = await query(
       `SELECT
         COUNT(*) as count,
@@ -155,11 +155,12 @@ export const getGlucoseStatsTool = new DynamicStructuredTool({
         STDDEV(glucose) as std_dev
        FROM glucose_readings
        WHERE user_id = $1
-         AND timestamp >= NOW() - INTERVAL '${days} days'`,
+         AND timestamp >= NOW() - INTERVAL '${days} days'
+         AND is_compression_suspect = FALSE`,
       [userId]
     );
 
-    // Get time in range
+    // Get time in range — exclude compression artifacts
     const tirResult = await query(
       `SELECT
         COUNT(*) FILTER (WHERE glucose >= 70 AND glucose <= 180) as in_range_70_180,
@@ -168,7 +169,8 @@ export const getGlucoseStatsTool = new DynamicStructuredTool({
         COUNT(*) FILTER (WHERE glucose > 180) as above_180
        FROM glucose_readings
        WHERE user_id = $1
-         AND timestamp >= NOW() - INTERVAL '${days} days'`,
+         AND timestamp >= NOW() - INTERVAL '${days} days'
+         AND is_compression_suspect = FALSE`,
       [userId]
     );
 
@@ -4098,7 +4100,7 @@ IMPORTANT: This is READ-ONLY access. Only SELECT queries are allowed.
 All queries are automatically filtered to the current user's data.
 
 Available tables (all prefixed with user_):
-- user_glucose_readings: id, timestamp, glucose, device, record_type, trend, source, created_at
+- user_glucose_readings: id, timestamp, glucose, device, record_type, trend, source, is_compression_suspect, created_at
 - user_meals: id, timestamp, description, carbs, meal_type, notes, source, created_at
 - user_insulin_doses: id, timestamp, units, insulin_type, brand_name, purpose, notes, source, created_at
 - user_exercise_logs: id, timestamp, duration_minutes, activity_type, intensity, description, notes, source, created_at
@@ -4106,13 +4108,20 @@ Available tables (all prefixed with user_):
 - user_glucose_correlations: id, factor_type, correlation_strength, confidence, last_updated
 - user_sage_messages: id, type, title, content, sent_at
 
+COMPRESSION LOWS: The is_compression_suspect column flags readings that are likely false lows caused by
+physical pressure on the sensor (e.g. sleeping on it). These produce an unrealistically fast V-shaped
+drop-and-recovery that is physiologically impossible. ALWAYS add WHERE is_compression_suspect = FALSE
+when computing averages, time-in-range, or low counts — otherwise metrics will be skewed by sensor
+artifacts. You may mention is_compression_suspect findings to the user when relevant (e.g. if they ask
+about a low that appears to be an artifact rather than a real hypoglycemia event).
+
 TIMEZONE: Bare timestamp literals (e.g. '2026-02-14 07:00') are automatically interpreted in the user's local timezone — you do NOT need to add UTC offsets or AT TIME ZONE clauses.
 
 Common query patterns:
-- Glucose during custom window: SELECT * FROM user_glucose_readings WHERE timestamp BETWEEN '2026-02-10' AND '2026-02-11'
-- Glucose for a specific local time window: SELECT * FROM user_glucose_readings WHERE timestamp BETWEEN '2026-02-14 07:00' AND '2026-02-14 10:00'
-- Meal impact correlation: SELECT m.*, AVG(gr.glucose) FROM user_meals m JOIN user_glucose_readings gr ON gr.timestamp BETWEEN m.timestamp AND m.timestamp + INTERVAL '2 hours' GROUP BY m.id
-- Hourly averages: SELECT DATE_TRUNC('hour', timestamp) AS hour, AVG(glucose) AS avg_glucose FROM user_glucose_readings GROUP BY hour ORDER BY hour`,
+- Glucose during custom window: SELECT * FROM user_glucose_readings WHERE timestamp BETWEEN '2026-02-10' AND '2026-02-11' AND is_compression_suspect = FALSE
+- Glucose for a specific local time window: SELECT * FROM user_glucose_readings WHERE timestamp BETWEEN '2026-02-14 07:00' AND '2026-02-14 10:00' AND is_compression_suspect = FALSE
+- Meal impact correlation: SELECT m.*, AVG(gr.glucose) FROM user_meals m JOIN user_glucose_readings gr ON gr.timestamp BETWEEN m.timestamp AND m.timestamp + INTERVAL '2 hours' AND gr.is_compression_suspect = FALSE GROUP BY m.id
+- Hourly averages: SELECT DATE_TRUNC('hour', timestamp) AS hour, AVG(glucose) AS avg_glucose FROM user_glucose_readings WHERE is_compression_suspect = FALSE GROUP BY hour ORDER BY hour`,
 
   schema: z.object({
     query: z.string().describe('The SQL SELECT query to execute. Reference tables with user_ prefix (e.g., user_glucose_readings)'),
